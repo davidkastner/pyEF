@@ -128,4 +128,5 @@ git pull
 
 #### Acknowledgements
 Authors: Melissa Manetsch and David W. Kastner
+
 [MolSSi template](https://github.com/molssi/cookiecutter-cms) version 1.6.
