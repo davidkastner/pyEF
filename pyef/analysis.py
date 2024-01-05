@@ -710,7 +710,7 @@ class Electrostatics:
                 output = proc.communicate("\n".join(commands).encode())
                 new_name = 'final_optim'+'_Hirshfeld_I.txt'
                 os.rename('final_optim.chg', new_name)
-
+                #will ned to add additional params here for E-field data
             results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
             # Probably want to add other bonds to this list!
             allspeciesdict.append(results_dict)
