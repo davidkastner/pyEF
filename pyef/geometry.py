@@ -1,24 +1,19 @@
-import logging
-import shutil
-import subprocess
 import os
+import logging
 import numpy as np
-import sys
-import molSimplify
-from molSimplify.Classes.mol3D import *
-from molSimplify.Scripts import *
-from collections import deque
-from molSimplify.Classes.globalvars import all_angle_refs
 import pandas as pd
+from collections import deque
+from molSimplify.Scripts import *
+from molSimplify.Classes.mol3D import *
 from molSimplify.Classes.ligand import ligand_breakdown
-#first write the full traj file to a single, last xyz file
+from molSimplify.Classes.globalvars import all_angle_refs
 
 class ErrorAnalysis:
     def __init__(self, struct_type):
         self.struct_type = struct_type
 
-    #function will return one if all conditions are met for valid geometry, otherwise will return 0
     def goodstruct(dict_results):
+        """Function will return one if all conditions are met for valid geometry, otherwise will return 0"""
         oct_angle_devi_max = dict_results['oct_angle_devi_max']
         numcoord = dict_results['num_coord_metal']
         max_del_sig_angle = dict_results['max_del_sig_angle']
@@ -53,19 +48,19 @@ class ErrorAnalysis:
         return opt_rmsd
 
     def molsimp_struct(init_mol3D, mol_test,skip_tests):
-        #make a copt of the mol3D object so you don't over-write previous mol3D
+        # Make a copt of the mol3D object so you don't over-write previous mol3D
         new_test = mol3D()
         new_test.copymol3D(mol_test)
         flag_results = new_test.IsStructure(init_mol=init_mol3D, num_coord=4, angle_ref=all_angle_refs["square planar"], skip=skip_tests)
         dict_results = flag_results[2]
-        #now check if the structure is good using in-script definitions
+        # Now check if the structure is good using in-script definitions
         boolgoodstruct = ErrorAnalysis.goodstruct(dict_results)
         return [boolgoodstruct, dict_results]
       
 
-    #Determine the smiles string associated with ligands in molecule
+    # Determine the smiles string associated with ligands in molecule
     def ligand_info(final_mol):
-        #First check if the ligand is inside of cage..
+        # First check if the ligand is inside of cage..
         all_ligand_smiles = []
         total_atoms = len(final_mol.getAtoms())
 
@@ -100,6 +95,7 @@ class ErrorAnalysis:
         print('H RMSD cage: ' + str(H_rmsd))
         print('no H RMSD cage: ' + str(noH_rmsd))
         return [H_rmsd, noH_rmsd]
+    
     def rmsd_TMC_cage(final_mol, path_to_init):
         total_atoms = len(final_mol.getAtoms())
         list_guest_atoms = range(280, total_atoms)
@@ -203,6 +199,7 @@ class ErrorAnalysis:
         return [returndict, final_mol]
 
             #This function executes the desired geometry checks for a list of stru
+
     def optim_rmsd_listfiles(self, optim_paths, isCSD, checks, compare_paths=[]):
         
         ''' Takes in several paths to folder that contain output, optim trajectories and then performs a series of geometry 
@@ -224,13 +221,14 @@ class ErrorAnalysis:
       None
         '''
 
-        #first we will just design this for a single optim.xyz file and check that hte ifal and initial one cna be compared
-        #write initial xyz and final xyz into two separate files:
-        #find optim file and get the output of it as the final xyz
+        # First we will just design this for a single optim.xyz file and check that hte ifal and initial one cna be compared
+        # Write initial xyz and final xyz into two separate files:
+        # Find optim file and get the output of it as the final xyz
+
         owd = os.getcwd()
         print('Current directory: '+owd)
     
-        #Create lists to store the structure parameters to be collected for each output file
+        # Create lists to store the structure parameters to be collected for each output file
 
         list_error_dicts = []
         list_structure_names = []
@@ -246,15 +244,15 @@ class ErrorAnalysis:
                 num_atoms = int(full_traj.readline())
                 num_lines = num_atoms + 2
         
-                #get the first xyz file
+                # Get the first xyz file
                 with open(optim_file) as input_file:
                     head = [next(input_file) for _ in range(num_lines)]
 
-                #last xyz in trajectory saved as the final file
+                # Last xyz in trajectory saved as the final file
                 with open('final_'+optim_file, 'w') as finalxyz:
                     finalxyz.writelines(deque(full_traj, num_lines))
 
-                #initial xyz in trajectory saved as the initial file
+                # Initial xyz in trajectory saved as the initial file
                 with open('initial_'+optim_file, 'w') as initxyz:
                     initxyz.writelines(head)
         
@@ -263,7 +261,7 @@ class ErrorAnalysis:
                 final_mol = mol3D()
                 final_mol.readfromxyz('initial_'+optim_file)
         
-                #list of geometry cehcks to skip when implementing IsStructure
+                # List of geometry cehcks to skip when implementing IsStructure
                 skipGeomChecks = ['atom_dist_max', 'banned_by_user', 'dist_del_eq', 'devi_linear_avrg', 'devi_linear_max', 'dist_del_eq_relative']
                 list_rmsd_noHs.append(rmsd_noHs(init_mol, final_mol))
                 list_rmsd.append(rmsd_Hs(init_mol, final_mol))
@@ -275,7 +273,7 @@ class ErrorAnalysis:
                 list_structure_names.append(optim_path)
                 os.chdir(owd)
             except Exception as e:
-                #print("An Exception Occured when trying to procees: " + str(optim_file)) 
+                # Print("An Exception Occured when trying to procees: " + str(optim_file)) 
                 logging.exception('An Exception was thrown')
         df = pd.DataFrame(list_error_dicts)
         df['Molecule'] = list_structure_names

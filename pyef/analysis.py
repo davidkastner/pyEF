@@ -1,20 +1,17 @@
-from distutils.dir_util import copy_tree
-from collections import deque
-import traceback
+import mmap
+import re
 import logging
+import traceback
 import subprocess
-import sys
-import glob, os, shutil
 import numpy as np
 import pandas as pd
-import mmap
-from GeometryCheck import ErrorAnalysis
-from molSimplify.Classes.ligand import ligand_breakdown
-from molSimplify.Classes.mol3D import *
-from molSimplify.Scripts import *
-from collections import deque
-from molSimplify.Classes.globalvars import all_angle_refs
+import glob, os, shutil
 import scipy.linalg as la
+from collections import deque
+from molSimplify.Scripts import *
+from GeometryCheck import ErrorAnalysis
+from molSimplify.Classes.mol3D import *
+from distutils.dir_util import copy_tree
 
 class Electrostatics:
     '''
@@ -43,9 +40,10 @@ class Electrostatics:
         self.inGaCageBool = inGaCage
         self.prepData()
 
-    #function prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely
     
     def fix_ECPmolden(self):
+        """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
+
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd()
@@ -66,6 +64,8 @@ class Electrostatics:
                 file.write(content)
             print("all molden files are now fixed")
         os.chdir(owd)
+
+
     def prepData(self):
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -79,10 +79,10 @@ class Electrostatics:
             print('optim_path: ' + str(optim_path))            
 
             if os.path.exists('final_optim.xyz'):
-                pass  #file already parsed
+                pass  # File already parsed
             else:
                 try:
-                    #first copy the last xyz frame of the optimization into a new file with standard name
+                    # First copy the last xyz frame of the optimization into a new file with standard name
                     path_to_init = optim_path[:-4]
                     os.chdir(optim_path)
                     optim_file = 'optim.xyz'
@@ -102,10 +102,10 @@ class Electrostatics:
                     logging.exception('An Exception was thrown')
 
             if os.path.exists('final_optim.molden'):
-                pass #.molden file already has correct name
+                pass # molden file already has correct name
             else:
                 try:    
-                   #now make a copy of the .molden file with the same name is the directory
+                   # Now make a copy of the .molden file with the same name is the directory
                     files = glob.iglob(os.path.join(optim_path, "*.molden"))
                     for file in files:
                         shutil.copy2(file, 'final_optim.molden')
@@ -125,7 +125,6 @@ class Electrostatics:
 
         # Define a pattern to extract the index, element name, and atomic dipole and quadrupole moment values
         pattern = r'Atomic multipole moments of\s+(\d+)\s*\(([^)]+)\s*\).*?X=\s*([-+]?\d+\.\d+)\s+Y=\s*([-+]?\d+\.\d+)\s+Z=\s*([-+]?\d+\.\d+).*?XX=\s*([-+]?\d+\.\d+)\s+XY=\s*([-+]?\d+\.\d+)\s+XZ=\s*([-+]?\d+\.\d+).*?YX=\s*([-+]?\d+\.\d+)\s+YY=\s*([-+]?\d+\.\d+)\s+YZ=\s*([-+]?\d+\.\d+).*?ZX=\s*([-+]?\d+\.\d+)\s+ZY=\s*([-+]?\d+\.\d+)\s+ZZ=\s*([-+]?\d+\.\d+)'
-
         atomicDicts = []
         # Iterate through sections and extract the information
         for section in sections:
@@ -160,8 +159,8 @@ class Electrostatics:
         return atomicDicts
 
 
-    #Define the functions to calculate the ESP:
-    #function to rapidly count the number of lines in a file
+    # Define the functions to calculate the ESP:
+    # Function to rapidly count the number of lines in a file
     def mapcount(filename):
         f = open(filename, "r+")
         buf = mmap.mmap(f.fileno(), 0)
@@ -170,27 +169,29 @@ class Electrostatics:
         while readline():
             lines += 1
         return lines
+
+
     def calcdist(espatom_idx, charge_file):
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
-        #convert each column to list for quicker indexing
+        # Convert each column to list for quicker indexing
         atoms = df['Atom']
         charges = df['charge']
         xs = df['x']
         ys = df['y']
         zs = df['z']
 
-        #pick the index of the atom at which the esp should be calculated
+        # Pick the index of the atom at which the esp should be calculated
         idx_atom = espatom_idx
 
-        #determine position and charge of the target atom
+        # Determine position and charge of the target atom
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
         chargeo = charges[idx_atom]
         total_esp = 0
-        #distance to gallium atoms
+        # Distance to gallium atoms
         Ga_idxs = [276, 277, 278, 279]
         Ga_self_dist = np.zeros([4,4])
         distances_vertices = []
@@ -212,31 +213,31 @@ class Electrostatics:
             
         return [distances_vertices, Ga_self_dist]
 
-    #espatom_idx should be the index of the atom at which the esp should be calculated
-    #charge_range should provide an array with the index of each atom to be considered in calculation of the ESP
-    #charge_file is the filepath for the .txt file containing the hirshfeld charges (generated by multiwfn)
+    # Espatom_idx should be the index of the atom at which the esp should be calculated
+    # Charge_range should provide an array with the index of each atom to be considered in calculation of the ESP
+    # Charge_file is the filepath for the .txt file containing the hirshfeld charges (generated by multiwfn)
     def calcesp(espatom_idx, charge_range, charge_file):
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
 
-        #convert each column to list for quicker indexing
+        # Convert each column to list for quicker indexing
         atoms = df['Atom']
         charges = df['charge']
         xs = df['x']
         ys = df['y']
         zs = df['z']
 
-        #pick the index of the atom at which the esp should be calculated
+        # Pick the index of the atom at which the esp should be calculated
         idx_atom = espatom_idx
 
-        #determine position and charge of the target atom
+        # Determine position and charge of the target atom
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
         chargeo = charges[idx_atom]
         total_esp = 0
 
-        #unit conversion
+        # Unit conversion
         A_to_m = 10**(-10)
         KJ_J = 10**-3
         faraday = 23.06   #kcal/(mol*V)
@@ -248,17 +249,17 @@ class Electrostatics:
             if idx == idx_atom:
                 continue
             else:
-                #Calculate esp and convert to units (A to m)
+                # Calculate esp and convert to units (A to m)
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 total_esp = total_esp + (charges[idx]/r)
 
-        final_esp = k*total_esp*((C_e))*cal_J*faraday   #note that cal/kcal * kJ/J gives 1
+        final_esp = k*total_esp*((C_e))*cal_J*faraday   # Note: cal/kcal * kJ/J gives 1
         #print(str(final_esp) + ' kJ/(mol*e)')
         return [final_esp, df['Atom'][idx_atom]]
 
 
-    #E in units of V/(ansgrom) = N*m/(C*Angstrom)
     def calc_firstTermE(espatom_idx, charge_range, charge_file):
+        # E in units of V/(ansgrom) = N*m/(C*Angstrom)
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
 
@@ -388,8 +389,8 @@ class Electrostatics:
             [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  Electrostatics.calc_fullE(bonded_atom_idx, all_lines, charge_file, atom_multipole_file)    
             bond_vec_unnorm = np.subtract(np.array(center_position), np.array(bonded_position)) 
             bond_vec = bond_vec_unnorm/(np.linalg.norm(bond_vec_unnorm))
-            #initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
-            #Compute E-field projected along this bond!
+            # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
+            # Compute E-field projected along this bond!
             E_proj = (1/2)*np.dot((np.array(bonded_E) + np.array(center_E)), bond_vec)
             E_proj_Shaik = (1/2)*np.dot((Shaik_E_center + Shaik_E_bonded), bond_vec)
             E_projected.append(E_proj)
@@ -424,7 +425,7 @@ class Electrostatics:
         [second_coord_ESP, atom_type] = Electrostatics.calcesp(metal_idx, final_lst, charge_file)
         return second_coord_ESP
 
-    #Boolean CageTrue
+    # Boolean CageTrue
     def charge_atom(filename, atom_idx):
         df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         atoms = df['Atom']
@@ -437,7 +438,7 @@ class Electrostatics:
         return [total_charge, partial_charge_atom]
 
     def ESP_all_calcs(filename, atom_idx, cageTrue):
-        #get the number of lines in the txt file
+        # Get the number of lines in the txt file
         total_lines =Electrostatics.mapcount(filename)
         all_lines = range(0, total_lines)
         [ESP_all, atom_type] = Electrostatics.calcesp(atom_idx, all_lines, filename)
@@ -459,9 +460,9 @@ class Electrostatics:
 
     def esp_bydistance(espatom_idx,  charge_file):
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
-        #unit conversion
+        # Unit conversion
         A_to_m = 10**(-10)
         KJ_J = 10**-3
         faraday = 23.06   #kcal/(mol*V)
@@ -469,24 +470,24 @@ class Electrostatics:
         one_mol = 6.02*(10**23)
         cal_J = 4.184
 
-        #convert each column to list for quicker indexing
+        # Convert each column to list for quicker indexing
         atoms = df['Atom']
         charges = df['charge']
         xs = df['x']
         ys = df['y']
         zs = df['z']
 
-        #pick the index of the atom at which the esp should be calculated
+        # Pick the index of the atom at which the esp should be calculated
         idx_atom = espatom_idx
 
         print("The charge at: "+ str(df['Atom'][idx_atom]) +" atom will be calculated")
-        #determine position and charge of the target atom
+        # Determine position and charge of the target atom
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
         chargeo = charges[idx_atom]
         total_esp = 0
-        #create an ordering of the atoms based on distance from the central atom
+        # Create an ordering of the atoms based on distance from the central atom
         total_atoms = len(xs)
         distances = []
         esps = []
@@ -497,7 +498,7 @@ class Electrostatics:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 distances.append(r)
                 esps.append(k*C_e*cal_J*faraday*charges[idx]/r)
-        #Now we sort the distance list, and use sorted indices to sort the
+        # Now we sort the distance list, and use sorted indices to sort the
         dist_arr = np.array(distances)
         sorted_idx = np.argsort(dist_arr)
         esp_arr = np.array(esps)
@@ -507,7 +508,7 @@ class Electrostatics:
 
         return [sorted_dist, sorted_esps, cumulative_esps]
   
-    #Function that can be called on a class object to compute key error analysis metrics for a transition metal complex
+    # Function that can be called on a class object to compute key error analysis metrics for a transition metal complex
     def errorAnalysis(self, csvName):
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -547,14 +548,14 @@ class Electrostatics:
     
     '''
     def getESPData(self, charge_types, ESPdata_filename):
-       #Access Class Variables
+       # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
 
-        owd = os.getcwd() # old working directory
+        owd = os.getcwd() # Old working directory
         allspeciesdict = []
-        counter = 0  #iterator to account for atomic indices of interest
+        counter = 0  # Iterator to account for atomic indices of interest
         for f in list_of_file:
             print(f)
             atom_idx = metal_idxs[counter]
@@ -592,7 +593,7 @@ class Electrostatics:
                         print('The Exception is: ' + str(e))
                         print(traceback.format_exc())
                         print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
-                        #Re-run multiwfn computation of partial charge 
+                        # Re-run multiwfn computation of partial charge 
                         proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                         calc_command = self.dict_of_calcs[key]
                         commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
@@ -602,7 +603,7 @@ class Electrostatics:
                         new_name = 'final_optim_' +key+'.txt'
                         os.rename('final_optim.chg', new_name)
                         if self.inGaCageBool:                        
-                            #With newly analyzed partial charges, re-compute ESP data
+                            # With newly analyzed partial charges, re-compute ESP data
                             [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
                         else:
                             [ESP_all, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
@@ -611,7 +612,7 @@ class Electrostatics:
                         ESP_fcoord = Electrostatics.esp_first_coord(molsimp_obj, atom_idx, full_file_path)
                         ESP_scoord = Electrostatics.esp_second_coord(molsimp_obj, atom_idx, full_file_path)
 
-                    #At this point, all calculations shouldbe complete and succesfull: Add ESP data to dictionary
+                    # At this point, all calculations shouldbe complete and succesfull: Add ESP data to dictionary
                     results_dict[str(key) + ' ESP Second Coor Shell (kcal/mol)'] = ESP_scoord
                     results_dict[str(key) + ' ESP First Coor Shell (kcal/mol)'] = ESP_fcoord
                     if self.inGaCageBool:
@@ -627,7 +628,7 @@ class Electrostatics:
                     results_dict['Sorted ESP '+ str(key)] = sorted_esps
                     results_dict['Cumulative ESP ' + str(key)] = cum_esps
 
-                    #if .molden files deal with encapsulated TMCS, complete an additional set of analyses
+                    # If .molden files deal with encapsulated TMCS, complete an additional set of analyses
                     if self.inGaCageBool:
                         [distoGa, Ga_selfdist]=Electrostatics.calcdist(atom_idx, full_file_path)
                         results_dict['MetaltoGa_dist'] = distoGa
@@ -648,7 +649,7 @@ class Electrostatics:
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
 
-        owd = os.getcwd() # old working directory
+        owd = os.getcwd() # Old working directory
         allspeciesdict = []
         counter = 0
 
@@ -659,7 +660,7 @@ class Electrostatics:
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
             subprocess.call("module load multiwfn/noGUI", shell=True)
-            #First For this to work, the .molden file should be named: f.molden
+            # First For this to work, the .molden file should be named: f.molden
 
             command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
 
@@ -671,13 +672,13 @@ class Electrostatics:
             results_dict = {}
             results_dict['Name'] = f
             Command_Polarization = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden >' +  'final_optim_polarization.txt'
-            #Check if the atomic polarizations have been computed
+            # Check if the atomic polarizations have been computed
             path_to_pol = os.getcwd() + '/' + 'final_optim_polarization.txt'
             if os.path.exists(path_to_pol):
                 print('I located polarization file for' + f + "!!")
             else:
                 print('Starting to run polarization calculation!')
-                #Now Run the calculation for atomic dipole and quadrupole moment
+                # Now Run the calculation for atomic dipole and quadrupole moment
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                 polarization_commands = ['15', '-1', '3', '2', '0', 'q'] # for atomic dipole and quadrupole moment of Hirshfeld-I type
                 output = proc.communicate("\n".join(polarization_commands).encode())
@@ -686,7 +687,7 @@ class Electrostatics:
                 full_file_path = os.getcwd() +'/' + 'final_optim_Hirshfeld_I.txt'
                 atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
                 copy_tree(atmrad_src, results_dir + 'atmrad/')        
-                #This only works if the current key is Hirshfeld I, otherwise unavailable since polarization path should be in hirshfeld-I
+                # This only works if the current key is Hirshfeld I, otherwise unavailable since polarization path should be in hirshfeld-I
                 [proj_Efields, bondedAs, bond_pos] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
             
             except Exception as e:
@@ -698,7 +699,7 @@ class Electrostatics:
                 os.rename('final_optim.chg', new_name)
 
             results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
-            #probably want to add other bonds to this list!
+            # Probably want to add other bonds to this list!
             allspeciesdict.append(results_dict)
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
