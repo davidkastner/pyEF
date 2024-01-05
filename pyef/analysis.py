@@ -398,11 +398,13 @@ class Electrostatics:
         print('Efield on metal atom is: ' +str(center_E))
         print('Shaik Efield on metal atom is: ' +str(Shaik_E_center))
         lst_bonded_atoms = mol_simp_obj.getBondedAtoms(metal_idx)
-        
+        bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
             [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  Electrostatics.calc_fullE(bonded_atom_idx, all_lines, charge_file, atom_multipole_file)    
             bond_vec_unnorm = np.subtract(np.array(center_position), np.array(bonded_position)) 
-            bond_vec = bond_vec_unnorm/(np.linalg.norm(bond_vec_unnorm))
+            bond_len = np.linalg.norm(bond_vec_unnorm)
+            bond_vec = bond_vec_unnorm/(bond_len)
+
             # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
             # Compute E-field projected along this bond!
             E_proj = (1/2)*np.dot((np.array(bonded_E) + np.array(center_E)), bond_vec)
@@ -411,6 +413,8 @@ class Electrostatics:
             E_shaik_proj.append(E_proj_Shaik)
             bonded_atoms.append(bonded_atom)
             bonded_positions.append(bonded_position)
+            bond_lens.append(bond_len)
+
         print('Projected E!')
         print(E_projected)
         print('Projected Shaik!')
@@ -418,7 +422,7 @@ class Electrostatics:
         print('Bonded ATOMS:')
         print(bonded_atoms)
         print(bonded_positions)
-        return [E_projected, bonded_atoms, bonded_positions]
+        return [E_projected, bonded_atoms, bonded_atom_idx, bond_lens]
             
     def esp_first_coord(mol_simp_obj, metal_idx, charge_file):
         print('The index of the metal atom is: ' + str(metal_idx))
@@ -701,17 +705,25 @@ class Electrostatics:
                 atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
                 copy_tree(atmrad_src, results_dir + 'atmrad/')        
                 # This only works if the current key is Hirshfeld I, otherwise unavailable since polarization path should be in hirshfeld-I
-                [proj_Efields, bondedAs, bond_pos] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
+                [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
             
             except Exception as e:
                 proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                 calc_command = self.dict_of_calcs['Hirshfeld_I']
                 commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                 output = proc.communicate("\n".join(commands).encode())
-                new_name = 'final_optim'+'_Hirshfeld_I.txt'
+                new_name = 'final_optim_Hirshfeld_I.txt'
                 os.rename('final_optim.chg', new_name)
+                [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
+
                 #will ned to add additional params here for E-field data
             results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
+            results_dict['Projected_Efields V/Angstrom'] = proj_Efields
+            results_dict['Bonded Atoms'] = bondedAs
+            results_dict['Bonded Indices'] = bonded_idxs
+            results_dict['Bond Lengths']= bond_len
+
+
             # Probably want to add other bonds to this list!
             allspeciesdict.append(results_dict)
         os.chdir(owd)
