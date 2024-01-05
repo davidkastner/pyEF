@@ -1,0 +1,21 @@
+name: E3
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - biopython
+  - black
+  - click
+  - cookiecutter
+  - emboss
+  - matplotlib
+  - numpy
+  - pandas
+  - pip
+  - python=3.8
+  - seaborn
+  - tqdm
+  - pip:
+      - sphinx_rtd_theme==0.5.2
+      - sphinx-autoapi
+      - https://github.com/revitron/revitron-sphinx-theme/archive/refs/tags/0.7.0.zip
