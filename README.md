@@ -2,9 +2,10 @@
 ==============================
 # pyEF
 *Python electric fields package*
+
 [//]: # (Badges)
-[![GitHub Actions Build Status](https://github.com/davidkastner/E3Bind/workflows/CI/badge.svg)](https://github.com/davidkastner/E3Bind/actions?query=workflow%3ACI)
-[![Documentation Status](https://readthedocs.org/projects/e3/badge/?version=latest)](https://e3.readthedocs.io/en/latest/?badge=latest)
+[![GitHub Actions Build Status](https://github.com/davidkastner/pyef/workflows/CI/badge.svg)](https://github.com/davidkastner/pyef/actions?query=workflow%3ACI)
+[![Documentation Status](https://readthedocs.org/projects/pyef/badge/?version=latest)](https://pyef.readthedocs.io/en/latest/?badge=latest)
 
 ## Table of Contents
 1. **Overview**

@@ -1,20 +1,13 @@
-name: E3
+name: pyef
 channels:
-  - bioconda
   - conda-forge
+  - defaults
 dependencies:
-  - biopython
-  - black
-  - click
-  - cookiecutter
-  - emboss
-  - matplotlib
+  - python=3.8
   - numpy
   - pandas
+  - scipy
   - pip
-  - python=3.8
-  - seaborn
-  - tqdm
   - pip:
       - sphinx_rtd_theme==0.5.2
       - sphinx-autoapi
