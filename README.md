@@ -1,7 +1,6 @@
 ![Graphical Summary of README](docs/_static/header.webp)
 ==============================
-# pyEF
-*Python electric fields package*
+# pyEF |  Python electric fields package*
 
 [//]: # (Badges)
 [![GitHub Actions Build Status](https://github.com/davidkastner/pyef/workflows/CI/badge.svg)](https://github.com/davidkastner/pyef/actions?query=workflow%3ACI)
