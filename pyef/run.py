@@ -1,4 +1,7 @@
 import os
+import sys
+import pyef
+import argparse
 from pyef.analysis import Electrostatics
 from pyef.geometry import ErrorAnalysis
 
@@ -55,11 +58,23 @@ def main(jobs, geom_flag, esp_flag, metal_indices):
     # Method to Compute Efield Projections on bonds connected to the atom specified by index in metal_indices
     dataObject.getEFieldData(Efield_data_filename)
 
-if __name__ == "__main__":
-    geom_flag = False   # Perform a geometry check
-    esp_flag = False    # Perform analysis of electrostatics
-    jobs = ['/home/kastner/DavidMimichrome/mc6_1_2best_c0opt', '/home/kastner/DavidMimichrome/mc6_2_6best_c0opt']
-    metal_indices = [486, 486]
-    main(jobs, geom_flag, esp_flag, metal_indices)
+def read_file_lines(file_path):
+    """Reads in auxiliary files containing job information"""
+    with open(file_path, 'r') as file:
+        return [line.strip() for line in file.readlines()]
 
-    # /home/kastner/DavidMimichrome/mc6_1_2best_c0opt, /home/kastner/DavidMimichrome/mc6_2_6best_c0opt
+if __name__ == "__main__":
+    # Example: python run.py --geom --esp --jobs_file path/to/jobs.in --metals_file path/to/metals.in  > pyEF.log
+    parser = argparse.ArgumentParser(description="Script Description")
+    parser.add_argument("--geom", action="store_true", help="Perform a geometry check")
+    parser.add_argument("--esp", action="store_true", help="Perform analysis of electrostatics")
+    parser.add_argument("--jobs_file", required=True, help="Path to file containing job paths")
+    parser.add_argument("--metals_file", required=True, help="Path to file containing metal indices")
+
+    args = parser.parse_args()
+    geom_flag = args.geom
+    esp_flag = args.esp
+    jobs = read_file_lines(args.jobs_file)
+    metal_indices = [int(idx) for idx in read_file_lines(args.metals_file)]
+
+    main(jobs, geom_flag, esp_flag, metal_indices)
