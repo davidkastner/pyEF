@@ -1,7 +1,6 @@
 ![Graphical Summary of README](docs/_static/header.webp)
 ==============================
-# pyEF  |   Electric fields for molecular systems
-
+# pyEF
 [//]: # (Badges)
 [![GitHub Actions Build Status](https://github.com/davidkastner/pyef/workflows/CI/badge.svg)](https://github.com/davidkastner/pyef/actions?query=workflow%3ACI)
 [![Documentation Status](https://readthedocs.org/projects/pyef/badge/?version=latest)](https://pyef.readthedocs.io/en/latest/?badge=latest)
