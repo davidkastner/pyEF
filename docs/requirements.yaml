@@ -1,12 +1,9 @@
 name: docs
 channels:
 dependencies:
-    # Base depends
-  - python
+  - python=3.8
   - pip
-
-
-
-    # Pip-only installs
-  #- pip:
-
+  - pip:
+    - sphinx_rtd_theme==1.1.1
+    - sphinx-autoapi
+    - https://github.com/revitron/revitron-sphinx-theme/archive/refs/tags/0.7.0.zip

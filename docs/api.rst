@@ -2,6 +2,10 @@ API Documentation
 =================
 
 .. autosummary::
-   :toctree: autosummary
+   :toctree: autosummary/
+   :recursive:
 
-   pyef.canvas
+   pyef.cli
+   pyef.run
+   pyef.analysis
+   pyef.geometry
