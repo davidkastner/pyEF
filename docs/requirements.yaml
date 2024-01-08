@@ -6,6 +6,8 @@ dependencies:
   - pip
     # Package depends
   - numpy
+  - pandas
+  - scipy
   - pip:
     # Pip-only installs
     - sphinx==6.2.1

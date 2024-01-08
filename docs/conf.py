@@ -16,7 +16,6 @@
 import os
 import sys
 import datetime
-import revitron_sphinx_theme
 
 sys.path.insert(0, os.path.abspath(".."))
 master_doc = 'index'
