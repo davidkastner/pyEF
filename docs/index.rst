@@ -5,8 +5,8 @@
 
 .. image:: _static/logo-white.svg
 
-E3Bind
-======
+PyEF
+====
 
 .. container:: .large
 
