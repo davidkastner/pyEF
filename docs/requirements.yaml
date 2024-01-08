@@ -4,6 +4,6 @@ dependencies:
   - python=3.8
   - pip
   - pip:
-    - sphinx_rtd_theme==1.1.1
-    - sphinx-autoapi
+    - sphinx==6.2.1
+    - sphinx-autoapi==3.0.0
     - https://github.com/revitron/revitron-sphinx-theme/archive/refs/tags/0.7.0.zip
