@@ -1,9 +1,13 @@
 name: docs
 channels:
 dependencies:
+    # Base depends
   - python=3.8
   - pip
+    # Package depends
+  - numpy
   - pip:
+    # Pip-only installs
     - sphinx==6.2.1
     - sphinx-autoapi==3.0.0
     - https://github.com/revitron/revitron-sphinx-theme/archive/refs/tags/0.7.0.zip

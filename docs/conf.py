@@ -27,7 +27,7 @@ project = "PyEF"
 copyright = '{}, <a href="https://kastner.io/en/">David W. Kastner</a>'.format(
     datetime.datetime.now().year
 )
-author = "David W. Kastner"
+author = "Melissa Manetsch and David W. Kastner"
 
 # -- General configuration ---------------------------------------------------
 
