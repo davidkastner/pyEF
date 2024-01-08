@@ -37,6 +37,8 @@ author = "Melissa Manetsch and David W. Kastner"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 
+autodoc_mock_imports = ["molSimplify"]
+
 extensions = [
     "autoapi.extension",
     "sphinx.ext.autosummary",
