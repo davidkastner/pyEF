@@ -37,8 +37,6 @@ author = "Melissa Manetsch and David W. Kastner"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 
-autodoc_mock_imports = ["molSimplify"]
-
 extensions = [
     "autoapi.extension",
     "sphinx.ext.autosummary",
@@ -58,7 +56,7 @@ autoapi_type = "python"
 autoapi_dirs = ["../pyef"]
 autoapi_ignore = ["*/tests/*", "*_version.py"]
 autodoc_member_order = "bysource"
-autodoc_mock_imports = ["click"]
+autodoc_mock_imports = ["molSimplify", "click"]
 
 autoapi_options = [
     "members",
