@@ -8,3 +8,4 @@ API Documentation
    pyef.cli
    pyef.run
    pyef.analysis
+   pyef.geometry

@@ -23,7 +23,7 @@ master_doc = 'index'
 # -- Project information -----------------------------------------------------
 
 project = "PyEF"
-copyright = '{}, <a href="https://kastner.io/en/">David W. Kastner</a>'.format(
+copyright = '{}, <a href="https://kastner.io/en/">Melissa Manetsch and David W. Kastner</a>'.format(
     datetime.datetime.now().year
 )
 author = "Melissa Manetsch and David W. Kastner"
