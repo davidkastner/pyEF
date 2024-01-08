@@ -52,19 +52,20 @@ extensions = [
 add_module_names = False
 
 autosummary_generate = True
-autoapi_type = "python"
-autoapi_dirs = ["../pyef"]
-autoapi_ignore = ["*/tests/*", "*_version.py"]
-autodoc_member_order = "bysource"
-autodoc_mock_imports = ["molSimplify", "click"]
+autoapi_generate_api_docs = False
+autoapi_type = 'python'
+autoapi_dirs = ['../pyef']
+autoapi_ignore = ["*/tests/*"]
 
-autoapi_options = [
-    "members",
-    "undoc-members",
-    "show-inheritance",
-    "show-module-summary",
-    "imported-members",
-]
+autoapi_options = ['members',
+                   'undoc-members',
+                   'show-inheritance',
+                   'show-module-summary',
+                   'imported-members']
+
+napoleon_google_docstring = False
+napoleon_use_param = False
+napoleon_use_ivar = True
 
 napoleon_google_docstring = True
 napoleon_include_init_with_doc = True
