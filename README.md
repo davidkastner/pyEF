@@ -49,7 +49,7 @@ conda env create -f environment.yml
 conda activate pyEF
 ```
 
-### Developer install of pyQMMM
+### Developer install of pyEF
 ```
 cd pyEF
 python -m pip install -e .
