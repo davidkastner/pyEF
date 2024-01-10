@@ -9,7 +9,8 @@ import glob, os, shutil
 import scipy.linalg as la
 from collections import deque
 from molSimplify.Scripts import *
-from pyef.geometry import ErrorAnalysis
+#from pyef.geometry import ErrorAnalysis
+from geometry import ErrorAnalysis
 from molSimplify.Classes.mol3D import *
 from distutils.dir_util import copy_tree
 
@@ -384,8 +385,39 @@ class Electrostatics:
         E_vec = [Ex, Ey, Ez]
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
 
+
+    #bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
+    def E_proj_bondIndices(bond_indices, charge_file, atom_multipole_file):
+        print('At line 391')
+        bonded_atoms = []
+        E_projected = []
+        E_shaik_proj = []
+        bonded_positions = []
+        total_lines = Electrostatics.mapcount(charge_file)
+        all_lines = range(0, total_lines)
+        #Determine the Efield vector at point of central metal stom
+        bond_lens = []
+        for atomidxA, atomidxB in bond_indices:
+            print('Starting iteration at 401: atomindxA: ' + str(atomidxA))
+            [A_bonded_E, A_bonded_position, A_bonded_atom, A_Shaik_E_bonded]  =  Electrostatics.calc_fullE(atomidxA, all_lines, charge_file, atom_multipole_file)   
+            [B_bonded_E, B_bonded_position, B_bonded_atom, B_Shaik_E_bonded]  =  Electrostatics.calc_fullE(atomidxB, all_lines, charge_file, atom_multipole_file)  
+            bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
+            bond_len = np.linalg.norm(bond_vec_unnorm)
+            bond_vec = bond_vec_unnorm/(bond_len)
+
+            # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
+            # Compute E-field projected along this bond!
+            E_proj = (1/2)*np.dot((np.array(A_bonded_E) + np.array(B_bonded_E)), bond_vec)
+            E_proj_Shaik = (1/2)*np.dot((A_Shaik_E_bonded + B_Shaik_E_bonded), bond_vec)
+            E_projected.append(E_proj)
+            E_shaik_proj.append(E_proj_Shaik)
+            bonded_atoms.append((A_bonded_atom, B_bonded_atom))
+            bonded_positions.append((A_bonded_position, B_bonded_position))
+            bond_lens.append(bond_len)
+        return [E_projected, bonded_atoms, bond_indices, bond_lens]
+    
+
     def E_proj_first_coord(mol_simp_obj, metal_idx, charge_file, atom_multipole_file):
-        ang_to_m = 10**(-10)
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
@@ -394,9 +426,6 @@ class Electrostatics:
         all_lines = range(0, total_lines)
         #Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Shaik_E_center]  =  Electrostatics.calc_fullE(metal_idx, all_lines, charge_file, atom_multipole_file)
-        print('Computed E field!')
-        print('Efield on metal atom is: ' +str(center_E))
-        print('Shaik Efield on metal atom is: ' +str(Shaik_E_center))
         lst_bonded_atoms = mol_simp_obj.getBondedAtoms(metal_idx)
         bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
@@ -414,14 +443,6 @@ class Electrostatics:
             bonded_atoms.append(bonded_atom)
             bonded_positions.append(bonded_position)
             bond_lens.append(bond_len)
-
-        print('Projected E!')
-        print(E_projected)
-        print('Projected Shaik!')
-        print(E_shaik_proj)
-        print('Bonded ATOMS:')
-        print(bonded_atoms)
-        print(bonded_positions)
         return [E_projected, bonded_atoms, bonded_atom_idx, bond_lens]
             
     def esp_first_coord(mol_simp_obj, metal_idx, charge_file):
@@ -469,7 +490,7 @@ class Electrostatics:
             ESP_just_cage = Electrostatics.calcesp(atom_idx, cage_lines, filename)[0]
             print('ESP for all atoms: ' + str(ESP_all) + ' kJ/(mol*e)')
             print('ESP just ligand: ' + str(ESP_just_ligand) + ' kJ/(mol*e)')
-            print('ESP jut cage: ' + str(ESP_just_cage) + ' kJ/(mol*e)')
+            print('ESP just cage: ' + str(ESP_just_cage) + ' kJ/(mol*e)')
             return [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type]
         else:
             # print('ESP for all atoms: ' + str(ESP_all) + ' kJ/(mol*e)') 
@@ -583,8 +604,6 @@ class Electrostatics:
             subprocess.call("module load multiwfn/noGUI", shell=True)
             command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
             results_dir = os.getcwd() + '/'
-            molsimp_obj= mol3D()
-            molsimp_obj.readfromxyz('final_optim.xyz')
             
             results_dict = {}
             results_dict['Name'] = f
@@ -661,8 +680,9 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(ESPdata_filename +'.csv')
         return df
-
-    def getEFieldData(self, Efield_data_filename):
+    
+    #input_bond_indices is a list of a list of tuples
+    def getEFieldData(self, Efield_data_filename, input_bond_indices=[]):
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
@@ -670,11 +690,14 @@ class Electrostatics:
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
         counter = 0
-
-    
+        
+        #If indices of bonds of interest are entered then switch to manual mode
+        bool_manual_mode = False
+        if len(input_bond_indices) > 0:
+            bool_manual_mode = True
+        
         for f in list_of_file:
-            atom_idx = metal_idxs[counter]
-            counter = counter + 1
+            atom_idx = metal_idxs[counter] 
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
             subprocess.call("module load multiwfn/noGUI", shell=True)
@@ -691,6 +714,7 @@ class Electrostatics:
 
             # Check if the atomic polarizations have been computed
             path_to_pol = os.getcwd() + '/' + 'final_optim_polarization.txt'
+            print('Attempting this path to the polarization file')
             if os.path.exists(path_to_pol):
                 print('   > Polarization file: ' + f + "!!")
             else:
@@ -703,9 +727,14 @@ class Electrostatics:
             try:
                 full_file_path = os.getcwd() +'/' + 'final_optim_Hirshfeld_I.txt'
                 atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
-                copy_tree(atmrad_src, results_dir + 'atmrad/')        
-                # This only works if the current key is Hirshfeld I, otherwise unavailable since polarization path should be in hirshfeld-I
-                [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
+                copy_tree(atmrad_src, results_dir + 'atmrad/')     
+                #If bond_indices is longer then one, default to manually entry mode
+                if bool_manual_mode:
+                    file_bond_indices = input_bond_indices[counter]
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
+                #Otherwise, automatically sense atoms bonded to metal and output E-fields of those
+                else:
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
             
             except Exception as e:
                 proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
@@ -714,15 +743,21 @@ class Electrostatics:
                 output = proc.communicate("\n".join(commands).encode())
                 new_name = 'final_optim_Hirshfeld_I.txt'
                 os.rename('final_optim.chg', new_name)
-                [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
-
+                if bool_manual_mode:
+                    file_bond_indices = input_bond_indices[counter]
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
+                #Otherwise, automatically sense atoms bonded to metal and output E-fields of those
+                else:
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
                 #will ned to add additional params here for E-field data
+            
             results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
             results_dict['Projected_Efields V/Angstrom'] = proj_Efields
             results_dict['Bonded Atoms'] = bondedAs
-            results_dict['Bonded Indices'] = bonded_idxs
-            results_dict['Bond Lengths']= bond_len
+            results_dict['Bonded Indices'] = bonded_idx
+            results_dict['Bond Lengths']= bond_lens
 
+            counter = counter + 1
 
             # Probably want to add other bonds to this list!
             allspeciesdict.append(results_dict)
