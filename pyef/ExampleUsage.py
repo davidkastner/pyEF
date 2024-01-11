@@ -31,15 +31,13 @@ folder_to_file_path  = '/scr/'
 #Initialize Electrostatics Object
 incage_bool = False
 dataObject = Electrostatics(list_of_folders, list_of_atoms, folder_to_file_path, incage_bool)
+
 #fix/reformat the name and charges on atoms in .molden file to set up for future calculations
 #dataObject.prepData()
 #dataObject.fix_ECPmolden()
 
 #Define name of .csv to contain error data
 err_csv_name = 'gfn2xtb_Error'
-
-#Method will calculate various RMSD, molsimplify error parameters/flags
-#dataObject.errorAnalysis(err_csv_name)
 
 #Determine Filename prefix for output 
 ESPdata_filename = 'MinimiChrome_ESP'
@@ -48,7 +46,7 @@ ESPdata_filename = 'MinimiChrome_ESP'
 lst_charge_types = ['Hirshfeld_I']
 
 #Create CSV with ESP data
-#dataObject.getESPData(lst_charge_types, ESPdata_filename)
+dataObject.getESPData(lst_charge_types, ESPdata_filename)
 
 
 #Define prefix name  of E-field datafile
@@ -59,4 +57,4 @@ Efield_data_filename = 'MinimiChrome_Efield'
 #A list of a list of tuples... each nested list is the list of bond tuples for a specific molecule in the list
 list_of_Efields = [[(1,2), (5,6)], [(1,4), (7,8)]]
 dataObject.getEFieldData(Efield_data_filename, list_of_Efields)
-
+dataObject.getEFieldData(Efield_data_filename)

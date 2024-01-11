@@ -8,10 +8,6 @@ import pandas as pd
 import glob, os, shutil
 import scipy.linalg as la
 from collections import deque
-from molSimplify.Scripts import *
-#from pyef.geometry import ErrorAnalysis
-from geometry import ErrorAnalysis
-from molSimplify.Classes.mol3D import *
 from distutils.dir_util import copy_tree
 
 class Electrostatics:
@@ -39,6 +35,40 @@ class Electrostatics:
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.inGaCageBool = inGaCage
+        self.amassdict = {'X': (1.0, 0, 0.77, 0), 'H': (1.0079, 1, 0.37, 1),
+             'D': (2.0141, 1, 0.37, 1), 'He': (4.002602, 2, 0.46, 2),
+             'Li': (6.94, 3, 1.33, 1), 'Be': (9.0121831, 4, 1.02, 2), 'B': (10.83, 5, 0.85, 3),
+             'C': (12.0107, 6, 0.77, 4), 'N': (14.0067, 7, 0.75, 5), 'O': (15.9994, 8, 0.73, 6),
+             'F': (18.9984, 9, 0.71, 7), 'Ne': (20.1797, 10, 0.67, 8), 'Na': (22.99, 11, 1.55, 1),
+             'Mg': (24.30, 12, 1.39, 2), 'Al': (26.98, 13, 1.26, 3), 'Si': (28.08, 14, 1.16, 4),
+             'P': (30.9738, 15, 1.06, 5), 'S': (32.065, 16, 1.02, 6), 'Cl': (35.453, 17, 0.99, 7),
+             'Ar': (39.948, 18, 0.96, 8), 'K': (39.10, 19, 1.96, 1), 'Ca': (40.08, 20, 1.71, 2),
+             'Sc': (44.96, 21, 1.7, 3), 'Ti': (47.867, 22, 1.36, 4), 'V': (50.94, 23, 1.22, 5),
+             'Cr': (51.9961, 24, 1.27, 6), 'Mn': (54.938, 25, 1.39, 7), 'Fe': (55.84526, 26, 1.25, 8),
+             'Co': (58.9332, 27, 1.26, 9), 'Ni': (58.4934, 28, 1.21, 10), 'Cu': (63.546, 29, 1.38, 11),
+             'Zn': (65.39, 30, 1.31, 12), 'Ga': (69.72, 31, 1.24, 3), 'Ge': (72.63, 32, 1.21, 4),
+             'As': (74.92, 33, 1.21, 5), 'Se': (78.96, 34, 1.16, 6), 'Br': (79.904, 35, 1.14, 7),
+             'Kr': (83.798, 36, 1.17, 8), 'Rb': (85.47, 37, 2.10, 1), 'Sr': (87.62, 38, 1.85, 2),
+             'Y': (88.91, 39, 1.63, 3), 'Zr': (91.22, 40, 1.54, 4), 'Nb': (92.91, 41, 1.47, 5),
+             'Mo': (95.96, 42, 1.38, 6), 'Tc': (98.9, 43, 1.56, 7), 'Ru': (101.1, 44, 1.25, 8),
+             'Rh': (102.9, 45, 1.25, 9), 'Pd': (106.4, 46, 1.20, 10), 'Ag': (107.9, 47, 1.28, 11),
+             'Cd': (112.4, 48, 1.48, 12), 'In': (111.818, 49, 1.42, 3), 'Sn': (118.710, 50, 1.40, 4),
+             'Sb': (121.760, 51, 1.40, 5), 'Te': (127.60, 52, 1.99, 6), 'I': (126.90447, 53, 1.40, 7),
+             'Xe': (131.293, 54, 1.31, 8), 'Cs': (132.9055, 55, 2.32, 1), 'Ba': (137.327, 56, 1.96, 2),
+             'La': (138.9, 57, 1.69, 3), 'Ce': (140.116, 58, 1.63, 4), 'Pr': (140.90766, 59, 1.76, 5),
+             'Nd': (144.242, 60, 1.74, 6), 'Pm': (145, 61, 1.73, 7), 'Sm': (150.36, 62, 1.72, 8),
+             'Eu': (151.964, 63, 1.68, 9), 'Gd': (157.25, 64, 1.69, 10), 'Tb': (158.92535, 65, 1.68, 11),
+             'Dy': (162.500, 66, 1.67, 12), 'Ho': (164.93033, 67, 1.66, 13), 'Er': (167.259, 68, 1.65, 14),
+             'Tm': (168.93422, 69, 1.64, 15), 'Yb': (173.045, 70, 1.70, 16), 'Lu': (174.9668, 71, 1.62, 3),
+             'Hf': (178.5, 72, 1.50, 8), 'Ta': (180.9, 73, 1.38, 5), 'W': (183.8, 74, 1.46, 6),
+             'Re': (186.2, 75, 1.59, 7), 'Os': (190.2, 76, 1.28, 8), 'Ir': (192.2, 77, 1.37, 9),
+             'Pt': (195.1, 78, 1.23, 10), 'Au': (197.0, 79, 1.24, 11), 'Hg': (200.6, 80, 1.49, 2),
+             'Tl': (204.38, 81, 1.44, 3), 'Pb': (207.2, 82, 1.44, 4), 'Bi': (208.9804, 83, 1.51, 5),
+             'Po': (208.98, 84, 1.90, 6), 'At': (209.99, 85, 2.00, 7), 'Rn': (222.6, 86, 142, 4),
+             'Fr': (223.02, 87, 3.48, 8), 'Ra': (226.03, 88, 2.01, 2), 'Ac': (277, 89, 1.86, 3),
+             'Th': (232.0377, 90, 1.75, 4), 'Pa': (231.04, 91, 2.00, 5), 'U': (238.02891, 92, 1.70, 6),
+             'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
+             'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}
         self.prepData()
 
     
@@ -65,7 +95,6 @@ class Electrostatics:
                 file.write(content)
             print("      > Molden file is fixed")
         os.chdir(owd)
-
 
     def prepData(self):
         metal_idxs = self.lst_of_tmcm_idx
@@ -117,6 +146,58 @@ class Electrostatics:
 
         os.chdir(owd)
      
+
+    #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
+    def getGeomInfo(self, filepathtoxyz):
+        data = []
+        counter_idx = 0
+        with open(filepathtoxyz, 'r') as file:
+            #Skip the first two lines since they contain meta-deta
+            next(file)
+            next(file)
+            for line in file:
+                
+                tokens = line.split()
+                if len(tokens) == 4:  # Assuming atom name and x, y, z coordinates are present
+                    atom_name = tokens[0]
+                x, y, z = map(float, tokens[1:])
+                rad = self.amassdict[atom_name][2]
+                data.append([counter_idx, atom_name, x, y, z, rad])
+                counter_idx += 1
+
+        columns = ['Index', 'Atom', 'X', 'Y', 'Z', 'Radius']
+        df = pd.DataFrame(data, columns=columns)
+        #Define upper limit for bond cutoff depending on the two atoms involved
+        return df
+
+    #Accepts an atom and will determine indices of atoms bound, based on implementation in molsimp
+    def getBondedAtoms(self, filepathtoxyz, atomidx):
+        bonded_atom_indices = []
+        df_mol = self.getGeomInfo(filepathtoxyz)
+        atm_rad = df_mol['Radius'][atomidx]
+        atm_X = df_mol['X'][atomidx]
+        atm_Y = df_mol['Y'][atomidx]
+        atm_Z = df_mol['Z'][atomidx]
+        df_mol['BondCutoff'] = df_mol['Radius'].apply(lambda y: y + atm_rad)
+        distsq = df_mol['X'].apply(lambda x: (x - atm_X)**2) + df_mol['Y'].apply(lambda y: (y - atm_Y)**2) + df_mol['Z'].apply(lambda z: (z - atm_Z)**2)
+        dist = distsq.apply(lambda d: d**(1/2))
+        for dist_idx in range(0, len(dist)):
+            if df_mol['BondCutoff'][dist_idx] > dist[dist_idx]:
+                bonded_atom_indices.append(dist_idx)
+        bonded_atom_indices.remove(atomidx)
+        
+        #Checks to ensure same bonded atoms as those obtained in molsimplify version
+        #from molSimplify.Classes.mol3D import *
+        #print('Bonded atoms by this method: ')
+        #print(bonded_atom_indices)
+        #print('Bonded Atoms via Molsimplify')
+        #molsimp_obj = mol3D()
+        #molsimp_obj.readfromxyz(filepathtoxyz)
+        #lst_bonded_atoms = molsimp_obj.getBondedAtoms(atomidx)
+        #print(lst_bonded_atoms)
+        return bonded_atom_indices
+
+
     def getmultipoles(multipole_name):
         # Read the text file
         with open(multipole_name, 'r') as file:
@@ -388,7 +469,6 @@ class Electrostatics:
 
     #bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
     def E_proj_bondIndices(bond_indices, charge_file, atom_multipole_file):
-        print('At line 391')
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
@@ -417,7 +497,7 @@ class Electrostatics:
         return [E_projected, bonded_atoms, bond_indices, bond_lens]
     
 
-    def E_proj_first_coord(mol_simp_obj, metal_idx, charge_file, atom_multipole_file):
+    def E_proj_first_coord(self, metal_idx, xyz_file_path, charge_file, atom_multipole_file):
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
@@ -426,7 +506,7 @@ class Electrostatics:
         all_lines = range(0, total_lines)
         #Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Shaik_E_center]  =  Electrostatics.calc_fullE(metal_idx, all_lines, charge_file, atom_multipole_file)
-        lst_bonded_atoms = mol_simp_obj.getBondedAtoms(metal_idx)
+        lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
         bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
             [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  Electrostatics.calc_fullE(bonded_atom_idx, all_lines, charge_file, atom_multipole_file)    
@@ -445,18 +525,18 @@ class Electrostatics:
             bond_lens.append(bond_len)
         return [E_projected, bonded_atoms, bonded_atom_idx, bond_lens]
             
-    def esp_first_coord(mol_simp_obj, metal_idx, charge_file):
+    def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
         print('The index of the metal atom is: ' + str(metal_idx))
-        lst_bonded_atoms = mol_simp_obj.getBondedAtoms(metal_idx);
+        lst_bonded_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
         [First_coord_ESP, atom_type] = Electrostatics.calcesp(metal_idx, lst_bonded_atoms, charge_file)
         return First_coord_ESP
 
-    def esp_second_coord(mol_simp_obj, metal_idx, charge_file):
+    def esp_second_coord(self, metal_idx, charge_file, path_to_xyz):
         lst_first_and_second = []
-        lst_first_coor_atoms = mol_simp_obj.getBondedAtoms(metal_idx);
+        lst_first_coor_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
         lst_first_and_second.extend(lst_first_coor_atoms)
         for coor_atom_idx in lst_first_coor_atoms:
-            second_coor = mol_simp_obj.getBondedAtoms(coor_atom_idx)
+            second_coor = self.getBondedAtoms(path_to_xyz, coor_atom_idx)
             lst_first_and_second.extend(second_coor)
         set_second_coor = set(lst_first_and_second)
         final_lst = list(set_second_coor)
@@ -548,32 +628,32 @@ class Electrostatics:
         return [sorted_dist, sorted_esps, cumulative_esps]
   
     # Function that can be called on a class object to compute key error analysis metrics for a transition metal complex
-    def errorAnalysis(self, csvName):
-        metal_idxs = self.lst_of_tmcm_idx
-        folder_to_molden = self.folder_to_file_path
-        list_of_file = self.lst_of_folders
-        owd = os.getcwd() # old working directory
-        allspeciesdict = []
-        counter = 0
-        for f in list_of_file:
-            print(f)
-            atom_idx = metal_idxs[counter]
-            counter = counter + 1
-            molsimp_obj = mol3D()
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            results_dir = os.getcwd() + '/'
-            try:
-                [results_dict, final_mol] = pyef.geometry.ErrorAnalysis.optim_rmsd_file(results_dir,atom_idx, False,[], self.inGaCageBool)
-                molsimp_obj.copymol3D(final_mol)
-            except Exception as e:
-                results_dict = {}
-            results_dict['Name'] = f
-            allspeciesdict.append(results_dict)
-        os.chdir(owd)
-        df = pd.DataFrame(allspeciesdict)
-        df.to_csv(csvName + '.csv')
-        return df
+    #def errorAnalysis(self, csvName):
+    #    metal_idxs = self.lst_of_tmcm_idx
+    #    folder_to_molden = self.folder_to_file_path
+    #    list_of_file = self.lst_of_folders
+    #    owd = os.getcwd() # old working directory
+    #    allspeciesdict = []
+    #    counter = 0
+    #    for f in list_of_file:
+    #        print(f)
+    #        atom_idx = metal_idxs[counter]
+    #        counter = counter + 1
+    #        molsimp_obj = mol3D()
+    #        os.chdir(owd)
+    #        os.chdir(f + folder_to_molden)
+    #        results_dir = os.getcwd() + '/'
+    #        try:
+    #            [results_dict, final_mol] = pyef.geometry.ErrorAnalysis.optim_rmsd_file(results_dir,atom_idx, False,[], self.inGaCageBool)
+    #            molsimp_obj.copymol3D(final_mol)
+    #        except Exception as e:
+    #            results_dict = {}
+    #        results_dict['Name'] = f
+    #        allspeciesdict.append(results_dict)
+    #    os.chdir(owd)
+    #    df = pd.DataFrame(allspeciesdict)
+    #    df.to_csv(csvName + '.csv')
+    #    return df
 
     # list_of_folders = the list of the folders that contain the desired files
     # new_dir: the [post-folder path to the scr folder that contains the .molden and optim.xyz file themselfs
@@ -596,7 +676,6 @@ class Electrostatics:
         allspeciesdict = []
         counter = 0  # Iterator to account for atomic indices of interest
         for f in list_of_file:
-            print(f)
             atom_idx = metal_idxs[counter]
             counter = counter + 1
             os.chdir(owd)
@@ -612,6 +691,7 @@ class Electrostatics:
                 print('Current key:' + str(key))
                 try:
                     full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
+                    path_to_xyz = os.getcwd() + '/final_optim.xyz'
                     if key == "Hirshfeld_I":
                         atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
@@ -623,9 +703,9 @@ class Electrostatics:
                             [ESP_all, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
 
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
-                        [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx,  full_file_path)
-                        ESP_fcoord = Electrostatics.esp_first_coord(molsimp_obj, atom_idx, full_file_path)
-                        ESP_scoord = Electrostatics.esp_second_coord(molsimp_obj, atom_idx, full_file_path)
+                        [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx, full_file_path)
+                        ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
+                        ESP_scoord = self.esp_second_coord(atom_idx, full_file_path, path_to_xyz)
                     except Exception as e:
                         print('The Exception is: ' + str(e))
                         print(traceback.format_exc())
@@ -645,9 +725,9 @@ class Electrostatics:
                         else:
                             [ESP_all, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
-                        [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx,  full_file_path)
-                        ESP_fcoord = Electrostatics.esp_first_coord(molsimp_obj, atom_idx, full_file_path)
-                        ESP_scoord = Electrostatics.esp_second_coord(molsimp_obj, atom_idx, full_file_path)
+                        [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx, full_file_path)
+                        ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
+                        ESP_scoord = self.esp_second_coord(atom_idx, full_file_path, path_to_xyz)
 
                     # At this point, all calculations shouldbe complete and succesfull: Add ESP data to dictionary
                     results_dict[str(key) + ' ESP Second Coor Shell (kcal/mol)'] = ESP_scoord
@@ -704,16 +784,14 @@ class Electrostatics:
             # First For this to work, the .molden file should be named: f.molden
 
             command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
-
             results_dir = os.getcwd() + '/'
-            molsimp_obj = mol3D()
-            molsimp_obj.readfromxyz('final_optim.xyz')
             results_dict = {}
             results_dict['Name'] = f
             Command_Polarization = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden >' +  'final_optim_polarization.txt'
 
             # Check if the atomic polarizations have been computed
             path_to_pol = os.getcwd() + '/' + 'final_optim_polarization.txt'
+            xyz_file_path =  os.getcwd() + '/' 'final_optim.xyz'
             print('Attempting this path to the polarization file')
             if os.path.exists(path_to_pol):
                 print('   > Polarization file: ' + f + "!!")
@@ -734,7 +812,7 @@ class Electrostatics:
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
                 #Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx,xyz_file_path, full_file_path, path_to_pol)
             
             except Exception as e:
                 proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
@@ -748,7 +826,7 @@ class Electrostatics:
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
                 #Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_first_coord(molsimp_obj, atom_idx, full_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx, xyz_file_path, full_file_path, path_to_pol)
                 #will ned to add additional params here for E-field data
             
             results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
