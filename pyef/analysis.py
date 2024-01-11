@@ -628,32 +628,35 @@ class Electrostatics:
         return [sorted_dist, sorted_esps, cumulative_esps]
   
     # Function that can be called on a class object to compute key error analysis metrics for a transition metal complex
-    #def errorAnalysis(self, csvName):
-    #    metal_idxs = self.lst_of_tmcm_idx
-    #    folder_to_molden = self.folder_to_file_path
-    #    list_of_file = self.lst_of_folders
-    #    owd = os.getcwd() # old working directory
-    #    allspeciesdict = []
-    #    counter = 0
-    #    for f in list_of_file:
-    #        print(f)
-    #        atom_idx = metal_idxs[counter]
-    #        counter = counter + 1
-    #        molsimp_obj = mol3D()
-    #        os.chdir(owd)
-    #        os.chdir(f + folder_to_molden)
-    #        results_dir = os.getcwd() + '/'
-    #        try:
-    #            [results_dict, final_mol] = pyef.geometry.ErrorAnalysis.optim_rmsd_file(results_dir,atom_idx, False,[], self.inGaCageBool)
-    #            molsimp_obj.copymol3D(final_mol)
-    #        except Exception as e:
-    #            results_dict = {}
-    #        results_dict['Name'] = f
-    #        allspeciesdict.append(results_dict)
-    #    os.chdir(owd)
-    #    df = pd.DataFrame(allspeciesdict)
-    #    df.to_csv(csvName + '.csv')
-    #    return df
+    def errorAnalysis(self, csvName):
+        #import functionalities only for use in this function
+        from pyef.geometry import ErrorAnalysis
+        from molSimplify.Classes.mol3D import *
+        metal_idxs = self.lst_of_tmcm_idx
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+        owd = os.getcwd() # old working directory
+        allspeciesdict = []
+        counter = 0
+        for f in list_of_file:
+            print(f)
+            atom_idx = metal_idxs[counter]
+            counter = counter + 1
+            molsimp_obj = mol3D()
+            os.chdir(owd)
+            os.chdir(f + folder_to_molden)
+            results_dir = os.getcwd() + '/'
+            try:
+                [results_dict, final_mol] = pyef.geometry.ErrorAnalysis.optim_rmsd_file(results_dir,atom_idx, False,[], self.inGaCageBool)
+                molsimp_obj.copymol3D(final_mol)
+            except Exception as e:
+                results_dict = {}
+            results_dict['Name'] = f
+            allspeciesdict.append(results_dict)
+        os.chdir(owd)
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(csvName + '.csv')
+        return df
 
     # list_of_folders = the list of the folders that contain the desired files
     # new_dir: the [post-folder path to the scr folder that contains the .molden and optim.xyz file themselfs
