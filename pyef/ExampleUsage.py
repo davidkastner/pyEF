@@ -1,6 +1,6 @@
 import os
 from analysis import Electrostatics
-from geometry import ErrorAnalysis
+#from geometry import ErrorAnalysis
 
 
 ####Steps to use#######

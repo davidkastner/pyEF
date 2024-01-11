@@ -3,7 +3,6 @@ import sys
 import pyef
 import argparse
 from pyef.analysis import Electrostatics
-from pyef.geometry import ErrorAnalysis
 
 def main(jobs, geom_flag, esp_flag, metal_indices):
     """

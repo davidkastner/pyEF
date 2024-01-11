@@ -631,7 +631,7 @@ class Electrostatics:
     def errorAnalysis(self, csvName):
         #import functionalities only for use in this function
         from pyef.geometry import ErrorAnalysis
-        from molSimplify.Classes.mol3D import *
+        import molSimplify.Classes.mol3D
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
