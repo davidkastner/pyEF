@@ -16,8 +16,6 @@ def ef(run):
     if run:
         click.echo("Importing dependencies...")
         from pyef.run import main
-        from pyef.analysis import Electrostatics
-        from pyef.geometry import ErrorAnalysis
 
         geom_flag = False   # Perform a geometry check
         esp_flag = False    # Perform analysis of electrostatics
@@ -35,8 +33,6 @@ def esp(run):
     if run:
         click.echo("Importing dependencies...")
         from pyef.run import main
-        from pyef.analysis import Electrostatics
-        from pyef.geometry import ErrorAnalysis
 
         geom_flag = False   # Perform a geometry check
         esp_flag = True    # Perform analysis of electrostatics
