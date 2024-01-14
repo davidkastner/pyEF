@@ -46,7 +46,7 @@ Installing all dependencies together has shown to produce more robust installati
 ```
 cd pyEF
 conda env create -f environment.yml
-conda activate pyEF
+conda activate pyef
 ```
 
 ### Developer install of pyEF
