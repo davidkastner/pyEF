@@ -35,6 +35,9 @@ class Electrostatics:
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.inGaCageBool = inGaCage
+
+        #dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
+        #Palladium covalent radius seemed to be under-estimated in original implementation, so changed to 1.39 per https://webelements.com/palladium/atom_sizes.html
         self.amassdict = {'X': (1.0, 0, 0.77, 0), 'H': (1.0079, 1, 0.37, 1),
              'D': (2.0141, 1, 0.37, 1), 'He': (4.002602, 2, 0.46, 2),
              'Li': (6.94, 3, 1.33, 1), 'Be': (9.0121831, 4, 1.02, 2), 'B': (10.83, 5, 0.85, 3),
@@ -51,7 +54,7 @@ class Electrostatics:
              'Kr': (83.798, 36, 1.17, 8), 'Rb': (85.47, 37, 2.10, 1), 'Sr': (87.62, 38, 1.85, 2),
              'Y': (88.91, 39, 1.63, 3), 'Zr': (91.22, 40, 1.54, 4), 'Nb': (92.91, 41, 1.47, 5),
              'Mo': (95.96, 42, 1.38, 6), 'Tc': (98.9, 43, 1.56, 7), 'Ru': (101.1, 44, 1.25, 8),
-             'Rh': (102.9, 45, 1.25, 9), 'Pd': (106.4, 46, 1.20, 10), 'Ag': (107.9, 47, 1.28, 11),
+             'Rh': (102.9, 45, 1.25, 9), 'Pd': (106.4, 46, 1.39, 10), 'Ag': (107.9, 47, 1.28, 11),
              'Cd': (112.4, 48, 1.48, 12), 'In': (111.818, 49, 1.42, 3), 'Sn': (118.710, 50, 1.40, 4),
              'Sb': (121.760, 51, 1.40, 5), 'Te': (127.60, 52, 1.99, 6), 'I': (126.90447, 53, 1.40, 7),
              'Xe': (131.293, 54, 1.31, 8), 'Cs': (132.9055, 55, 2.32, 1), 'Ba': (137.327, 56, 1.96, 2),
@@ -507,6 +510,7 @@ class Electrostatics:
         #Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Shaik_E_center]  =  Electrostatics.calc_fullE(metal_idx, all_lines, charge_file, atom_multipole_file)
         lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
+        
         bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
             [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  Electrostatics.calc_fullE(bonded_atom_idx, all_lines, charge_file, atom_multipole_file)    
@@ -523,7 +527,7 @@ class Electrostatics:
             bonded_atoms.append(bonded_atom)
             bonded_positions.append(bonded_position)
             bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, bonded_atom_idx, bond_lens]
+        return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens]
             
     def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
         print('The index of the metal atom is: ' + str(metal_idx))
