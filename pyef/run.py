@@ -34,14 +34,14 @@ def main(jobs, geom_flag, esp_flag, metal_indices):
     dataObject.fix_ECPmolden()
 
     # Define name of .csv to contain error data
-    err_csv_name = 'gfn2xtb_Error'
+    err_csv_name = 'Errordata'
 
     if geom_flag:
         # Method will calculate various RMSD, molsimplify error parameters/flags
         dataObject.errorAnalysis(err_csv_name)
 
     # Determine Filename prefix for output 
-    ESPdata_filename = 'MinimiChrome_ESP'
+    ESPdata_filename = 'ESPdata'
 
     # List of partial C... for ESP also need a list of partial charges of interest
     lst_charge_types = ['Hirshfeld_I']
@@ -52,7 +52,7 @@ def main(jobs, geom_flag, esp_flag, metal_indices):
 
 
     # Define prefix name  of E-field datafile
-    Efield_data_filename = 'MinimiChrome_Efield'
+    Efield_data_filename = 'Efielddata'
 
     # Method to Compute Efield Projections on bonds connected to the atom specified by index in metal_indices
     dataObject.getEFieldData(Efield_data_filename)

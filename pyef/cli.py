@@ -12,7 +12,7 @@ def cli():
 @click.option("--run", is_flag=True, help="Analyze electric fields.")
 def ef(run):
     """Analyzes electric fields"""
-    click.echo("Calcute the projected electric field.")
+    click.echo("Calculate the projected electric field.")
     if run:
         click.echo("Importing dependencies...")
         from pyef.run import main
@@ -22,7 +22,8 @@ def ef(run):
         job_paths = input("   > Paths to jobs separated by commas: ")
         jobs = [job.strip() for job in job_paths.split(",")]
         metal_indices = input("   > Indices of your metals, separated by commas: ")
-        metal_indices = [metal.strip() for metal in metal_indices.split(",")]
+        metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
+        click.echo("This is the value of the first: " + str(type(metal_indices[0])))
         pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
         
 @click.command()
@@ -39,7 +40,7 @@ def esp(run):
         job_paths = input("   > Paths to jobs separated by commas: ")
         jobs = [job.strip() for job in job_paths.split(",")]
         metal_indices = input("   > Indices of your metals, separated by commas: ")
-        metal_indices = [metal.strip() for metal in metal_indices.split(",")]
+        metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
         pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
 
 def welcome_message():
