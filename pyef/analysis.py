@@ -1,11 +1,12 @@
-import mmap
 import re
+import os
+import glob
+import shutil
 import logging
 import traceback
 import subprocess
 import numpy as np
 import pandas as pd
-import glob, os, shutil
 import scipy.linalg as la
 from collections import deque
 from distutils.dir_util import copy_tree
@@ -105,47 +106,43 @@ class Electrostatics:
         list_of_folders = self.lst_of_folders
         owd = os.getcwd()
         print('   > Pre-processing data')
-        for f in list_of_folders:
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            optim_path = os.getcwd() + '/'
-            print('      > optim_path: ' + str(optim_path))            
 
-            if os.path.exists('final_optim.xyz'):
-                pass  # File already parsed
-            else:
-                try:
-                    # First copy the last xyz frame of the optimization into a new file with standard name
-                    path_to_init = optim_path[:-4]
-                    os.chdir(optim_path)
-                    optim_file = 'optim.xyz'
-                    full_traj = open(optim_file, 'r')
-                    print('At optim path: ' + str(optim_path))
+        for f in list_of_folders:
+            folder_path = os.path.join(owd, f + folder_to_molden)
+            print('      > optim_path: ' + folder_path)
+
+            # Processing optim.xyz to create final_optim.xyz
+            optim_file_path = os.path.join(folder_path, 'optim.xyz')
+            final_optim_xyz = os.path.join(folder_path, 'final_optim.xyz')
+
+            try:
+                with open(optim_file_path, 'r') as full_traj:
                     num_atoms = int(full_traj.readline())
                     num_lines = num_atoms + 2
-                    with open(optim_file) as input_file:
-                        head = [next(input_file) for _ in range(num_lines)]
-                    with open('initial_' + optim_file, 'w') as initxyz:
-                        initxyz.writelines(head)
-                    #last xyz in trajectory saved as the final file
-                    with open('final_'+optim_file, 'w') as finalxyz:
-                        finalxyz.writelines(deque(full_traj, num_lines))
-                except Exception as e:
-                    shutil.copy2(os.path.join(optim_path, 'xyz.xyz'), 'final_optim.xyz')
-                    logging.exception('An Exception was thrown')
+                    head = [next(full_traj) for _ in range(num_lines)]
 
-            if os.path.exists('final_optim.molden'):
-                pass # molden file already has correct name
-            else:
-                try:    
-                   # Now make a copy of the .molden file with the same name is the directory
-                    files = glob.iglob(os.path.join(optim_path, "*.molden"))
-                    for file in files:
-                        shutil.copy2(file, 'final_optim.molden')
+                with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
+                    initxyz.writelines(head)
+                with open(final_optim_xyz, 'w') as finalxyz:
+                    finalxyz.writelines(deque(full_traj, num_lines))
+            except Exception as e:
+                backup_file = os.path.join(folder_path, 'xyz.xyz')
+                if os.path.exists(backup_file):
+                    shutil.copy2(backup_file, final_optim_xyz)
+                    logging.info('Single point data found. Using xyz.xyz as fallback.')
+                else:
+                    logging.exception(f'An unexpected error occurred while processing optim.xyz: {e}')
 
-                except Exception as e:
-                    logging.exception('An Exception was thrown')
-          
+            # Copying .molden files to final_optim.molden
+            final_optim_molden = os.path.join(folder_path, 'final_optim.molden')
+            try:
+                files = glob.iglob(os.path.join(folder_path, "*.molden"))
+                for file in files:
+                    if os.path.abspath(file) != os.path.abspath(final_optim_molden):
+                        shutil.copy2(file, final_optim_molden)
+            except Exception as e:
+                logging.exception('An Exception was thrown while copying molden files.')
+
 
         os.chdir(owd)
      
