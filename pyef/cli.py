@@ -16,14 +16,14 @@ def ef(run):
     if run:
         click.echo("Importing dependencies...")
         from pyef.run import main
+        from pyef.manage import parse_job_batch_file
 
         geom_flag = False   # Perform a geometry check
         esp_flag = False    # Perform analysis of electrostatics
-        job_paths = input("   > Paths to jobs separated by commas: ")
-        jobs = [job.strip() for job in job_paths.split(",")]
+        job_path = input("   > Path to job batch file: ")
+        jobs = parse_job_batch_file(job_path)
         metal_indices = input("   > Indices of your metals, separated by commas: ")
         metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
-        click.echo("This is the value of the first: " + str(type(metal_indices[0])))
         pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
         
 @click.command()
