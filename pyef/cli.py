@@ -3,12 +3,37 @@
 import pyef
 import click
 
+def welcome():
+    """Print first to welcome the user while it waits to load the modules"""
+    
+    print("\n     ╔═══════════════════════════╗")
+    print("     ║ .-----------------------. ║")
+    print("     ║ |       ┌──────┐        | ║")
+    print("     ║ |       │  ┌───┘        | ║")
+    print("     ║ |       │  └───┐        | ║")
+    print("     ║ |       │  ┌───┘        | ║")
+    print("     ║ |       │  ├┬┬┬┐        | ║")
+    print("     ║ |       └──┴┴┴┴┘        | ║")
+    print("     ║ |                       | ║")
+    print("     ║ |    WELCOME TO PYEF    | ║")
+    print("     ║ '-----------------------' ║")
+    print("     ╚═══════════════════════════╝\n")
+
+    print("Default programmed actions for the pyEF package.")
+    print("GitHub: https://github.com/davidkastner/pyef")
+    print("Documentation: https://pyef.readthedocs.io")
+    print("• Command for electric field analysis: pyef ef --run")
+    print("• Command for electrostatic analysis: pyef esp --run\n")
+
+# Welcome even if no flags
+welcome()
+
 @click.group()
 def cli():
-    """pyEF Command-line Interface."""
-    welcome_message()
+    """CLI entry point"""
+    pass
 
-@click.command()
+@cli.command()
 @click.option("--run", is_flag=True, help="Analyze electric fields.")
 def ef(run):
     """Analyzes electric fields"""
@@ -26,7 +51,7 @@ def ef(run):
         metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
         pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
         
-@click.command()
+@cli.command()
 @click.option("--run", is_flag=True, help="Perform an action")
 def esp(run):
     """Analyzes electrostatic potential"""
@@ -42,19 +67,6 @@ def esp(run):
         metal_indices = input("   > Indices of your metals, separated by commas: ")
         metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
         pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
-
-def welcome_message():
-    print("\n.-------------------------.")
-    print("| WELCOME TO THE pyEF CLI |")
-    print(".-------------------------.")
-    print("Default programmed actions for the pyEF package.")
-    print("GitHub: https://github.com/davidkastner/pyef")
-    print("Documentation: https://pyef.readthedocs.io")
-    print("Command for electric field analysis: pyef ef --run")
-    print("Command for electrostatic analysis: pyef esp --run\n")
-
-cli.add_command(ef)
-cli.add_command(esp)
 
 if __name__ == '__main__':
     cli()
