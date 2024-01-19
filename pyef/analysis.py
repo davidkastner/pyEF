@@ -121,8 +121,10 @@ class Electrostatics:
                 with open(optim_file_path, 'r') as full_traj:
                     num_atoms = int(full_traj.readline())
                     num_lines = num_atoms + 2
-                    head = [next(full_traj) for _ in range(num_lines)]
-
+                    print('Number of lines: ' + str(num_lines))
+                    #If ends on first optimization of cycle, change cutting pattern
+                    head = [next(full_traj) for _ in range(num_lines - 1)]
+                  
                     with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
                         initxyz.writelines(head)
                     with open(final_optim_xyz, 'w') as finalxyz:
