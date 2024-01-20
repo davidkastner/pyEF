@@ -2,39 +2,39 @@
 
 def parse_job_batch_file(file_path):
     """
-    Parse a job batch file to extract job paths.
-
-    This function reads a file specified by `file_path`.
-    Each line in the file is expected to contain a path to a job.
-    The function processes the file line by line, extracting the job paths.
-    Lines that are either empty or start with '#' (comments) are ignored.
-    Leading and trailing whitespace on each line is also removed.
+    Parse a CSV file and extract specific columns as lists and tuples.
 
     Parameters
     ----------
-    file_path: str
-        A string specifying the path to the job batch file.
+    file_path : str
+        The file path of the CSV file to be parsed.
 
     Returns
     -------
-    jobs: list
-        A list of job paths extracted from the file. Each job path is a string.
+    jobs : list of str
+        List containing entries from the first column of the CSV.
+    metal_indices : list of int
+        List containing entries from the second column of the CSV as integers.
+    column_pairs : list of tuples
+        List of tuples, each containing the second and third column entries of the CSV, with the second column as an integer.
 
-    Example
-    -------
-    >>> parse_job_batch_file('job_batch.txt')
-    ['path/to/job1', 'path/to/job2', ...]
-    
     """
 
+    jobs = []
+    metal_indices = []
+    column_pairs = []
+
     with open(file_path, 'r') as file:
-        jobs = []
         for line in file:
-            # Strip leading and trailing whitespace
-            line = line.strip()
+            # Skip empty lines and lines starting with '#'
+            if line.strip() == '' or line.strip().startswith('#'):
+                continue
 
-            # Ignore empty lines and lines starting with '#'
-            if line and not line.startswith('#'):
-                jobs.append(line)
+            columns = line.strip().split(',')
+            # Extracting and appending data to respective lists
+            jobs.append(columns[0])
+            metal_index = int(columns[1])
+            metal_indices.append(metal_index)
+            column_pairs.append((metal_index, columns[2]))
 
-        return jobs
+    return jobs, metal_indices, column_pairs

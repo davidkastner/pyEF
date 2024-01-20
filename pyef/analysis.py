@@ -1,6 +1,6 @@
-import mmap
 import re
 import os
+import mmap
 import glob
 import shutil
 import logging
@@ -38,10 +38,10 @@ class Electrostatics:
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.inGaCageBool = inGaCage
 
-        #dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
-        #Palladium covalent radius seemed to be under-estimated in original implementation, so changed to 1.39 per https://webelements.com/palladium/atom_sizes.html
-        #Dictionary from molsimplify, https://molsimplify.readthedocs.io/en/latest/_modules/molSimplify/Classes/globalvars.html
-        #some covalent radii updated with 2008 updated values from webelements.com accessed 1/18/24 
+        # Dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
+        # Palladium covalent radius seemed to be under-estimated in original implementation, so changed to 1.39 per https://webelements.com/palladium/atom_sizes.html
+        # Dictionary from molsimplify, https://molsimplify.readthedocs.io/en/latest/_modules/molSimplify/Classes/globalvars.html
+        # Some covalent radii updated with 2008 updated values from webelements.com accessed 1/18/24 
         self.amassdict = {'X': (1.0, 0, 0.77, 0), 'H': (1.0079, 1, 0.37, 1),
              'D': (2.0141, 1, 0.37, 1), 'He': (4.002602, 2, 0.46, 2),
              'Li': (6.94, 3, 1.33, 1), 'Be': (9.0121831, 4, 1.02, 2), 'B': (10.83, 5, 0.85, 3),
@@ -121,7 +121,7 @@ class Electrostatics:
                 with open(optim_file_path, 'r') as full_traj:
                     num_atoms = int(full_traj.readline())
                     num_lines = num_atoms + 2
-                    #If ends on first optimization of cycle, change cutting pattern
+                    # If ends on first optimization of cycle, change cutting pattern
                     full_traj.seek(0)
                     head = [next(full_traj) for _ in range(num_lines)]
                     full_traj.seek(0)
@@ -151,12 +151,12 @@ class Electrostatics:
         os.chdir(owd)
      
 
-    #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
+    # Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
     def getGeomInfo(self, filepathtoxyz):
         data = []
         counter_idx = 0
         with open(filepathtoxyz, 'r') as file:
-            #Skip the first two lines since they contain meta-deta
+            # Skip the first two lines since they contain meta-deta
             next(file)
             next(file)
             for line in file:
@@ -171,10 +171,10 @@ class Electrostatics:
 
         columns = ['Index', 'Atom', 'X', 'Y', 'Z', 'Radius']
         df = pd.DataFrame(data, columns=columns)
-        #Define upper limit for bond cutoff depending on the two atoms involved
+        # Define upper limit for bond cutoff depending on the two atoms involved
         return df
 
-    #Accepts an atom and will determine indices of atoms bound, based on implementation in molsimp
+    # Accepts an atom and will determine indices of atoms bound, based on implementation in molsimp
     def getBondedAtoms(self, filepathtoxyz, atomidx):
         bonded_atom_indices = []
         df_mol = self.getGeomInfo(filepathtoxyz)
@@ -190,15 +190,15 @@ class Electrostatics:
                 bonded_atom_indices.append(dist_idx)
         bonded_atom_indices.remove(atomidx)
         
-        #Checks to ensure same bonded atoms as those obtained in molsimplify version
-        #from molSimplify.Classes.mol3D import *
-        #print('Bonded atoms by this method: ')
-        #print(bonded_atom_indices)
-        #print('Bonded Atoms via Molsimplify')
-        #molsimp_obj = mol3D()
-        #molsimp_obj.readfromxyz(filepathtoxyz)
-        #lst_bonded_atoms = molsimp_obj.getBondedAtoms(atomidx)
-        #print(lst_bonded_atoms)
+        # Checks to ensure same bonded atoms as those obtained in molsimplify version
+        # from molSimplify.Classes.mol3D import *
+        # print('Bonded atoms by this method: ')
+        # print(bonded_atom_indices)
+        # print('Bonded Atoms via Molsimplify')
+        # molsimp_obj = mol3D()
+        # molsimp_obj.readfromxyz(filepathtoxyz)
+        # lst_bonded_atoms = molsimp_obj.getBondedAtoms(atomidx)
+        # print(lst_bonded_atoms)
         return bonded_atom_indices
 
 
@@ -318,7 +318,7 @@ class Electrostatics:
 
         """
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
         # Convert each column to list for quicker indexing
         atoms = df['Atom']
@@ -471,7 +471,7 @@ class Electrostatics:
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
 
 
-    #bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
+    # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
     def E_proj_bondIndices(bond_indices, charge_file, atom_multipole_file):
         bonded_atoms = []
         E_projected = []
@@ -479,7 +479,7 @@ class Electrostatics:
         bonded_positions = []
         total_lines = Electrostatics.mapcount(charge_file)
         all_lines = range(0, total_lines)
-        #Determine the Efield vector at point of central metal stom
+        # Determine the Efield vector at point of central metal stom
         bond_lens = []
         for atomidxA, atomidxB in bond_indices:
             print('Starting iteration at 401: atomindxA: ' + str(atomidxA))
@@ -508,7 +508,7 @@ class Electrostatics:
         bonded_positions = []
         total_lines = Electrostatics.mapcount(charge_file)
         all_lines = range(0, total_lines)
-        #Determine the Efield vector at point of central metal stom
+        # Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Shaik_E_center]  =  Electrostatics.calc_fullE(metal_idx, all_lines, charge_file, atom_multipole_file)
         lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
         
@@ -769,7 +769,7 @@ class Electrostatics:
         df.to_csv(ESPdata_filename +'.csv')
         return df
     
-    #input_bond_indices is a list of a list of tuples
+    # input_bond_indices is a list of a list of tuples
     def getEFieldData(self, Efield_data_filename, input_bond_indices=[]):
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -779,7 +779,7 @@ class Electrostatics:
         allspeciesdict = []
         counter = 0
         
-        #If indices of bonds of interest are entered then switch to manual mode
+        # If indices of bonds of interest are entered then switch to manual mode
         bool_manual_mode = False
         if len(input_bond_indices) > 0:
             bool_manual_mode = True
@@ -814,28 +814,28 @@ class Electrostatics:
                 full_file_path = os.getcwd() +'/' + 'final_optim_Hirshfeld_I.txt'
                 atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
                 copy_tree(atmrad_src, results_dir + 'atmrad/')     
-                #If bond_indices is longer then one, default to manually entry mode
+                # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
-                #Otherwise, automatically sense atoms bonded to metal and output E-fields of those
+                # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx,xyz_file_path, full_file_path, path_to_pol)
             
             except Exception as e:
                 proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                 calc_command = self.dict_of_calcs['Hirshfeld_I']
-                commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                commands = ['7', calc_command, '1', 'y', '0', 'q'] # For atomic charge type corresponding to dict key
                 output = proc.communicate("\n".join(commands).encode())
                 new_name = 'final_optim_Hirshfeld_I.txt'
                 os.rename('final_optim.chg', new_name)
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
-                #Otherwise, automatically sense atoms bonded to metal and output E-fields of those
+                # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx, xyz_file_path, full_file_path, path_to_pol)
-                #will ned to add additional params here for E-field data
+                # Will ned to add additional params here for E-field data
             
             results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
             results_dict['Projected_Efields V/Angstrom'] = proj_Efields

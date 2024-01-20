@@ -23,7 +23,8 @@ def welcome():
     print("GitHub: https://github.com/davidkastner/pyef")
     print("Documentation: https://pyef.readthedocs.io")
     print("• Command for electric field analysis: pyef ef --run")
-    print("• Command for electrostatic analysis: pyef esp --run\n")
+    print("• Command for electrostatic analysis: pyef esp --run")
+    print("• Example annotated job file: github.com/davidkastner/pyEF/tree/main/demo/jobs.in\n")
 
 # Welcome even if no flags
 welcome()
@@ -45,12 +46,13 @@ def ef(run):
 
         geom_flag = False   # Perform a geometry check
         esp_flag = False    # Perform analysis of electrostatics
-        job_path = input("   > Path to job batch file: ")
-        jobs = parse_job_batch_file(job_path)
-        metal_indices = input("   > Indices of your metals, separated by commas: ")
-        metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
-        pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
-        
+
+        job_path = input("   > Path to pyEF job file: ")
+        jobs, metal_indices, bond_indices = parse_job_batch_file(job_path)
+
+        pyef.run.main(jobs, metal_indices, bond_indices, geom_flag, esp_flag)
+
+# THE ESP SECTION IS UNDERCONSTRUCTION AND MAY NOT WORK        
 @cli.command()
 @click.option("--run", is_flag=True, help="Perform an action")
 def esp(run):
@@ -61,12 +63,14 @@ def esp(run):
         from pyef.run import main
 
         geom_flag = False   # Perform a geometry check
-        esp_flag = True    # Perform analysis of electrostatics
+        esp_flag = True     # Perform analysis of electrostatics
+
         job_paths = input("   > Paths to jobs separated by commas: ")
         jobs = [job.strip() for job in job_paths.split(",")]
         metal_indices = input("   > Indices of your metals, separated by commas: ")
         metal_indices = [int(metal.strip()) for metal in metal_indices.split(",")]
         pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
+
 
 if __name__ == '__main__':
     cli()
