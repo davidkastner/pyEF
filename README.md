@@ -11,7 +11,7 @@
 3. **Installation**
     * Download the package from GitHub
     * Creating a python environment
-    * Developer install of E3Bind
+    * Developer install of PyEF
     * Supporting installations
 4. **What is included?**
     * File structure
@@ -22,7 +22,7 @@
 
 
 ## 1. Overview
-The purpose of pyEF is to make electric field and electrostatics calculations more accessible.
+The purpose of PyEF is to make electric field and electrostatics calculations more accessible.
 pyEF is a python package optimized to run using molden files from QM calculations.
 
 ## 2. Tutorials
@@ -56,7 +56,7 @@ python -m pip install -e .
 ```
 
 ## 4. What's included?
-pyEF contains a collection of optimized scripts that work together in pre-built workflows.
+PyEF contains a collection of optimized scripts that work together in pre-built workflows.
 If a script is not already included for procedure, many of the functions may be useful in building a procedure.
 
 ### File structure
