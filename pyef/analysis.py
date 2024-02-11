@@ -210,7 +210,14 @@ class Electrostatics:
             sections = re.split(r'\n\s*[*]+\s*', text)
 
         # Define a pattern to extract the index, element name, and atomic dipole and quadrupole moment values
-        pattern = r'Atomic multipole moments of\s+(\d+)\s*\(([^)]+)\s*\).*?X=\s*([-+]?\d+\.\d+)\s+Y=\s*([-+]?\d+\.\d+)\s+Z=\s*([-+]?\d+\.\d+).*?XX=\s*([-+]?\d+\.\d+)\s+XY=\s*([-+]?\d+\.\d+)\s+XZ=\s*([-+]?\d+\.\d+).*?YX=\s*([-+]?\d+\.\d+)\s+YY=\s*([-+]?\d+\.\d+)\s+YZ=\s*([-+]?\d+\.\d+).*?ZX=\s*([-+]?\d+\.\d+)\s+ZY=\s*([-+]?\d+\.\d+)\s+ZZ=\s*([-+]?\d+\.\d+)'
+        #pattern = r'Atomic multipole moments of\s+(\d+)\s*\(([^)]+)\s*\).*?X=\s*([-+]?\d+\.\d+)\s+Y=\s*([-+]?\d+\.\d+)\s+Z=\s*([-+]?\d+\.\d+).*?XX=\s*([-+]?\d+\.\d+)\s+XY=\s*([-+]?\d+\.\d+)\s+XZ=\s*([-+]?\d+\.\d+).*?YX=\s*([-+]?\d+\.\d+)\s+YY=\s*([-+]?\d+\.\d+)\s+YZ=\s*([-+]?\d+\.\d+).*?ZX=\s*([-+]?\d+\.\d+)\s+ZY=\s*([-+]?\d+\.\d+)\s+ZZ=\s*([-+]?\d+\.\d+)'
+        pattern = (r'Atomic multipole moments of\s+(\d+)\s*\(([^)]+)\s*\).*?'
+    r'Atomic monopole moment \(electron\):\s*([-+]?\d+\.\d+)\s+Atomic charge:\s*([-+]?\d+\.\d+).*?'
+    r'X=\s*([-+]?\d+\.\d+)\s+Y=\s*([-+]?\d+\.\d+)\s+Z=\s*([-+]?\d+\.\d+).*?'
+    r'XX=\s*([-+]?\d+\.\d+)\s+XY=\s*([-+]?\d+\.\d+)\s+XZ=\s*([-+]?\d+\.\d+).*?'
+    r'YX=\s*([-+]?\d+\.\d+)\s+YY=\s*([-+]?\d+\.\d+)\s+YZ=\s*([-+]?\d+\.\d+).*?'
+    r'ZX=\s*([-+]?\d+\.\d+)\s+ZY=\s*([-+]?\d+\.\d+)\s+ZZ=\s*([-+]?\d+\.\d+)'
+    )
         atomicDicts = []
 
         # Iterate through sections and extract the information
@@ -219,21 +226,22 @@ class Electrostatics:
             if match:
                 index = match.group(1)
                 element = match.group(2)
-                x_value = match.group(3)
-                y_value = match.group(4)
-                z_value = match.group(5)
+                monopole_moment = float(match.group(3))
+                atomic_charge = float(match.group(4))
+                x_value = match.group(5)
+                y_value = match.group(6)
+                z_value = match.group(7)
                 dipole_moment = [float(x_value), float(y_value), float(z_value)]
 
-                xx_value = match.group(6)
-                xy_value = match.group(7)
-                xz_value = match.group(8)
-                yx_value = match.group(9)
-                yy_value = match.group(10)
-                yz_value = match.group(11)
-                zx_value = match.group(12)
-                zy_value = match.group(13)
-                zz_value = match.group(14)
-
+                xx_value = match.group(8)
+                xy_value = match.group(9)
+                xz_value = match.group(10)
+                yx_value = match.group(11)
+                yy_value = match.group(12)
+                yz_value = match.group(13)
+                zx_value = match.group(14)
+                zy_value = match.group(15)
+                zz_value = match.group(16)
                 # Create a 3x3 matrix for the quadrupole moment
                 quadrupole_moment = np.array([
                 [float(xx_value), float(xy_value), float(xz_value)],
@@ -241,7 +249,7 @@ class Electrostatics:
                 [float(zx_value), float(zy_value), float(zz_value)]
                 ])
 
-                atomDict = {"Index": index, "Element": element, 'Dipole_Moment': dipole_moment, 'Quadrupole_Moment': quadrupole_moment}
+                atomDict = {"Index": index, "Element": element, "Atom_Charge": atomic_charge, 'Dipole_Moment': dipole_moment, 'Quadrupole_Moment': quadrupole_moment}
                 atomicDicts.append(atomDict)
         return atomicDicts
 
@@ -404,25 +412,22 @@ class Electrostatics:
         E_vec = [Ex, Ey, Ez]
         return [E_vec, position_vec, df['Atom'][idx_atom]]
 
-    def calc_fullE(espatom_idx, charge_range, charge_file, atom_multipole_file):
-        df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+    def calc_fullE(self, idx_atom, charge_range, xyz_file, atom_multipole_file):
+
+        df = self.getGeomInfo(xyz_file)
+        #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
         # Convert each column to list for quicker indexing
         atoms = df['Atom']
-        charges = df['charge']
-        xs = df['x']
-        ys = df['y']
-        zs = df['z']
-
-        # Pick the index of the atom at which the esp should be calculated
-        idx_atom = espatom_idx
+        xs = df['X']
+        ys = df['Y']
+        zs = df['Z']
 
         # Determine position and charge of the target atom
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
-        chargeo = charges[idx_atom]
         position_vec = [xo, yo, zo]
         Ex = 0
         Ey = 0
@@ -448,43 +453,37 @@ class Electrostatics:
             else:
                 # Units of dipole_vec: 
                 dipole_vec = atom_dict["Dipole_Moment"]
-                inv_dist_vec = np.array([1/(xs[idx] - xo),1/(ys[idx] - yo), 1/(zs[idx] - zo)])
                 dist_vec = np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
                 dist_arr = np.outer(dist_vec, dist_vec)
                 quadrupole_arr = atom_dict['Quadrupole_Moment']
-                # r_2A = ((xs[idx] - xo))**2 + ((ys[idx] - yo))**2 + ((zs[idx] - zo))**2
-                # Shaik_E = Shaik_E + inv_eps*k*C_e*charges[idx]*(1/r_2A)*dist_vec 
+                
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Shaik_E = Shaik_E + A_to_m*inv_eps*k*C_e*charges[idx]*(1/(r**2))*dist_vec/la.norm(dist_vec)
-                # Ex = Ex + inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(-charges[idx]*(A_to_m**2) + (1/r**2)*A_to_m*np.dot(dipole_vec, dist_vec))
-                # Ey = Ey + inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(-charges[idx]*(A_to_m**2) + (1/r**2)*A_to_m*np.dot(dipole_vec, dist_vec))
-                # Ez = Ez + inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(-charges[idx]*(A_to_m**2) + (1/r**2)*A_to_m*np.dot(dipole_vec, dist_vec))
+                Shaik_E = Shaik_E + A_to_m*inv_eps*k*C_e*atom_dict["Atom_Charge"]*(1/(r**2))*dist_vec/la.norm(dist_vec)
                 Ex_quad = inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(A_to_m**6)*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
                 Ey_quad = inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
                 Ez_quad = inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
 
-                Ex = Ex + inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(-charges[idx]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[1:], dist_vec[1:]))-(1/3)*Ex_quad.sum()
-                Ey = Ey + inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(-charges[idx]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
-                Ez = Ez + inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(-charges[idx]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
+                Ex = Ex + inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[1:], dist_vec[1:]))-(1/3)*Ex_quad.sum()
+                Ey = Ey + inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
+                Ez = Ez + inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
         E_vec = [Ex, Ey, Ez]
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
 
 
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
-    def E_proj_bondIndices(bond_indices, charge_file, atom_multipole_file):
+    def E_proj_bondIndices(self, bond_indices, xyz_filepath, atom_multipole_file):
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
         bonded_positions = []
-        total_lines = Electrostatics.mapcount(charge_file)
-        all_lines = range(0, total_lines)
+        total_lines = Electrostatics.mapcount(xyz_filepath)
+        all_lines = range(0, total_lines - 2)
         # Determine the Efield vector at point of central metal stom
         bond_lens = []
         for atomidxA, atomidxB in bond_indices:
-            print('Starting iteration at 401: atomindxA: ' + str(atomidxA))
-            [A_bonded_E, A_bonded_position, A_bonded_atom, A_Shaik_E_bonded]  =  Electrostatics.calc_fullE(atomidxA, all_lines, charge_file, atom_multipole_file)   
-            [B_bonded_E, B_bonded_position, B_bonded_atom, B_Shaik_E_bonded]  =  Electrostatics.calc_fullE(atomidxB, all_lines, charge_file, atom_multipole_file)  
+            [A_bonded_E, A_bonded_position, A_bonded_atom, A_Shaik_E_bonded]  =  self.calc_fullE(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
+            [B_bonded_E, B_bonded_position, B_bonded_atom, B_Shaik_E_bonded]  =  self.calc_fullE(atomidxB, all_lines, xyz_filepath, atom_multipole_file)  
             bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
             bond_len = np.linalg.norm(bond_vec_unnorm)
             bond_vec = bond_vec_unnorm/(bond_len)
@@ -501,20 +500,20 @@ class Electrostatics:
         return [E_projected, bonded_atoms, bond_indices, bond_lens]
     
 
-    def E_proj_first_coord(self, metal_idx, xyz_file_path, charge_file, atom_multipole_file):
+    def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file):
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
         bonded_positions = []
-        total_lines = Electrostatics.mapcount(charge_file)
-        all_lines = range(0, total_lines)
+        total_lines = Electrostatics.mapcount(xyz_file_path)
+        all_lines = range(0, total_lines - 2)
         # Determine the Efield vector at point of central metal stom
-        [center_E, center_position, center_atom, Shaik_E_center]  =  Electrostatics.calc_fullE(metal_idx, all_lines, charge_file, atom_multipole_file)
+        [center_E, center_position, center_atom, Shaik_E_center]  =  self.calc_fullE(metal_idx, all_lines, xyz_file_path, atom_multipole_file)
         lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
         
         bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
-            [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  Electrostatics.calc_fullE(bonded_atom_idx, all_lines, charge_file, atom_multipole_file)    
+            [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  self.calc_fullE(bonded_atom_idx, all_lines, xyz_file_path, atom_multipole_file)    
             bond_vec_unnorm = np.subtract(np.array(center_position), np.array(bonded_position)) 
             bond_len = np.linalg.norm(bond_vec_unnorm)
             bond_vec = bond_vec_unnorm/(bond_len)
@@ -811,37 +810,20 @@ class Electrostatics:
                 output = proc.communicate("\n".join(polarization_commands).encode())
     
             try:
-                full_file_path = os.getcwd() +'/' + 'final_optim_Hirshfeld_I.txt'
-                atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
-                copy_tree(atmrad_src, results_dir + 'atmrad/')     
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_bondIndices(file_bond_indices,xyz_file_path, path_to_pol)
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx,xyz_file_path, full_file_path, path_to_pol)
-            
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol)
+                results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
+                results_dict['Projected_Efields V/Angstrom'] = proj_Efields
+                results_dict['Bonded Atoms'] = bondedAs
+                results_dict['Bonded Indices'] = bonded_idx
+                results_dict['Bond Lengths']= bond_lens
             except Exception as e:
-                proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                calc_command = self.dict_of_calcs['Hirshfeld_I']
-                commands = ['7', calc_command, '1', 'y', '0', 'q'] # For atomic charge type corresponding to dict key
-                output = proc.communicate("\n".join(commands).encode())
-                new_name = 'final_optim_Hirshfeld_I.txt'
-                os.rename('final_optim.chg', new_name)
-                if bool_manual_mode:
-                    file_bond_indices = input_bond_indices[counter]
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = Electrostatics.E_proj_bondIndices(file_bond_indices, full_file_path, path_to_pol)
-                # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
-                else:
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx, xyz_file_path, full_file_path, path_to_pol)
-                # Will ned to add additional params here for E-field data
-            
-            results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
-            results_dict['Projected_Efields V/Angstrom'] = proj_Efields
-            results_dict['Bonded Atoms'] = bondedAs
-            results_dict['Bonded Indices'] = bonded_idx
-            results_dict['Bond Lengths']= bond_lens
+                print(repr(e))
 
             counter = counter + 1
 
