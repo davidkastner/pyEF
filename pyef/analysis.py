@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import scipy.linalg as la
 from collections import deque
+from importlib import resources
 from distutils.dir_util import copy_tree
 
 class Electrostatics:
@@ -99,7 +100,7 @@ class Electrostatics:
 
             with open('final_optim.molden', 'w') as file:
                 file.write(content)
-            print("      > Molden file is fixed")
+            print("      > Molden file is fixed\n")
         os.chdir(owd)
 
     def prepData(self):
@@ -713,24 +714,29 @@ class Electrostatics:
                         [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx, full_file_path)
                         ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
                         ESP_scoord = self.esp_second_coord(atom_idx, full_file_path, path_to_xyz)
+                    
                     except Exception as e:
                         print('The Exception is: ' + str(e))
                         print(traceback.format_exc())
                         print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
+
                         # Re-run multiwfn computation of partial charge 
                         proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                         calc_command = self.dict_of_calcs[key]
                         commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                        
                         if key == 'CHELPG':
                             commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
                         output = proc.communicate("\n".join(commands).encode())
                         new_name = 'final_optim_' +key+'.txt'
                         os.rename('final_optim.chg', new_name)
+                        
                         if self.inGaCageBool:                        
                             # With newly analyzed partial charges, re-compute ESP data
                             [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
                         else:
                             [ESP_all, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
+                        
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
                         [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx, full_file_path)
                         ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
@@ -770,6 +776,7 @@ class Electrostatics:
     
     # input_bond_indices is a list of a list of tuples
     def getEFieldData(self, Efield_data_filename, input_bond_indices=[]):
+
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
@@ -784,30 +791,39 @@ class Electrostatics:
             bool_manual_mode = True
         
         for f in list_of_file:
+            load_multiwfn = "module load multiwfn/noGUI"
             atom_idx = metal_idxs[counter] 
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
-            subprocess.call("module load multiwfn/noGUI", shell=True)
-            # First For this to work, the .molden file should be named: f.molden
+            subprocess.call(load_multiwfn, shell=True)
 
-            command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
-            results_dir = os.getcwd() + '/'
+            # First For this to work, the .molden file should be named: f.molden
             results_dict = {}
             results_dict['Name'] = f
-            Command_Polarization = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden >' +  'final_optim_polarization.txt'
+            multiwfn_path = "/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn"
+            molden_filename = "final_optim.molden"
+            final_structure_file = "final_optim.xyz"
+            polarization_file = "final_optim_polarization.txt"
+            
+            # Dynamically get path to package settings.ini file
+            with resources.path('pyef.resources', 'settings.ini') as ini_path:
+                path_to_ini_file = str(ini_path)
+                Command_Polarization = f"{multiwfn_path} {molden_filename} -set {path_to_ini_file} > {polarization_file}"
 
             # Check if the atomic polarizations have been computed
-            path_to_pol = os.getcwd() + '/' + 'final_optim_polarization.txt'
-            xyz_file_path =  os.getcwd() + '/' 'final_optim.xyz'
-            print('Attempting this path to the polarization file')
+            path_to_pol = os.path.join(os.getcwd(), polarization_file)
+            xyz_file_path = os.path.join(os.getcwd(), final_structure_file)
+            print(f"Attempting polarization file path: {path_to_pol}")
+
             if os.path.exists(path_to_pol):
-                print('   > Polarization file: ' + f + "!!")
+                print(f"   > Polarization file: {f}!!")
             else:
                 print('Starting to run polarization calculation!')
                 # Now Run the calculation for atomic dipole and quadrupole moment
+                print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                polarization_commands = ['15', '-1', '3', '2', '0', 'q'] # for atomic dipole and quadrupole moment of Hirshfeld-I type
-                output = proc.communicate("\n".join(polarization_commands).encode())
+                polarization_commands = ['15', '-1', '3', '2', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                proc.communicate("\n".join(polarization_commands).encode())
     
             try:
                 # If bond_indices is longer then one, default to manually entry mode
@@ -817,11 +833,13 @@ class Electrostatics:
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
                     [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol)
+                
                 results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
                 results_dict['Projected_Efields V/Angstrom'] = proj_Efields
                 results_dict['Bonded Atoms'] = bondedAs
                 results_dict['Bonded Indices'] = bonded_idx
                 results_dict['Bond Lengths']= bond_lens
+
             except Exception as e:
                 print(repr(e))
 
@@ -829,8 +847,9 @@ class Electrostatics:
 
             # Probably want to add other bonds to this list!
             allspeciesdict.append(results_dict)
+
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
-        df.to_csv(Efield_data_filename +'.csv')
+        df.to_csv(f"{Efield_data_filename}.csv")
 
 
