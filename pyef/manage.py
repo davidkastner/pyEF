@@ -26,15 +26,16 @@ def parse_job_batch_file(file_path):
 
     with open(file_path, 'r') as file:
         for line in file:
-            # Skip empty lines and lines starting with '#'
+            # Skip empty lines and comments '#'
             if line.strip() == '' or line.strip().startswith('#'):
                 continue
 
-            columns = line.strip().split(',')
+            columns = [col.strip() for col in line.strip().split(',')]
             # Extracting and appending data to respective lists
             jobs.append(columns[0])
             metal_index = int(columns[1])
+            bonded_atom_index = int(columns[2])
             metal_indices.append(metal_index)
-            column_pairs.append((metal_index, columns[2]))
+            column_pairs.append([(metal_index, bonded_atom_index)])
 
     return jobs, metal_indices, column_pairs

@@ -4,7 +4,7 @@ import pyef
 import argparse
 from pyef.analysis import Electrostatics
 
-def main(jobs, metal_indices, bond_indices, geom_flag, esp_flag):
+def main(job_name, jobs, metal_indices, bond_indices, geom_flag, esp_flag):
     """
     Main function for running the pyEF workflow.
 
@@ -50,12 +50,8 @@ def main(jobs, metal_indices, bond_indices, geom_flag, esp_flag):
         # Create CSV with ESP data
         dataObject.getESPData(lst_charge_types, ESPdata_filename)
 
-
-    # Define prefix name  of E-field datafile
-    Efield_data_filename = 'Efielddata'
-
     # Method to Compute Efield Projections on bonds connected to the atom specified by index in metal_indices
-    dataObject.getEFieldData(Efield_data_filename, bond_indices)
+    dataObject.getEFieldData(job_name, bond_indices)
 
 def read_file_lines(file_path):
     """Reads in auxiliary files containing job information"""
