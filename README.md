@@ -1,6 +1,6 @@
 ![Graphical Summary of README](docs/_static/header.webp)
 ==============================
-# pyEF
+# PyEF
 [//]: # (Badges)
 [![GitHub Actions Build Status](https://github.com/davidkastner/pyef/workflows/CI/badge.svg)](https://github.com/davidkastner/pyef/actions?query=workflow%3ACI)
 [![Documentation Status](https://readthedocs.org/projects/pyef/badge/?version=latest)](https://pyef.readthedocs.io/en/latest/?badge=latest)
@@ -23,7 +23,7 @@
 
 ## 1. Overview
 The purpose of PyEF is to make electric field and electrostatics calculations more accessible.
-pyEF is a python package optimized to run using molden files from QM calculations.
+PyEF is a python package optimized to run using molden files from QM calculations.
 
 ## 2. Tutorials
 In progress
