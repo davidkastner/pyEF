@@ -498,7 +498,7 @@ class Electrostatics:
             bonded_atoms.append((A_bonded_atom, B_bonded_atom))
             bonded_positions.append((A_bonded_position, B_bonded_position))
             bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, bond_indices, bond_lens]
+        return [E_projected, bonded_atoms, bond_indices, bond_lens, E_shaik_proj]
     
 
     def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file):
@@ -528,7 +528,7 @@ class Electrostatics:
             bonded_atoms.append(bonded_atom)
             bonded_positions.append(bonded_position)
             bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens]
+        return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens, E_shaik_proj]
             
     def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
         print('The index of the metal atom is: ' + str(metal_idx))
@@ -828,13 +828,14 @@ class Electrostatics:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_bondIndices(file_bond_indices,xyz_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices,xyz_file_path, path_to_pol)
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol)
                 
                 results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
                 results_dict['Projected_Efields V/Angstrom'] = proj_Efields
+                results_dict['Shaik proj Efields V/A'] = shaik_proj
                 results_dict['Bonded Atoms'] = bondedAs
                 results_dict['Bonded Indices'] = bonded_idx
                 results_dict['Bond Lengths']= bond_lens
