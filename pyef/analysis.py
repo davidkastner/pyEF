@@ -445,7 +445,7 @@ class Electrostatics:
         KJ_J = 10**-3
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
-        inv_eps = 1/5
+        inv_eps = 1
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
         for idx in charge_range:
             atom_dict = lst_multipole_dict[idx] 
@@ -724,7 +724,6 @@ class Electrostatics:
                         proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                         calc_command = self.dict_of_calcs[key]
                         commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
-                        
                         if key == 'CHELPG':
                             commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
                         output = proc.communicate("\n".join(commands).encode())
