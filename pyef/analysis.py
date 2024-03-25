@@ -314,6 +314,43 @@ class Electrostatics:
             
         return [distances_vertices, Ga_self_dist]
 
+    def calcNearestCageAtom(espatom_idx, charge_file):
+        df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
+
+        # Convert each column to list for quicker indexing
+        atoms = df['Atom']
+        charges = df['charge']
+        xs = df['x']
+        ys = df['y']
+        zs = df['z']
+
+        # Pick the index of the atom at which the esp should be calculated
+        idx_atom = espatom_idx
+
+        # Determine position and charge of the target atom
+        xo = xs[idx_atom]
+        yo = ys[idx_atom]
+        zo = zs[idx_atom]
+        chargeo = charges[idx_atom]
+        total_esp = 0
+
+        # Distance to cage atoms
+        cage_idxs = list(np.range(0, 280))
+        distances_toCage = []
+        counter = 0
+
+        for cage_idx in cage_idxs:
+            Cax = xs[cage_idx]
+            Cay = ys[cage_idx]
+            Caz = zs[cage_idx]
+            r = (((Cax - xo))**2 + ((Cay - yo))**2 + ((Caz - zo))**2)**(0.5)
+            distances_toCage.append(r)
+        array_dists = np.array(distances_toCage)
+        NearestCageAtom = np.min(array_dists)
+
+        return [NearestCageAtom]
+
 
     def calcesp(espatom_idx, charge_range, charge_file):
         """
@@ -760,8 +797,10 @@ class Electrostatics:
                     # If .molden files deal with encapsulated TMCS, complete an additional set of analyses
                     if self.inGaCageBool:
                         [distoGa, Ga_selfdist]=Electrostatics.calcdist(atom_idx, full_file_path)
+                        [cageAtomdist]=Electrostatics.calcNearestCageAtom(atom_idx, full_file_path)
                         results_dict['MetaltoGa_dist'] = distoGa
                         results_dict['GatoGa_dist'] = Ga_selfdist
+                        results_dict['NearestCageAtom'] = cageAtomdist
                     else:
                         continue
                 except Exception as e:
