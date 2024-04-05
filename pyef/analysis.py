@@ -38,7 +38,7 @@ class Electrostatics:
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.inGaCageBool = inGaCage
-
+        self.dielectric = 1
         # Dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
         # Palladium covalent radius seemed to be under-estimated in original implementation, so changed to 1.39 per https://webelements.com/palladium/atom_sizes.html
         # Dictionary from molsimplify, https://molsimplify.readthedocs.io/en/latest/_modules/molSimplify/Classes/globalvars.html
@@ -78,7 +78,8 @@ class Electrostatics:
              'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
-    
+    def changeDielectric(self, dlc):
+        self.dielectric = dlc
     def fix_ECPmolden(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
 
@@ -336,7 +337,7 @@ class Electrostatics:
         total_esp = 0
 
         # Distance to cage atoms
-        cage_idxs = list(np.range(0, 280))
+        cage_idxs = list(np.arange(0, 280))
         distances_toCage = []
         counter = 0
 
@@ -352,7 +353,7 @@ class Electrostatics:
         return [NearestCageAtom]
 
 
-    def calcesp(espatom_idx, charge_range, charge_file):
+    def calcesp(espatom_idx, charge_range, charge_file, dielectric):
         """
         Calculate the esp
 
@@ -399,7 +400,7 @@ class Electrostatics:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 total_esp = total_esp + (charges[idx]/r)
 
-        final_esp = k*total_esp*((C_e))*cal_J*faraday   # Note: cal/kcal * kJ/J gives 1
+        final_esp = k*total_esp*((C_e))*cal_J*faraday*(1/dielectric)   # Note: cal/kcal * kJ/J gives 1
         # print(str(final_esp) + ' kJ/(mol*e)')
         return [final_esp, df['Atom'][idx_atom]]
 
@@ -570,7 +571,7 @@ class Electrostatics:
     def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
         print('The index of the metal atom is: ' + str(metal_idx))
         lst_bonded_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
-        [First_coord_ESP, atom_type] = Electrostatics.calcesp(metal_idx, lst_bonded_atoms, charge_file)
+        [First_coord_ESP, atom_type] = Electrostatics.calcesp(metal_idx, lst_bonded_atoms, charge_file, self.dielectric)
         return First_coord_ESP
 
     def esp_second_coord(self, metal_idx, charge_file, path_to_xyz):
@@ -583,7 +584,7 @@ class Electrostatics:
         set_second_coor = set(lst_first_and_second)
         final_lst = list(set_second_coor)
         final_lst.remove(metal_idx)
-        [second_coord_ESP, atom_type] = Electrostatics.calcesp(metal_idx, final_lst, charge_file)
+        [second_coord_ESP, atom_type] = Electrostatics.calcesp(metal_idx, final_lst, charge_file, self.dielectric)
         return second_coord_ESP
 
     # Boolean CageTrue
@@ -598,18 +599,18 @@ class Electrostatics:
         partial_charge_atom = charges[atom_idx]
         return [total_charge, partial_charge_atom]
 
-    def ESP_all_calcs(filename, atom_idx, cageTrue):
+    def ESP_all_calcs(filename, atom_idx, cageTrue, dlc):
         # Get the number of lines in the txt file
         total_lines =Electrostatics.mapcount(filename)
         all_lines = range(0, total_lines)
-        [ESP_all, atom_type] = Electrostatics.calcesp(atom_idx, all_lines, filename)
+        [ESP_all, atom_type] = Electrostatics.calcesp(atom_idx, all_lines, filename, dlc)
         if cageTrue:
             cage_lines = range(0, 280)
             guest_lines = range(280, total_lines)
             # print('Cage indices: ' + str(cage_lines))
             # print('Guest indices: ' + str(guest_lines))
-            ESP_just_ligand = Electrostatics.calcesp(atom_idx, guest_lines, filename)[0]
-            ESP_just_cage = Electrostatics.calcesp(atom_idx, cage_lines, filename)[0]
+            ESP_just_ligand = Electrostatics.calcesp(atom_idx, guest_lines, filename, dlc)[0]
+            ESP_just_cage = Electrostatics.calcesp(atom_idx, cage_lines, filename, dlc)[0]
             print('ESP for all atoms: ' + str(ESP_all) + ' kJ/(mol*e)')
             print('ESP just ligand: ' + str(ESP_just_ligand) + ' kJ/(mol*e)')
             print('ESP just cage: ' + str(ESP_just_cage) + ' kJ/(mol*e)')
@@ -619,7 +620,7 @@ class Electrostatics:
             return [ESP_all, atom_type]
 
 
-    def esp_bydistance(espatom_idx,  charge_file):
+    def esp_bydistance(espatom_idx,  charge_file, dielectric):
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
@@ -658,7 +659,7 @@ class Electrostatics:
             else:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 distances.append(r)
-                esps.append(k*C_e*cal_J*faraday*charges[idx]/r)
+                esps.append(k*(1/dielectric)*C_e*cal_J*faraday*charges[idx]/r)
         # Now we sort the distance list, and use sorted indices to sort the
         dist_arr = np.array(distances)
         sorted_idx = np.argsort(dist_arr)
@@ -743,12 +744,12 @@ class Electrostatics:
                     try: 
                         if self.inGaCageBool:
                             # With newly analyzed partial charges, re-compute ESP data
-                            [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
+                            [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool, self.dielectric)
                         else:
-                            [ESP_all, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
+                            [ESP_all, atom_type] = Electrostatics.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool, self.dielectric)
 
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
-                        [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx, full_file_path)
+                        [sorted_distances, sorted_esps, cum_esps] = Electrostatics.esp_bydistance(atom_idx, full_file_path, self.dielectric)
                         ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
                         ESP_scoord = self.esp_second_coord(atom_idx, full_file_path, path_to_xyz)
                     
