@@ -674,7 +674,7 @@ class Electrostatics:
                 continue
             elif idx in bound_atoms:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                esps.append(k**C_e*cal_J*faraday*charges[idx]/r)
+                esps.append(k*C_e*cal_J*faraday*charges[idx]/r)
                 distances.append(r)
             else:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
