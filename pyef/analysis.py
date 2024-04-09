@@ -41,7 +41,7 @@ class Electrostatics:
         self.dielectric = 1
        
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
-        self.changeDielectBoundBool = True
+        self.changeDielectBoundBool = False
         # Dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
         # Palladium covalent radius seemed to be under-estimated in original implementation, so changed to 1.39 per https://webelements.com/palladium/atom_sizes.html
         # Dictionary from molsimplify, https://molsimplify.readthedocs.io/en/latest/_modules/molSimplify/Classes/globalvars.html
@@ -81,8 +81,13 @@ class Electrostatics:
              'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
+
+    def minDielecBonds(self, bool_bonds):
+        self.changeDielectBoundBool = bool_bonds
+
     def changeDielectric(self, dlc):
         self.dielectric = dlc
+
     def fix_ECPmolden(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
 
