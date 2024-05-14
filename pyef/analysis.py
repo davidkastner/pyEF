@@ -389,11 +389,11 @@ class Electrostatics:
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
         # Convert each column to list for quicker indexing
-        atoms = df['Atom']
-        charges = df['charge']
-        xs = df['x']
-        ys = df['y']
-        zs = df['z']
+        atoms = list(df['Atom'])
+        charges = list(df['charge'])
+        xs = list(df['x'])
+        ys = list(df['y'])
+        zs = list(df['z'])
 
         #For QMMM calculation, include point charges in ESP calculation
         if self.ptChgs:
@@ -401,11 +401,13 @@ class Electrostatics:
             init_file_path = path_to_xyz[0:-len('final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
-            xs = xs + df_ptchg['x']
-            ys = ys + df_ptchg['y']
-            zs = zs + df_ptchg['z']
-            charges = charges + df_ptchg['charge']
-            atoms = atoms + df_ptchg['Atom']
+            xs = xs + list(df_ptchg['x'])
+            ys = ys + list(df_ptchg['y'])
+            zs = zs + list(df_ptchg['z'])
+            charges = charges + list(df_ptchg['charge'])
+            atoms = atoms + list(df_ptchg['Atom'])
+            #change charge range to include these new partial charges!
+            charge_range = range(0, len(xs))
         # Pick the index of the atom at which the esp should be calculated
         idx_atom = espatom_idx
 
@@ -523,6 +525,8 @@ class Electrostatics:
         one_mol = 6.02*(10**23)
         inv_eps = 1
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
+        if charge_range[-1] > len(xs):
+            charge_range = range(0, len(xs))
         for idx in charge_range:
             atom_dict = lst_multipole_dict[idx] 
             if idx == idx_atom:
@@ -536,7 +540,7 @@ class Electrostatics:
                 
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Shaik_E = Shaik_E + A_to_m*inv_eps*k*C_e*atom_dict["Atom_Charge"]*(1/(r**2))*dist_vec/la.norm(dist_vec)
+                Shaik_E = Shaik_E + A_to_m*inv_eps*k*C_e*(-atom_dict["Atom_Charge"]*(1/(r**2))*dist_vec/la.norm(dist_vec))
                 Ex_quad = inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(A_to_m**6)*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
                 Ey_quad = inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
                 Ez_quad = inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
@@ -545,6 +549,27 @@ class Electrostatics:
                 Ey = Ey + inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
                 Ez = Ez + inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
         E_vec = [Ex, Ey, Ez]
+
+        #For QMMM calculation, include point charges in Shaik E field calc
+        if self.ptChgs:
+            ptchg_filename = 'ptchrg.xyz'
+            init_file_path = xyz_file[0:-len('final_optim.xyz')]
+            full_ptchg_fp = init_file_path + ptchg_filename
+            df_ptchg = self.getPtChgs(full_ptchg_fp)
+            MM_xs = list(df_ptchg['x'])
+            MM_ys = list(df_ptchg['y'])
+            MM_zs = list(df_ptchg['z'])
+            MM_charges = list(df_ptchg['charge'])
+            print('MM charges: ')
+            print(MM_charges)
+            #change charge range to include these new partial charges!
+            charge_range = range(0, len(MM_xs))
+            for chg_idx in charge_range:
+                r = (((MM_xs[idx] - xo)*A_to_m)**2 + ((MM_ys[idx] - yo)*A_to_m)**2 + ((MM_zs[idx] - zo)*A_to_m)**2)**(0.5)
+                dist_vec = np.array([(MM_xs[idx] - xo), (MM_ys[idx] - yo), (MM_zs[idx] - zo)])
+                Shaik_E = Shaik_E -  A_to_m*inv_eps*k*C_e*MM_charges[idx]*(1/(r**2))*dist_vec/la.norm(dist_vec)
+            #Add contributions to Shaik Efield from point charges 
+           
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
 
 
@@ -576,7 +601,7 @@ class Electrostatics:
             bond_lens.append(bond_len)
         return [E_projected, bonded_atoms, bond_indices, bond_lens, E_shaik_proj]
     
-
+    #Calculate Efield projection accounting only for electrostatic effects of directly bound atoms (proxy for inductive effect)
     def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file):
         bonded_atoms = []
         E_projected = []
@@ -606,12 +631,13 @@ class Electrostatics:
             bond_lens.append(bond_len)
         return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens, E_shaik_proj]
             
+    #Calc ESP accounting only for electrostatic contributions for atoms bound to ESP center
     def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
         print('The index of the metal atom is: ' + str(metal_idx))
         lst_bonded_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
         [First_coord_ESP, atom_type] = self.calcesp(path_to_xyz, metal_idx, lst_bonded_atoms, charge_file)
         return First_coord_ESP
-
+    #Calc ESP accounting for first and second coordinating spheres of atom the ESP center atom
     def esp_second_coord(self, metal_idx, charge_file, path_to_xyz):
         lst_first_and_second = []
         lst_first_coor_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
@@ -654,7 +680,7 @@ class Electrostatics:
             print('ESP just cage: ' + str(ESP_just_cage) + ' kJ/(mol*e)')
             return [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type]
         else:
-            print('ESP for all atoms: ' + str(ESP_all) + ' kJ/(mol*e)') 
+            print('ESP at '+str(atom_type) + ' (index = ' + str(atom_idx) + ') : ' + str(ESP_all) + ' kJ/(mol*e)') 
             return [ESP_all, atom_type]
 
 
@@ -672,16 +698,15 @@ class Electrostatics:
         cal_J = 4.184
 
         # Convert each column to list for quicker indexing
-        atoms = df['Atom']
-        charges = df['charge']
-        xs = df['x']
-        ys = df['y']
-        zs = df['z']
+        atoms = list(df['Atom'])
+        charges = list(df['charge'])
+        xs = list(df['x'])
+        ys = list(df['y'])
+        zs = list(df['z'])
 
         # Pick the index of the atom at which the esp should be calculated
         idx_atom = espatom_idx
 
-        print("The charge at: "+ str(df['Atom'][idx_atom]) +" atom will be calculated")
         # Determine position and charge of the target atom
         xo = xs[idx_atom]
         yo = ys[idx_atom]
@@ -694,11 +719,11 @@ class Electrostatics:
             init_file_path = path_to_xyz[0:-len('final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
-            xs = xs + df_ptchg['x']
-            ys = ys + df_ptchg['y']
-            zs = zs + df_ptchg['z']
-            charges = charges + df_ptchg['charge']
-            atoms = atoms + df_ptchg['Atom']
+            xs = xs + list(df_ptchg['x'])
+            ys = ys + list(df_ptchg['y'])
+            zs = zs + list(df_ptchg['z'])
+            charges = charges + list(df_ptchg['charge'])
+            atoms = atoms + list(df_ptchg['Atom'])
 
         total_esp = 0
         # Create an ordering of the atoms based on distance from the central atom
@@ -742,9 +767,7 @@ class Electrostatics:
         sorted_partial_charges = chg_arr.take(init_sorted_idx)
         sorted_atomTypes = [atm_lst[i] for i in init_sorted_idx]
        
-        print('Here is idx_atom: ' + str(idx_atom))
         new_bool_still = idx_atom in sorted_idx
-        print(new_bool_still)
         #final_sorted_idx = np.delete(init_sorted_idx, init_sorted_idx[idx_atom])
         return [sorted_dist, sorted_esps, cumulative_esps, sorted_idx, sorted_partial_charges, sorted_atomTypes]
   
@@ -964,7 +987,8 @@ class Electrostatics:
 
             except Exception as e:
                 print(repr(e))
-
+                traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+                print(traceback_str)
             counter = counter + 1
 
             # Probably want to add other bonds to this list!
