@@ -560,8 +560,6 @@ class Electrostatics:
             MM_ys = list(df_ptchg['y'])
             MM_zs = list(df_ptchg['z'])
             MM_charges = list(df_ptchg['charge'])
-            print('MM charges: ')
-            print(MM_charges)
             #change charge range to include these new partial charges!
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
