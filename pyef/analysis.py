@@ -1048,7 +1048,7 @@ class Electrostatics:
                         atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
                     try:
-                        for atom_idx in lst_atom_idxs
+                        for atom_idx in lst_atom_idxs:
                             [atom_type, partial_charge_atom] = Electrostatics.getAtomInfo(full_file_path, atom_idx)
                             results_dict[f'{key} Charge {atom_idx} {atom_type}'] = partial_charge_atom
                     except Exception as e:
@@ -1066,7 +1066,7 @@ class Electrostatics:
                         new_name = 'final_optim_' +key+'.txt'
                         os.rename('final_optim.chg', new_name)
 
-                        for atom_idx in lst_atom_idxs
+                        for atom_idx in lst_atom_idxs:
                             [atom_type, partial_charge_atom] = Electrostatics.getAtomInfo(full_file_path, atom_idx)
                             results_dict[f'{key} Charge {atom_idx} {atom_type}'] = partial_charge_atom
 
