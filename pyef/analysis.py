@@ -398,7 +398,7 @@ class Electrostatics:
         #For QMMM calculation, include point charges in ESP calculation
         if self.ptChgs:
             ptchg_filename = 'ptchrg.xyz'
-            init_file_path = path_to_xyz[0:-len('final_optim.xyz')]
+            init_file_path = path_to_xyz[0:-len('scr/final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
             xs = xs + list(df_ptchg['x'])
@@ -553,7 +553,7 @@ class Electrostatics:
         #For QMMM calculation, include point charges in Shaik E field calc
         if self.ptChgs:
             ptchg_filename = 'ptchrg.xyz'
-            init_file_path = xyz_file[0:-len('final_optim.xyz')]
+            init_file_path = xyz_file[0:-len('scr/final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
             MM_xs = list(df_ptchg['x'])
@@ -660,6 +660,18 @@ class Electrostatics:
         partial_charge_atom = charges[atom_idx]
         return [total_charge, partial_charge_atom]
 
+    def getAtomInfo(filename, atom_idx):
+        df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+        atoms = df['Atom']
+        charges = df['charge']
+        xs = df['x']
+        ys = df['y']
+        zs = df['z']
+        total_charge = np.sum(df['charge'])
+        partial_charge_atom = charges[atom_idx]
+        atom_type = atoms[atom_idx]
+        return [atom_type, partial_charge_atom]
+
     def ESP_all_calcs(self, path_to_xyz, filename, atom_idx, cageTrue):
         # Get the number of lines in the txt file
         dlc = self.dielectric
@@ -714,7 +726,7 @@ class Electrostatics:
         #For QMMM calculation, include point charges in ESP calculation 
         if self.ptChgs:
             ptchg_filename = 'ptchrg.xyz'
-            init_file_path = path_to_xyz[0:-len('final_optim.xyz')]
+            init_file_path = path_to_xyz[0:-len('scr/final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
             xs = xs + list(df_ptchg['x'])
@@ -996,4 +1008,74 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(f"{Efield_data_filename}.csv")
 
+
+
+    ''' Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
+    Accepts:
+    charge_types: list of strings
+    lst_of_atom_idxs: list of integers denoting atom indices (0 indexed!)
+    partial_chg_filename: string
+        Name of the output file name
+    Returns: 
+        nothing. Will Create a csv file entitled partial_chg_filename.csv with partial charge info
+    '''
+    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename):
+       # Access Class Variables
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+
+        owd = os.getcwd() # Old working directory
+        allspeciesdict = []
+        counter = 0  # Iterator to account for atomic indices of interest
+        for f in list_of_file:
+            print('-----------------' + str(f) + '------------------')
+            counter = counter + 1
+            os.chdir(owd)
+            os.chdir(f + folder_to_molden)
+            subprocess.call("module load multiwfn/noGUI", shell=True)
+            command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
+            results_dir = os.getcwd() + '/'
+
+            results_dict = {}
+            results_dict['Name'] = f
+            
+            for key in charge_types:
+                print('Partial Charge Scheme:' + str(key))
+                try:
+                    full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
+                    path_to_xyz = os.getcwd() + '/final_optim.xyz'
+                    if key == "Hirshfeld_I":
+                        atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
+                        copy_tree(atmrad_src, results_dir + 'atmrad/')
+                    try:
+                        for atom_idx in lst_atom_idxs
+                            [atom_type, partial_charge_atom] = Electrostatics.getAtomInfo(full_file_path, atom_idx)
+                            results_dict[f'{key} Charge {atom_idx} {atom_type}'] = partial_charge_atom
+                    except Exception as e:
+                        print('The Exception is: ' + str(e))
+                        print(traceback.format_exc())
+                        print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
+
+                        # Re-run multiwfn computation of partial charge
+                        proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                        calc_command = self.dict_of_calcs[key]
+                        commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                        if key == 'CHELPG':
+                            commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
+                        output = proc.communicate("\n".join(commands).encode())
+                        new_name = 'final_optim_' +key+'.txt'
+                        os.rename('final_optim.chg', new_name)
+
+                        for atom_idx in lst_atom_idxs
+                            [atom_type, partial_charge_atom] = Electrostatics.getAtomInfo(full_file_path, atom_idx)
+                            results_dict[f'{key} Charge {atom_idx} {atom_type}'] = partial_charge_atom
+
+                except Exception as e:
+                    logging.exception('An Exception was thrown')
+                    continue
+            allspeciesdict.append(results_dict)
+        os.chdir(owd)
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(partial_chg_filename +'.csv')
+        return df
 
