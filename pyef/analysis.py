@@ -563,9 +563,9 @@ class Electrostatics:
             #change charge range to include these new partial charges!
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
-                r = (((MM_xs[idx] - xo)*A_to_m)**2 + ((MM_ys[idx] - yo)*A_to_m)**2 + ((MM_zs[idx] - zo)*A_to_m)**2)**(0.5)
-                dist_vec = np.array([(MM_xs[idx] - xo), (MM_ys[idx] - yo), (MM_zs[idx] - zo)])
-                Shaik_E = Shaik_E -  A_to_m*inv_eps*k*C_e*MM_charges[idx]*(1/(r**2))*dist_vec/la.norm(dist_vec)
+                r = (((MM_xs[chg_idx] - xo)*A_to_m)**2 + ((MM_ys[chg_idx] - yo)*A_to_m)**2 + ((MM_zs[chg_idx] - zo)*A_to_m)**2)**(0.5)
+                dist_vec = np.array([(MM_xs[chg_idx] - xo), (MM_ys[chg_idx] - yo), (MM_zs[chg_idx] - zo)])
+                Shaik_E = Shaik_E +  A_to_m*inv_eps*k*C_e*(-MM_charges[chg_idx]*(1/(r**2))*dist_vec/la.norm(dist_vec))
             #Add contributions to Shaik Efield from point charges 
            
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
