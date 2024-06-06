@@ -108,6 +108,9 @@ class Electrostatics:
             pattern_au = re.compile(r'(Au\s+\d+\s+)(\d+)')
             content = pattern_au.sub(r'\g<1>19', content)
 
+            pattern_fe = re.compile(r'(Fe\s+\d+\s+)(\d+)')
+            content = pattern_fe.sub(r'\g<1>8', content)
+
             pattern_i = re.compile(r'(I\s+\d+\s+)(\d+)')
             content = pattern_i.sub(r'\g<1>7', content)
 
