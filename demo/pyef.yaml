@@ -1,0 +1,6 @@
+# Configuration parameters
+input: ./jobs.in              # Path to the input file
+dielectric: 1                 # User defined dielectric
+ef: true                      # Run the EF workflow
+esp: false                    # Run the ESP workflow
+geometry_check: false         # Run the geometry check workflow

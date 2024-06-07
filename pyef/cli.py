@@ -2,71 +2,79 @@
 
 import os
 import pyef
+import yaml
 import click
 
 def welcome():
     """Print first to welcome the user while it waits to load the modules"""
-    
-    print("\n     ╔═══════════════════════════╗")
-    print("     ║ .-----------------------. ║")
-    print("     ║ |       ┌──────┐        | ║")
-    print("     ║ |       │  ┌───┘        | ║")
-    print("     ║ |       │  └───┐        | ║")
-    print("     ║ |       │  ┌───┘        | ║")
-    print("     ║ |       │  ├┬┬┬┐        | ║")
-    print("     ║ |       └──┴┴┴┴┘        | ║")
-    print("     ║ |                       | ║")
-    print("     ║ |    WELCOME TO PYEF    | ║")
-    print("     ║ '-----------------------' ║")
-    print("     ╚═══════════════════════════╝\n")
-
-    print("Default programmed actions for the pyEF package.")
-    print("GitHub: https://github.com/davidkastner/pyef")
-    print("Documentation: https://pyef.readthedocs.io")
-    print("• Command for electric field analysis: pyef ef -i path/to/jobs.in")
-    print("• Command for electrostatic analysis: pyef esp -i path/to/jobs.in")
-    print("• Example annotated job file: github.com/davidkastner/pyEF/tree/main/demo/jobs.in")
-    print("• Update the settings.ini file in pyef.resources, especially the `nthreads` variable\n")
+    print("\n")
+    print("             ╔═══════════════════════╗")
+    print("             ║        ┌──────┐       ║")
+    print("             ║        │  ┌───┘       ║")
+    print("             ║        │  └───┐       ║")
+    print("             ║        │  ┌───┘       ║")
+    print("             ║        │  ├┬┬┬┐       ║")
+    print("             ║        └──┴┴┴┴┘       ║")
+    print("             ║                       ║")
+    print("             ║    WELCOME TO PYEF    ║")
+    print("             ╚═══════════╗╔══════════╝")
+    print("                 ╔═══════╝╚═══════╗                 ")
+    print("                 ║ THE KULIK LAB  ║                 ")
+    print("                 ╚═══════╗╔═══════╝                 ")
+    print("  ╔══════════════════════╝╚══════════════════════╗  ")
+    print("  ║  Code: github.com/davidkastner/pyef          ║  ")
+    print("  ║  Docs: pyef.readthedocs.io                   ║  ")
+    print("  ║     - Usage: pyef -c pyef.in                 ║  ")
+    print("  ║  Example: github.com/davidkastner/pyef/demo  ║  ")
+    print("  ╚══════════════════════════════════════════════╝  \n")
 
 # Welcome even if no flags
 welcome()
 
-@click.group()
-def cli():
+# Read in the configuration yaml file
+def read_config(config_file):
+    with open(config_file, 'r') as file:
+        return yaml.safe_load(file)
+
+@click.group(invoke_without_command=True)
+@click.option("--config", "-c", type=click.Path(exists=True), help="Path to the configuration YAML file")
+@click.pass_context
+def cli(ctx, config):
     """CLI entry point"""
-    pass
+    if ctx.invoked_subcommand is None and config:
+        ctx.invoke(run, config=config)
+    elif ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
 
-@cli.command()
-@click.option("-i", "--input", "job_path", required=True, type=str, help="Path to pyEF job file.")
-def ef(job_path):
-    """Analyzes electric fields"""
-    click.echo("Importing dependencies...")
+@click.command()
+@click.option("--config", "-c", required=True, type=click.Path(exists=True), help="Path to the configuration YAML file")
+def run(config):
     from pyef.run import main
     from pyef.manage import parse_job_batch_file
 
-    geom_flag = False   # Perform a geometry check
-    esp_flag = False    # Perform analysis of electrostatics
+    config_data = read_config(config)
+    input = config_data.get('input', '')
+    run_ef = config_data.get('ef', False)
+    run_esp = config_data.get('esp', False)
+    run_geometry_check = config_data.get('esp', False)
 
-    # Now using the job_path provided by the -i option
-    jobs, metal_indices, bond_indices = parse_job_batch_file(job_path)
-    job_name = os.path.splitext(job_path)[0]
-    pyef.run.main(job_name, jobs, metal_indices, bond_indices, geom_flag, esp_flag)
+    if run_ef:
+        """Analyzes electric fields"""
+        click.echo("Importing dependencies...")
 
-# THE ESP SECTION IS UNDERCONSTRUCTION AND MAY NOT WORK        
-@cli.command()
-@click.option("-i", "--input", "job_path", required=True, type=str, help="Path to pyEF job file.")
-def esp(job_path):
-    """Analyzes electrostatic potential"""
-    click.echo("Performing electrostatic analysis.")
-    from pyef.run import main
-    from pyef.manage import parse_job_batch_file
+        jobs, metal_indices, bond_indices = parse_job_batch_file(input)
+        job_name = os.path.splitext(input)[0]
+        pyef.run.main(job_name, jobs, metal_indices, bond_indices, run_geometry_check, run_esp)
 
-    geom_flag = False   # Perform a geometry check
-    esp_flag = True     # Perform analysis of electrostatics
+    # THE ESP SECTION IS UNDERCONSTRUCTION AND MAY NOT WORK  
+    if run_esp:      
+        """Analyzes electrostatic potential"""
+        click.echo("Performing electrostatic analysis.")
 
-    jobs, metal_indices, bond_indices = parse_job_batch_file(job_path)
-    pyef.run.main(jobs, geom_flag, esp_flag, metal_indices)
+        jobs, metal_indices, bond_indices = parse_job_batch_file(input)
+        pyef.run.main(jobs, run_geometry_check, run_esp, metal_indices)
 
+cli.add_command(run)
 
 if __name__ == '__main__':
     cli()
