@@ -1,0 +1,20 @@
+########################## WELCOME TO A PYEF JOB FILE ###################
+# The first column is the path to the TeraChem job.                     #
+# The second column is the first atom index of a bond.                  #
+# The third column is the second atom index of a bond.                  #
+# Atom indices are indexed at 0.                                        #
+# White space and comments are ignored so you can personalize this csv. #
+#########################################################################
+
+486, 487 # This is the target CH bond
+482, 484
+481, 485
+486, 487
+486, 487
+486, 487
+486, 487
+486, 487
+486, 487
+486, 487
+486, 487
+486, 487
