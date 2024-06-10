@@ -819,14 +819,18 @@ class Electrostatics:
     # new_dir: the [post-folder path to the scr folder that contains the .molden and optim.xyz file themselfs
     # dict of calcs, calculations to be performed by multiwavefunction with the corresponding keys
     # newfilanme: desired name of the .csv fiole that will be createcd in getData cotnaining all of the ESP/other data extracted un the file
-    ''' Function computes a series of ESP data using the charge scheme specified in charge types
-    Accepts:
-    charge_types: list of strings
-    ESPdata_filename: string
-        Name of the output file name
-    
-    '''
-    def getESPData(self, charge_types, ESPdata_filename):
+
+    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path):
+        '''
+        Function computes a series of ESP data using the charge scheme specified in charge types.
+
+        Attributes
+        ----------
+        charge_types: list of strings
+        ESPdata_filename: string
+            Name of the output file name
+
+        '''
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -841,8 +845,8 @@ class Electrostatics:
             counter = counter + 1
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
-            subprocess.call("module load multiwfn/noGUI", shell=True)
-            command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
+            subprocess.call(multiwfn_module, shell=True)
+            command_A = f"{multiwfn_path} final_optim.molden"
             results_dir = os.getcwd() + '/'
             
             results_dict = {}
@@ -851,10 +855,10 @@ class Electrostatics:
             for key in charge_types:
                 print('Partial Charge Scheme:' + str(key))
                 try:
-                    full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
-                    path_to_xyz = os.getcwd() + '/final_optim.xyz'
+                    full_file_path = f"{os.getcwd()}/final_optim_{key}.txt'"
+                    path_to_xyz = f"{os.getcwd()}/final_optim.xyz'"
                     if key == "Hirshfeld_I":
-                        atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
+                        atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
                     try: 
                         if self.inGaCageBool:
@@ -931,8 +935,9 @@ class Electrostatics:
         df.to_csv(ESPdata_filename +'.csv')
         return df
     
+
     # input_bond_indices is a list of a list of tuples
-    def getEFieldData(self, Efield_data_filename, input_bond_indices=[]):
+    def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, input_bond_indices=[]):
 
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -948,7 +953,7 @@ class Electrostatics:
             bool_manual_mode = True
         
         for f in list_of_file:
-            load_multiwfn = "module load multiwfn/noGUI"
+            load_multiwfn = multiwfn_module
             atom_idx = metal_idxs[counter] 
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
@@ -957,7 +962,7 @@ class Electrostatics:
             # First For this to work, the .molden file should be named: f.molden
             results_dict = {}
             results_dict['Name'] = f
-            multiwfn_path = "/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn"
+            multiwfn_path = multiwfn_path
             molden_filename = "final_optim.molden"
             final_structure_file = "final_optim.xyz"
             polarization_file = "final_optim_polarization.txt"
@@ -1012,17 +1017,23 @@ class Electrostatics:
         df.to_csv(f"{Efield_data_filename}.csv")
 
 
-
-    ''' Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
-    Accepts:
-    charge_types: list of strings
-    lst_of_atom_idxs: list of integers denoting atom indices (0 indexed!)
-    partial_chg_filename: string
-        Name of the output file name
-    Returns: 
-        nothing. Will Create a csv file entitled partial_chg_filename.csv with partial charge info
-    '''
-    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename):
+    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
+        '''
+        Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
+        
+        Attributes
+        ----------
+        charge_types: list(str)
+            list of strings
+        lst_of_atom_idxs: list(int)
+            list of integers denoting atom indices (0 indexed!)
+        partial_chg_filename: string
+            Name of the output file name
+        
+        Notes
+        -----
+        Will Create a csv file entitled partial_chg_filename.csv with partial charge info
+        '''
        # Access Class Variables
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
@@ -1035,8 +1046,8 @@ class Electrostatics:
             counter = counter + 1
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
-            subprocess.call("module load multiwfn/noGUI", shell=True)
-            command_A = '/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn '+ 'final_optim.molden'
+            subprocess.call(multiwfn_module, shell=True)
+            command_A = f"{multiwfn_path} final_optim.molden"
             results_dir = os.getcwd() + '/'
 
             results_dict = {}
@@ -1048,7 +1059,7 @@ class Electrostatics:
                     full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
                     path_to_xyz = os.getcwd() + '/final_optim.xyz'
                     if key == "Hirshfeld_I":
-                        atmrad_src = "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad"
+                        atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
                     try:
                         for atom_idx in lst_atom_idxs:

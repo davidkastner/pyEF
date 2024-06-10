@@ -1,6 +1,9 @@
 # Configuration parameters
-input: ./jobs.in              # Path to the input file
-dielectric: 1                 # User defined dielectric
-ef: true                      # Run the EF workflow
-esp: false                    # Run the ESP workflow
-geometry_check: false         # Run the geometry check workflow
+input: ./jobs.in                                                 # Path to the input file
+dielectric: 1                                                    # User defined dielectric
+ef: true                                                         # Run the EF workflow
+esp: false                                                       # Run the ESP workflow
+geometry_check: false                                            # Run the geometry check workflow
+multiwfn_module: "module load multiwfn/noGUI"                    # Module command to load Multiwfn
+multiwfn_path: "/opt/Multiwfn_3.7_bin_Linux_noGUI/Multiwfn"      # Path to Multiwfn executable
+atmrad_path: "/opt/Multiwfn_3.7_bin_Linux_noGUI/examples/atmrad" # Path to the atom radius file

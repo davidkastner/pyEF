@@ -1,8 +1,9 @@
-"""Functions for managing files need for pyEF"""
+"""Functions for managing files needed for pyEF"""
 
 def parse_job_batch_file(file_path):
     """
     Parse a CSV file and extract specific columns as lists and tuples.
+    The input file allows Python style comments on any line.
 
     Parameters
     ----------
@@ -26,16 +27,24 @@ def parse_job_batch_file(file_path):
 
     with open(file_path, 'r') as file:
         for line in file:
-            # Skip empty lines and comments '#'
+            # Skip empty lines and comments that start with '#'
             if line.strip() == '' or line.strip().startswith('#'):
                 continue
 
-            columns = [col.strip() for col in line.strip().split(',')]
+            # Remove comments from the line
+            line = line.split('#')[0].strip()
+            
+            # Skip the line if it's empty after removing the comment
+            if line == '':
+                continue
+
+            columns = [col.strip() for col in line.split(',')]
+            
             # Extracting and appending data to respective lists
             jobs.append(columns[0])
             metal_index = int(columns[1])
             bonded_atom_index = int(columns[2])
             metal_indices.append(metal_index)
-            column_pairs.append([(metal_index, bonded_atom_index)])
+            column_pairs.append((metal_index, bonded_atom_index))
 
     return jobs, metal_indices, column_pairs
