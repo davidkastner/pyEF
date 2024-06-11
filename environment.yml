@@ -8,6 +8,7 @@ dependencies:
   - numpy
   - pandas
   - scipy
+  - yaml
   - pip
   - pip:
     - sphinx==6.2.1

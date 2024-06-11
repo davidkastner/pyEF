@@ -134,36 +134,42 @@ class Electrostatics:
             optim_file_path = os.path.join(folder_path, 'optim.xyz')
             final_optim_xyz = os.path.join(folder_path, 'final_optim.xyz')
 
-            try:
-                with open(optim_file_path, 'r') as full_traj:
-                    num_atoms = int(full_traj.readline())
-                    num_lines = num_atoms + 2
-                    # If ends on first optimization of cycle, change cutting pattern
-                    full_traj.seek(0)
-                    head = [next(full_traj) for _ in range(num_lines)]
-                    full_traj.seek(0)
-                    with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
-                        initxyz.writelines(head)
-                    with open(final_optim_xyz, 'w') as finalxyz:
-                        finalxyz.writelines(deque(full_traj, num_lines))
-            except Exception as e:
-                backup_file = os.path.join(folder_path, 'xyz.xyz')
-                if os.path.exists(backup_file):
-                    shutil.copy2(backup_file, final_optim_xyz)
-                    logging.info('Single point data found. Using xyz.xyz as fallback.')
-                else:
-                    logging.exception(f'An unexpected error occurred while processing optim.xyz: {e}')
+            if not os.path.exists(final_optim_xyz):
+                try:
+                    with open(optim_file_path, 'r') as full_traj:
+                        num_atoms = int(full_traj.readline())
+                        num_lines = num_atoms + 2
+                        # If ends on first optimization of cycle, change cutting pattern
+                        full_traj.seek(0)
+                        head = [next(full_traj) for _ in range(num_lines)]
+                        full_traj.seek(0)
+                        with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
+                            initxyz.writelines(head)
+                        with open(final_optim_xyz, 'w') as finalxyz:
+                            finalxyz.writelines(deque(full_traj, num_lines))
+                except Exception as e:
+                    backup_file = os.path.join(folder_path, 'xyz.xyz')
+                    if os.path.exists(backup_file):
+                        shutil.copy2(backup_file, final_optim_xyz)
+                        logging.info('Single point data found. Using xyz.xyz as fallback.')
+                    else:
+                        logging.exception(f'An unexpected error occurred while processing optim.xyz: {e}')
+            else:
+                print(f'      > {final_optim_xyz} already exists.')            
 
             # Copying .molden files to final_optim.molden
             final_optim_molden = os.path.join(folder_path, 'final_optim.molden')
-            try:
-                files = glob.iglob(os.path.join(folder_path, "*.molden"))
-                for file in files:
-                    if os.path.abspath(file) != os.path.abspath(final_optim_molden):
-                        shutil.copy2(file, final_optim_molden)
-            except Exception as e:
-                logging.exception('An Exception was thrown while copying molden files.')
-
+            
+            if not os.path.exists(final_optim_molden):
+                try:
+                    files = glob.iglob(os.path.join(folder_path, "*.molden"))
+                    for file in files:
+                        if os.path.abspath(file) != os.path.abspath(final_optim_molden):
+                            shutil.copy2(file, final_optim_molden)
+                except Exception as e:
+                    logging.exception('An Exception was thrown while copying molden files.')
+            else:
+                print(f"      > {final_optim_molden} already exists.")
 
         os.chdir(owd)
 
@@ -526,7 +532,7 @@ class Electrostatics:
         KJ_J = 10**-3
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
-        inv_eps = 1
+        inv_eps = 4
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
         if charge_range[-1] > len(xs):
             charge_range = range(0, len(xs))
@@ -820,7 +826,7 @@ class Electrostatics:
     # dict of calcs, calculations to be performed by multiwavefunction with the corresponding keys
     # newfilanme: desired name of the .csv fiole that will be createcd in getData cotnaining all of the ESP/other data extracted un the file
 
-    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path):
+    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types.
 
@@ -953,11 +959,10 @@ class Electrostatics:
             bool_manual_mode = True
         
         for f in list_of_file:
-            load_multiwfn = multiwfn_module
             atom_idx = metal_idxs[counter] 
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
-            subprocess.call(load_multiwfn, shell=True)
+            subprocess.call(multiwfn_module, shell=True)
 
             # First For this to work, the .molden file should be named: f.molden
             results_dict = {}
@@ -977,9 +982,16 @@ class Electrostatics:
             xyz_file_path = os.path.join(os.getcwd(), final_structure_file)
             print(f"Attempting polarization file path: {path_to_pol}")
 
+            # Check the contents of the polarization file to see if it finished
+            need_to_run_calculation = True
             if os.path.exists(path_to_pol):
-                print(f"   > Polarization file: {f}!!")
-            else:
+                with open(path_to_pol, 'r') as file:
+                    contents = file.read()
+                    if "Calculation took up" in contents:
+                        print(f"   > Polarization file: {f}!!")
+                        need_to_run_calculation = False
+
+            if need_to_run_calculation:
                 print('Starting to run polarization calculation!')
                 # Now Run the calculation for atomic dipole and quadrupole moment
                 print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
@@ -991,7 +1003,7 @@ class Electrostatics:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices,xyz_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices, xyz_file_path, path_to_pol)
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
                     [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol)

@@ -54,6 +54,7 @@ def run(config):
 
     config_data = read_config(config)
     input = config_data.get('input', '')
+    dielectric = config_data.get('dielectric', 1)
     run_ef = config_data.get('ef', False)
     run_esp = config_data.get('esp', False)
     run_geometry_check = config_data.get('esp', False)
@@ -63,19 +64,19 @@ def run(config):
 
     if run_ef:
         """Analyzes electric fields"""
-        click.echo("Importing dependencies...")
+        click.echo("Performing electric field analysis")
 
         jobs, metal_indices, bond_indices = parse_job_batch_file(input)
         job_name = os.path.splitext(input)[0]
-        pyef.run.main(job_name, jobs, metal_indices, bond_indices, run_geometry_check, run_esp, multiwfn_module, multiwfn_path, atmrad_path)
+        pyef.run.main(job_name, jobs, metal_indices, bond_indices, dielectric, run_geometry_check, run_esp, multiwfn_module, multiwfn_path, atmrad_path)
 
     # THE ESP SECTION IS UNDERCONSTRUCTION AND MAY NOT WORK  
     if run_esp:      
         """Analyzes electrostatic potential"""
-        click.echo("Performing electrostatic analysis.")
+        click.echo("Performing electrostatic analysis")
 
         jobs, metal_indices, bond_indices = parse_job_batch_file(input)
-        pyef.run.main(job_name, jobs, metal_indices, bond_indices, run_geometry_check, run_esp, multiwfn_module, multiwfn_path, atmrad_path)
+        pyef.run.main(job_name, jobs, metal_indices, bond_indices, dielectric, run_geometry_check, run_esp, multiwfn_module, multiwfn_path, atmrad_path)
 
 cli.add_command(run)
 
