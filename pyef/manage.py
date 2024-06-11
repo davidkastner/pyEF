@@ -23,7 +23,7 @@ def parse_job_batch_file(file_path):
 
     jobs = []
     metal_indices = []
-    column_pairs = []
+    bond_indices = []
 
     with open(file_path, 'r') as file:
         for line in file:
@@ -45,6 +45,6 @@ def parse_job_batch_file(file_path):
             metal_index = int(columns[1])
             bonded_atom_index = int(columns[2])
             metal_indices.append(metal_index)
-            column_pairs.append((metal_index, bonded_atom_index))
+            bond_indices.append([(metal_index, bonded_atom_index)])
 
-    return jobs, metal_indices, column_pairs
+    return jobs, metal_indices, bond_indices

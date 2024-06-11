@@ -4,7 +4,7 @@ import pyef
 import argparse
 from pyef.analysis import Electrostatics
 
-def main(job_name, jobs, metal_indices, bond_indices, geom_flag, esp_flag, multiwfn_module, multiwfn_path, atmrad_path):
+def main(job_name, jobs, metal_indices, bond_indices, dielectric, geom_flag, esp_flag, multiwfn_module, multiwfn_path, atmrad_path):
     """
     Main function for running the pyEF workflow.
 
@@ -48,7 +48,7 @@ def main(job_name, jobs, metal_indices, bond_indices, geom_flag, esp_flag, multi
 
     if esp_flag:
         # Create CSV with ESP data
-        dataObject.getESPData(lst_charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path)
+        dataObject.getESPData(lst_charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric)
 
     # Method to Compute Efield Projections on bonds connected to the atom specified by index in metal_indices
     dataObject.getEFieldData(job_name, multiwfn_module, multiwfn_path, bond_indices)
