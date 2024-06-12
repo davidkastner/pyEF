@@ -40,7 +40,7 @@ class Electrostatics:
         self.inGaCageBool = inGaCage
         self.dielectric = 1
         self.ptChgs = includePtChgs
-       
+        self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
         self.changeDielectBoundBool = False
         # Dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
@@ -85,6 +85,9 @@ class Electrostatics:
 
     def includePtChgs(self):
         self.ptChgs = True
+
+    def excludeAtomsFromEfieldCalc(self, atom_to_exclude):
+        self.excludeAtomfromEcalc = atom_to_exclude
 
     def minDielecBonds(self, bool_bonds):
         self.changeDielectBoundBool = bool_bonds
@@ -532,7 +535,7 @@ class Electrostatics:
         KJ_J = 10**-3
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
-        inv_eps = 4
+        inv_eps = 1/self.dielectric
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
         if charge_range[-1] > len(xs):
             charge_range = range(0, len(xs))
@@ -579,15 +582,12 @@ class Electrostatics:
            
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
 
-
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
-    def E_proj_bondIndices(self, bond_indices, xyz_filepath, atom_multipole_file):
+    def E_proj_bondIndices(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines):
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
         bonded_positions = []
-        total_lines = Electrostatics.mapcount(xyz_filepath)
-        all_lines = range(0, total_lines - 2)
         # Determine the Efield vector at point of central metal stom
         bond_lens = []
         for atomidxA, atomidxB in bond_indices:
@@ -609,13 +609,11 @@ class Electrostatics:
         return [E_projected, bonded_atoms, bond_indices, bond_lens, E_shaik_proj]
     
     #Calculate Efield projection accounting only for electrostatic effects of directly bound atoms (proxy for inductive effect)
-    def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file):
+    def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file, all_lines):
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
         bonded_positions = []
-        total_lines = Electrostatics.mapcount(xyz_file_path)
-        all_lines = range(0, total_lines - 2)
         # Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Shaik_E_center]  =  self.calc_fullE(metal_idx, all_lines, xyz_file_path, atom_multipole_file)
         lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
@@ -981,6 +979,11 @@ class Electrostatics:
             path_to_pol = os.path.join(os.getcwd(), polarization_file)
             xyz_file_path = os.path.join(os.getcwd(), final_structure_file)
             print(f"Attempting polarization file path: {path_to_pol}")
+            
+            #Pick lines to include, can exclude atom indices from calculation by calling function excludeAtomsFromEfieldCalc
+            total_lines = Electrostatics.mapcount(xyz_file_path)
+            init_all_lines = range(0, total_lines - 2)
+            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
 
             # Check the contents of the polarization file to see if it finished
             need_to_run_calculation = True
@@ -1003,10 +1006,10 @@ class Electrostatics:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices, xyz_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices, xyz_file_path, path_to_pol, all_lines)
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
-                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol)
+                    [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_first_coord(atom_idx,xyz_file_path, path_to_pol, all_lines)
                 
                 results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
                 results_dict['Projected_Efields V/Angstrom'] = proj_Efields
