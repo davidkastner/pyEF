@@ -32,7 +32,7 @@ class Electrostatics:
     hasECP: boolean
         indicates if an effective core potential was used... in this case, molden file will need to be re-formatted to be compatible multiwfn!
     '''
-    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, inGaCage, hasECP=False, includePtChgs=False):
+    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, inGaCage=False, hasECP=False, includePtChgs=False):
         self.lst_of_folders = lst_of_folders
         self.lst_of_tmcm_idx = lst_of_tmcm_idx
         self.folder_to_file_path = folder_to_file_path
@@ -840,7 +840,7 @@ class Electrostatics:
     # dict of calcs, calculations to be performed by multiwavefunction with the corresponding keys
     # newfilanme: desired name of the .csv fiole that will be createcd in getData cotnaining all of the ESP/other data extracted un the file
 
-    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric):
+    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types.
 
@@ -911,7 +911,7 @@ class Electrostatics:
                             # With newly analyzed partial charges, re-compute ESP data
                             [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
                         else:
-                            [ESP_all, atom_type] = self.ESP_all_calcs(full_file_path, atom_idx, self.inGaCageBool)
+                            [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
                         
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
                         [sorted_distances, sorted_esps, cum_esps, sorted_cum_idx, sorted_cum_chg, sorted_atomTypes] = self.esp_bydistance(path_to_xyz, atom_idx, full_file_path)
