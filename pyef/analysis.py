@@ -581,6 +581,54 @@ class Electrostatics:
             #Add contributions to Shaik Efield from point charges 
            
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
+    
+    def ESPfromMultipole(self, xyfilepath, atom_multipole_file, charge_range, idx_atom):
+        df = self.getGeomInfo(xyfilepath)
+        #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
+
+        # Convert each column to list for quicker indexing
+        atoms = df['Atom']
+        xs = df['X']
+        ys = df['Y']
+        zs = df['Z']
+
+        # Determine position and charge of the target atom
+        xo = xs[idx_atom]
+        yo = ys[idx_atom]
+        zo = zs[idx_atom]
+
+         # Unit conversion
+        A_to_m = 10**(-10)
+        KJ_J = 10**-3
+        faraday = 23.06   #kcal/(mol*V)
+        C_e = 1.6023*(10**-19)
+        one_mol = 6.02*(10**23)
+        cal_J = 4.184
+        dielectric = self.dielectric
+        lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
+        #create list of bound atoms, these are treated with a different dielectric
+        bound_atoms = self.getBondedAtoms(xyfilepath, idx_atom)
+        total_esp= 0
+        for idx in charge_range:
+            atom_dict = lst_multipole_dict[idx]
+            if idx == idx_atom:
+                continue
+            elif idx in bound_atoms:
+                #now account for bound atoms
+                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
+                 total_esp = total_esp + (atom_dict["Atom_Charge"]/r)
+            else:
+                # Calculate esp and convert to units (A to m)
+                r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
+                total_esp = total_esp + (1/dielectric)*(atom_dict["Atom_Charge"]/r)
+
+        final_esp = k*total_esp*((C_e))*cal_J*faraday   # Note: cal/kcal * kJ/J gives 1
+        return [final_esp, df['Atom'][idx_atom] ]
+
+
+
+ 
 
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
     def E_proj_bondIndices(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines):
@@ -955,6 +1003,74 @@ class Electrostatics:
         df.to_csv(ESPdata_filename +'.csv')
         return df
     
+    def getESPLargeData(self, ESP_filename, multiwfn_module, multiwfn_path):
+        metal_idxs = self.lst_of_tmcm_idx
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+
+        owd = os.getcwd() # Old working directory
+        allspeciesdict = []
+        counter = 0
+        
+        for f in list_of_file:
+            atom_idx = metal_idxs[counter] 
+            os.chdir(owd)
+            os.chdir(f + folder_to_molden)
+            subprocess.call(multiwfn_module, shell=True)
+
+            # First For this to work, the .molden file should be named: f.molden
+            results_dict = {}
+            results_dict['Name'] = f
+            multiwfn_path = multiwfn_path
+            molden_filename = "final_optim.molden"
+            final_structure_file = "final_optim.xyz"
+            polarization_file = "final_optim_polarization.txt"
+            
+            # Dynamically get path to package settings.ini file
+            with resources.path('pyef.resources', 'settings.ini') as ini_path:
+                path_to_ini_file = str(ini_path)
+                Command_Polarization = f"{multiwfn_path} {molden_filename} -set {path_to_ini_file} > {polarization_file}"
+
+            # Check if the atomic polarizations have been computed
+            path_to_pol = os.path.join(os.getcwd(), polarization_file)
+            xyz_file_path = os.path.join(os.getcwd(), final_structure_file)
+            print(f"Attempting polarization file path: {path_to_pol}")
+            
+            #Pick lines to include, can exclude atom indices from calculation by calling function excludeAtomsFromEfieldCalc
+            total_lines = Electrostatics.mapcount(xyz_file_path)
+            init_all_lines = range(0, total_lines - 2)
+            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
+
+            # Check the contents of the polarization file to see if it finished
+            need_to_run_calculation = True
+            if os.path.exists(path_to_pol):
+                with open(path_to_pol, 'r') as file:
+                    contents = file.read()
+                    if "Calculation took up" in contents:
+                        print(f"   > Polarization file: {f}!!")
+                        need_to_run_calculation = False
+
+            if need_to_run_calculation:
+                print('Starting to run polarization calculation!')
+                # Now Run the calculation for atomic dipole and quadrupole moment
+                print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
+                proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                polarization_commands = ['15', '-1', '3', '2', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                proc.communicate("\n".join(polarization_commands).encode())
+            try:
+                [final_esp, atom_name] = self.ESPfromMultipole(xyz_file_path, path_to_pol, all_lines, atom_idx)
+                results_dict['Total ESP'] = final_esp
+                results_dict['Atom'] = atom_name 
+            except Exception as e:
+                print(repr(e))
+                traceback_str = ''.join(traceback.format_tb(e.__traceback__))
+                print(traceback_str)
+            allspeciesdict.append(results_dict)
+        os.chdir(owd)
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(f"{ESP_filename}.csv")
+
+
 
     # input_bond_indices is a list of a list of tuples
     def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, input_bond_indices=[]):
