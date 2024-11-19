@@ -537,9 +537,10 @@ class Electrostatics:
         one_mol = 6.02*(10**23)
         inv_eps = 1/self.dielectric
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
-        if charge_range[-1] > len(xs):
-            charge_range = range(0, len(xs))
-        for idx in charge_range:
+        lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
+        multipole_chg_range = [i for i in lst_multipole_idxs if i in charge_range]
+        for idx in multipole_chg_range:
+            #If the atom idx is outside of the charge range then skip
             atom_dict = lst_multipole_dict[idx] 
             if idx == idx_atom:
                 continue
@@ -638,6 +639,7 @@ class Electrostatics:
         bonded_positions = []
         # Determine the Efield vector at point of central metal stom
         bond_lens = []
+        print(f'Here are the bond indices: {bond_indices}')
         for atomidxA, atomidxB in bond_indices:
             [A_bonded_E, A_bonded_position, A_bonded_atom, A_Shaik_E_bonded]  =  self.calc_fullE(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
             [B_bonded_E, B_bonded_position, B_bonded_atom, B_Shaik_E_bonded]  =  self.calc_fullE(atomidxB, all_lines, xyz_filepath, atom_multipole_file)  
@@ -1115,8 +1117,9 @@ class Electrostatics:
             #Pick lines to include, can exclude atom indices from calculation by calling function excludeAtomsFromEfieldCalc
             total_lines = Electrostatics.mapcount(xyz_file_path)
             init_all_lines = range(0, total_lines - 2)
+            print(f'Initially I have {len(init_all_lines)}')
             all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
-
+            print(f'At this point in the calculation I have {len(all_lines)} and am exlcuding: {self.excludeAtomfromEcalc}')
             # Check the contents of the polarization file to see if it finished
             need_to_run_calculation = True
             if os.path.exists(path_to_pol):
