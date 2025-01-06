@@ -12,6 +12,8 @@ import scipy.linalg as la
 from collections import deque
 from importlib import resources
 from distutils.dir_util import copy_tree
+import openbabel
+from biopandas.pdb import PandasPdb
 
 class Electrostatics:
     '''
@@ -175,6 +177,64 @@ class Electrostatics:
                 print(f"      > {final_optim_molden} already exists.")
 
         os.chdir(owd)
+
+    def createpdbfromcoords(xyz_coords, charges, atoms, output_filename):
+        obConversion = openbabel.OBConversion()
+        obConversion.SetOutFormat("pdb")
+        mol = openbabel.OBMol()
+        for coords, charge, symbol in zip(xyz_coords, charges, atoms):
+             x, y, z = coords
+
+             # Create a new atom and set its properties
+             atom = mol.NewAtom()
+             atom.SetType(symbol)  # Use the atomic symbol, e.g., 'C' for carbon
+             atom.SetVector(x, y, z)
+             atom.SetPartialCharge(charge)
+
+        # Write the molecule to a PDB file
+        obConversion.WriteFile(mol, output_filename)
+
+    def makePDB(self, xyzfilename, output_filename, type_charge, pdbName):
+        print(f'Final XYZ filename: {xyzfilename}')
+        df = self.getGeomInfo(xyzfilename)
+        #get out the xyz coords, charges, and atoms!
+        #run the outpute_filename
+        obConversion = openbabel.OBConversion()
+
+        if type_charge == 'Monopole':
+            df = pd.read_csv(output_filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+            atoms = df['Atom']
+            charges = df['charge']
+            xs = df['x']
+            ys = df['y']
+            zs = df['z']
+            for idx in range(0, len(charges)):
+                atom = mol.NewAtom()
+                atom.SetType(atoms[idx])
+                atom.SetVector(xs[idx], ys[idx], zs[idx])
+                atom.SetPartialCharge(charges[idx])
+            obConversion.WriteFile(mol, pdbName)
+        elif type_charge == 'Multipole':
+            charge_lst = []
+            lst_multipole_dict = Electrostatics.getmultipoles(output_filename)
+            obConversion.SetInAndOutFormats("xyz", "pdb")
+            mol = openbabel.OBMol()
+            obConversion.ReadFile(mol, xyzfilename)
+
+            if len(lst_multipole_dict) != mol.NumAtoms():
+                print('Unable to generate .pdb with partial charges')
+            else:
+                for idx in range(0, len(lst_multipole_dict)):
+                    atom = mol.GetAtom(idx + 1)
+                    atom_dict = lst_multipole_dict[idx] 
+                    charge = atom_dict["Atom_Charge"]
+                    atom.SetPartialCharge(charge)
+                    charge_lst.append(charge)
+                obConversion.WriteFile(mol, pdbName)
+                ppdb = PandasPdb()
+                ppdb.read_pdb(pdbName)
+                ppdb.df['HETATM']['b_factor'] = charge_lst
+                ppdb.to_pdb(path=pdbName,records=None,gz=False,append_newline=True)
 
     #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
     def getGeomInfo(self, filepathtoxyz):
@@ -1075,7 +1135,7 @@ class Electrostatics:
 
 
     # input_bond_indices is a list of a list of tuples
-    def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, input_bond_indices=[]):
+    def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, input_bond_indices=[], excludeAtoms=[]):
 
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1138,9 +1198,14 @@ class Electrostatics:
                 proc.communicate("\n".join(polarization_commands).encode())
     
             try:
+                pdbName = f + '.pdb'
+                self.makePDB(xyz_file_path, path_to_pol, 'Multipole', pdbName)
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
+                    if len(excludeAtoms) > 1:
+                        to_exclude = excludeAtoms[counter]
+                        self.excludeAtomsFromEfieldCalc(to_exclude)
                     [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices, xyz_file_path, path_to_pol, all_lines)
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
