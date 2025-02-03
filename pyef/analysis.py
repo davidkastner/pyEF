@@ -1137,7 +1137,7 @@ class Electrostatics:
 
 
     # input_bond_indices is a list of a list of tuples
-    def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, input_bond_indices=[], excludeAtoms=[]):
+    def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, atmrad_path, input_bond_indices=[], excludeAtoms=[]):
 
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1194,9 +1194,11 @@ class Electrostatics:
             if need_to_run_calculation:
                 print('Starting to run polarization calculation!')
                 # Now Run the calculation for atomic dipole and quadrupole moment
+                atmrad_src = atmrad_path
+                copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                 print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                polarization_commands = ['15', '-1', '4', '2', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                polarization_commands = ['15', '-1', '4', '1', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
                 proc.communicate("\n".join(polarization_commands).encode())
     
             try:
