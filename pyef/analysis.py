@@ -44,6 +44,9 @@ class Electrostatics:
         self.inGaCageBool = inGaCage
         self.dielectric = 1
         self.ptChgs = includePtChgs
+
+        #defauly setting does not generate PDB files
+        self.makePDB = False
         self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
         self.changeDielectBoundBool = False
@@ -98,6 +101,9 @@ class Electrostatics:
 
     def changeDielectric(self, dlc):
         self.dielectric = dlc
+
+    def makePDB(self):
+        self.makePDB = True
 
     def fix_ECPmolden(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
@@ -1198,12 +1204,13 @@ class Electrostatics:
                 copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                 print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                polarization_commands = ['15', '-1', '4', '1', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                polarization_commands = ['15', '-1', '4', '1', '2','0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
                 proc.communicate("\n".join(polarization_commands).encode())
     
-            try:
+            if self.makePDB:
                 pdbName = f + '.pdb'
                 self.makePDB(xyz_file_path, path_to_pol, 'Multipole', pdbName)
+            try:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
                     file_bond_indices = input_bond_indices[counter]
