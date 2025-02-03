@@ -23,8 +23,16 @@ class IterativeHirshfeld:
         """
         self.mol = gto.Mole()
         self.mol.build(parse_arg=False)
-        molden.load_molecule(self.mol, self.molden_file)
-        self.mo_coeff, self.occ = molden.read_mo(self.molden_file, self.mol)
+        # Read molecular geometry from the .molden file
+        with open(self.molden_file, "r") as f:
+            molden.read(self.mol, f)
+            # Rebuild the molecule after reading from the .molden file
+            self.mol.build()
+
+        # Load molecular orbital coefficients and occupations
+        with open(self.molden_file, 'r') as f:
+            molden_data = molden.read(self.mol, f)
+            self.mo_coeff, self.occ = molden_data
 
     def load_promolecular_densities(self):
         """

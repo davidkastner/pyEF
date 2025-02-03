@@ -14,6 +14,8 @@ from importlib import resources
 from distutils.dir_util import copy_tree
 import openbabel
 from biopandas.pdb import PandasPdb
+from pyef.partialcharges import IterativeHirshfeld 
+
 
 class Electrostatics:
     '''
@@ -1194,7 +1196,7 @@ class Electrostatics:
                 # Now Run the calculation for atomic dipole and quadrupole moment
                 print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                polarization_commands = ['15', '-1', '3', '2', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                polarization_commands = ['15', '-1', '4', '2', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
                 proc.communicate("\n".join(polarization_commands).encode())
     
             try:
@@ -1308,7 +1310,22 @@ class Electrostatics:
         df.to_csv(partial_chg_filename +'.csv')
         return df
 
-
+    def testingHomeAdeCharges(self, atmrad_path):
+        folder_to_molden = self.folder_to_file_path
+        list_of_files = self.lst_of_folders
+        molden_file = 'final_optim.molden'
+        owd = os.getcwd() # Old working directory
+        allspeciesdict = []
+        counter = 0  # Iterator to account for atomic indices of interest
+        for f in list_of_files:
+            print('-----------------' + str(f) + '------------------')
+            counter = counter + 1
+            os.chdir(owd)
+            os.chdir(f + folder_to_molden)
+            ptchg = IterativeHirshfeld(molden_file, atmrad_path) 
+            max_l = 3
+            charges, multipole_moments = ptchg.run(max_l)
+            print(f'Here are the charges!')
 
     def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
         '''
