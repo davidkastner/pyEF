@@ -30,17 +30,17 @@ class Electrostatics:
         list contains integer indices of the metal atom at which ESP will be computed (typically center metal of TMC)
     folder_to_file_path: string
         string that indicates the filepath starting from the folder location (in lst_of_folders) to the .molden file
-    inGaCage: boolean
-        indicates whether files deal with TMCs or TMCsin Ga Cage
     hasECP: boolean
         indicates if an effective core potential was used... in this case, molden file will need to be re-formatted to be compatible multiwfn!
+    includePtChgs: boolean
+        indicates if point charges should be included in ESP calculation
+
     '''
-    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, inGaCage=False, hasECP=False, includePtChgs=False):
+    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, hasECP=False, includePtChgs=False):
         self.lst_of_folders = lst_of_folders
         self.lst_of_tmcm_idx = lst_of_tmcm_idx
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
-        self.inGaCageBool = inGaCage
         self.dielectric = 1
         self.ptChgs = includePtChgs
 
@@ -90,18 +90,29 @@ class Electrostatics:
         self.prepData()
 
     def includePtChgs(self):
+        ''' Function to include point charges in ESP calculation
+        '''
         self.ptChgs = True
 
     def excludeAtomsFromEfieldCalc(self, atom_to_exclude):
+        ''' Function to exclude atoms from Efield calculation
+        '''
         self.excludeAtomfromEcalc = atom_to_exclude
 
     def minDielecBonds(self, bool_bonds):
+        ''' Function to change dielectric of bound atoms to 1
+        '''
         self.changeDielectBoundBool = bool_bonds
 
     def changeDielectric(self, dlc):
+        ''' Function to change dielectric of solvent
+        Input: dlc: float   dielectric constant of solvent
+        '''
         self.dielectric = dlc
 
     def makePDB(self):
+        ''' Function to generate PDB files with partial charges
+        '''
         self.makePDB = True
 
     def fix_ECPmolden(self):
@@ -132,6 +143,7 @@ class Electrostatics:
         os.chdir(owd)
 
     def prepData(self):
+        """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
@@ -186,6 +198,14 @@ class Electrostatics:
         os.chdir(owd)
 
     def createpdbfromcoords(xyz_coords, charges, atoms, output_filename):
+        '''
+        Input: xyz_coords: list of tuples of coordinates
+        charges: list of charges
+        atoms: list of atomic symbols
+        output_filename: string of output filename
+
+        Output: .pdb file with partial charges
+        '''
         obConversion = openbabel.OBConversion()
         obConversion.SetOutFormat("pdb")
         mol = openbabel.OBMol()
@@ -202,6 +222,14 @@ class Electrostatics:
         obConversion.WriteFile(mol, output_filename)
 
     def makePDB(self, xyzfilename, output_filename, type_charge, pdbName):
+        ''' Function to generate PDB files with partial charges
+        Input: xyzfilename: string of xyz filename
+        output_filename: string of output filename
+        type_charge: string of type of charge (Monopole or Multipole)
+        pdbName: string of output pdb filename
+        
+        Outp ut: .pdb file with partial charges
+        '''
         print(f'Final XYZ filename: {xyzfilename}')
         df = self.getGeomInfo(xyzfilename)
         #get out the xyz coords, charges, and atoms!
@@ -245,6 +273,11 @@ class Electrostatics:
 
     #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
     def getGeomInfo(self, filepathtoxyz):
+        '''
+        Input: 
+        filepathtoxyz: string of xyz filename
+        Output: dataframe with atomic symbols and coordinates
+        '''
         data = []
         counter_idx = 0
         with open(filepathtoxyz, 'r') as file:
@@ -271,6 +304,13 @@ class Electrostatics:
 
     # Accepts an atom and will determine indices of atoms bound, based on implementation in molsimp
     def getBondedAtoms(self, filepathtoxyz, atomidx):
+        '''
+        Input:
+        filepathtoxyz: string of xyz filename
+        atomidx: integer of atom index
+        Output: list of integers of bonded atom indices
+
+        ''' 
         bonded_atom_indices = []
         df_mol = self.getGeomInfo(filepathtoxyz)
         atm_rad = df_mol['Radius'][atomidx]
@@ -289,6 +329,10 @@ class Electrostatics:
 
 
     def getmultipoles(multipole_name):
+        '''
+        Input: multipole_name: string of multipole filename
+        Output: list of dictionaries of multipole moments
+        '''
         # Read the text file
         with open(multipole_name, 'r') as file:
             text = file.read()
@@ -340,6 +384,10 @@ class Electrostatics:
         return atomicDicts
     #Function will process a point charge file (as generated by amber) and return a dataframe with partial charges and coordinates for use in ESP calculation
     def getPtChgs(self, filename_pt):
+        '''
+        Input: filename_pt: string of point charge filename
+        Output: dataframe with partial charges and coordinates
+        '''
         chg_df = pd.read_table(filename_pt, skiprows=2, delim_whitespace=True, names=['charge', 'x', 'y', 'z'])
         atm_name = ['pnt']
         atoms = atm_name*len(chg_df['charge'])
@@ -348,7 +396,10 @@ class Electrostatics:
 
     # Define the functions to calculate the ESP:
     def mapcount(filename):
-        """Function to rapidly count the number of lines in a file"""
+        """Function to rapidly count the number of lines in a file
+        Input: filename: string of filename
+        Output: integer of number of lines in file
+        """
 
         f = open(filename, "r+")
         buf = mmap.mmap(f.fileno(), 0)
@@ -363,6 +414,11 @@ class Electrostatics:
     def calcesp(self, path_to_xyz, espatom_idx, charge_range, charge_file):
         """
         Calculate the esp
+        Input: path_to_xyz: string of xyz filename
+        espatom_idx: integer of atom index
+        charge_range: list of integers of atom indices
+        charge_file: string of charge filename
+        Output: list of ESP and atomic symbol
 
         Notes
         -----
@@ -435,6 +491,13 @@ class Electrostatics:
 
 
     def calc_firstTermE(espatom_idx, charge_range, charge_file):
+        '''
+        Input: espatom_idx: integer of atom index
+        charge_range: list of integers of atom indices
+        charge_file: string of charge filename
+        Output: list of E-field vector and atomic symbol
+        '''
+
         # E in units of V/(ansgrom) = N*m/(C*Angstrom)
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
@@ -479,6 +542,14 @@ class Electrostatics:
         return [E_vec, position_vec, df['Atom'][idx_atom]]
 
     def calc_fullE(self, idx_atom, charge_range, xyz_file, atom_multipole_file):
+        '''
+        
+        Input: idx_atom: integer of atom index
+        charge_range: list of integers of atom indices
+        xyz_file: string of xyz filename
+        atom_multipole_file: string of multipole filename
+        Output: list of E-field vector and atomic symbol
+        '''
 
         df = self.getGeomInfo(xyz_file)
         #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
@@ -569,6 +640,14 @@ class Electrostatics:
         return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
     
     def ESPfromMultipole(self, xyfilepath, atom_multipole_file, charge_range, idx_atom):
+        '''
+
+        Input: idx_atom: integer of atom index
+        charge_range: list of integers of atom indices
+        xyfilepath: string of xyz filename
+        atom_multipole_file: string of multipole filename
+        Output: list of ESP and atomic symbol
+        '''
         df = self.getGeomInfo(xyfilepath)
         #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
@@ -615,6 +694,13 @@ class Electrostatics:
 
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
     def E_proj_bondIndices(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines):
+        '''
+        Input: bond_indices: list of tuples of atom indices
+        xyz_filepath: string of xyz filename
+        atom_multipole_file: string of multipole filename
+        all_lines: list of strings of lines in xyz file
+        Output: list of E-field vector and atomic symbol
+        '''
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
@@ -642,6 +728,13 @@ class Electrostatics:
     
     #Calculate Efield projection accounting only for electrostatic effects of directly bound atoms (proxy for inductive effect)
     def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file, all_lines):
+        '''
+        Input: metal_idx: integer of atom index
+        xyz_file_path: string of xyz filename
+        atom_multipole_file: string of multipole filename
+        all_lines: list of strings of lines in xyz file
+        Output: list of E-field vector and atomic symbol
+        '''
         bonded_atoms = []
         E_projected = []
         E_shaik_proj = []
@@ -670,12 +763,25 @@ class Electrostatics:
             
     #Calc ESP accounting only for electrostatic contributions for atoms bound to ESP center
     def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
+        '''
+        Input: metal_idx: integer of atom index
+        charge_file: string of charge filename
+        path_to_xyz: string of xyz filename
+        Output: list of ESP and atomic symbol
+        '''
+
         print('The index of the metal atom is: ' + str(metal_idx))
         lst_bonded_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
         [First_coord_ESP, atom_type] = self.calcesp(path_to_xyz, metal_idx, lst_bonded_atoms, charge_file)
         return First_coord_ESP
     #Calc ESP accounting for first and second coordinating spheres of atom the ESP center atom
     def esp_second_coord(self, metal_idx, charge_file, path_to_xyz):
+        '''
+        Input: metal_idx: integer of atom index
+            charge_file: string of charge filename
+            path_to_xyz: string of xyz filename
+        Output: list of ESP and atomic symbol
+            '''
         lst_first_and_second = []
         lst_first_coor_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
         lst_first_and_second.extend(lst_first_coor_atoms)
@@ -689,6 +795,10 @@ class Electrostatics:
 
     # Boolean CageTrue
     def charge_atom(filename, atom_idx):
+        '''
+        Input: filename: string of charge filename
+        atom_idx: integer of atom index
+        Output: list of total charge and partial charge of atom'''
         df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         atoms = df['Atom']
         charges = df['charge']
@@ -700,6 +810,10 @@ class Electrostatics:
         return [total_charge, partial_charge_atom]
 
     def getAtomInfo(filename, atom_idx):
+        '''
+        Input: filename: string of charge filename
+        atom_idx: integer of atom index
+        Output: list of total charge and partial charge of atom'''
         df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         atoms = df['Atom']
         charges = df['charge']
@@ -713,6 +827,9 @@ class Electrostatics:
 
 
     def getAtomsInfo(filename, atom_indices):
+        ''' Input: filename: string of charge filename
+        atom_indices: list of integers of atom indices
+        Output: list of total charge and partial charge of atom'''
         df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         atoms = df['Atom']
         charges = df['charge']
@@ -728,6 +845,12 @@ class Electrostatics:
 
 
     def ESP_all_calcs(self, path_to_xyz, filename, atom_idx, cageTrue):
+        '''
+        Input: path_to_xyz: string of xyz filename
+        filename: string of charge filename
+        atom_idx: integer of atom index
+        cageTrue: boolean
+        Output: list of ESP and atomic symbol'''
         # Get the number of lines in the txt file
         dlc = self.dielectric
         total_lines =Electrostatics.mapcount(filename)
@@ -750,6 +873,12 @@ class Electrostatics:
 
 
     def esp_bydistance(self, path_to_xyz, espatom_idx,  charge_file):
+        '''
+        Input: path_to_xyz: string of xyz filename
+        espatom_idx: integer of atom index
+        charge_file: string of charge filename
+        Output: list of ESP and atomic symbol
+        '''
         dielectric = self.dielectric
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
@@ -845,14 +974,26 @@ class Electrostatics:
     def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types.
-
-        Attributes
-        ----------
+        Inputs:
+        ------- 
         charge_types: list of strings
         ESPdata_filename: string
             Name of the output file name
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        multiwfn_path: string
+            Path to the multiwfn executable
+        atmrad_path: string
+            Path to the atmrad executable
+        dielectric: float
+            Dielectric constant of the solvent
+    
+        Outputs:
+        -------
+        ESPdata_filename: string
+            Name of the output file name    '''
 
-        '''
+        self.dielectric = dielectric
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -958,6 +1099,24 @@ class Electrostatics:
         return df
     
     def getESPLargeData(self, ESP_filename, multiwfn_module, multiwfn_path):
+        '''
+        Function computes a series of ESP data using the charge scheme specified in charge types.
+        Inputs:
+        -------
+        ESP_filename: string
+            Name of the output file name
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        multiwfn_path: string
+            Path to the multiwfn executable
+
+        Outputs:
+        -------
+        ESP_filename: string
+            Name of the output file name
+
+            '''
+
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
@@ -1028,7 +1187,23 @@ class Electrostatics:
 
     # input_bond_indices is a list of a list of tuples
     def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, atmrad_path, input_bond_indices=[], excludeAtoms=[]):
-
+        '''
+        Function computes a series of ESP data using the charge scheme specified in charge types.
+        Inputs:
+        -------
+        Efield_data_filename: string
+            Name of the output file name
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        multiwfn_path: string
+            Path to the multiwfn executable   
+            
+        Outputs:    
+        -------        
+        Efield_data_filename: string
+             Name of the output file name
+        '''
+        
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
@@ -1134,14 +1309,25 @@ class Electrostatics:
         '''
         Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
         
-        Attributes
-        ----------
+    Inputs:
+        --
         charge_types: list(str)
             list of strings
         lst_of_atom_idxs: list(int)
             list of integers denoting atom indices (0 indexed!)
         partial_chg_filename: string
-            Name of the output file name
+            Name of the output file name    
+        multiwfn_path: string
+            Path to the multiwfn executable
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        atmrad_path: string
+            Path to the atmrad executable
+        
+       Outputs:
+        --
+        df: Pandas Dataframe with partial charge info
+        
         
         Notes
         -----
@@ -1207,18 +1393,27 @@ class Electrostatics:
         return df
 
     def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
-        '''
-        Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
+        '''Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
 
-        Attributes
-        ----------
+        Inputs:
+        -------
         charge_types: list(str)
             list of strings
-        res_dict: dictionary with strings mapped to list(int)
+        res_dict: dictionary with strings mapped to list(int)   
             strings denote name of residues which are mapped to the associated atom indices in the lists(0 indexed!)
         partial_chg_filename: string
             Name of the output file name
+        multiwfn_path: string
+            Path to the multiwfn executable
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        atmrad_path: string
+            Path to the atmrad executable
 
+         Outputs:
+        -------
+        df: Pandas Dataframe with partial charge info
+        
         Notes
         -----
         Will Create a csv file entitled partial_chg_filename.csv with partial charge info
