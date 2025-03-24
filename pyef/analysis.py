@@ -14,7 +14,6 @@ from importlib import resources
 from distutils.dir_util import copy_tree
 import openbabel
 from biopandas.pdb import PandasPdb
-from pyef.partialcharges import IterativeHirshfeld 
 
 
 class Electrostatics:
@@ -286,15 +285,6 @@ class Electrostatics:
                 bonded_atom_indices.append(dist_idx)
         bonded_atom_indices.remove(atomidx)
         
-        # Checks to ensure same bonded atoms as those obtained in molsimplify version
-        # from molSimplify.Classes.mol3D import *
-        # print('Bonded atoms by this method: ')
-        # print(bonded_atom_indices)
-        # print('Bonded Atoms via Molsimplify')
-        # molsimp_obj = mol3D()
-        # molsimp_obj.readfromxyz(filepathtoxyz)
-        # lst_bonded_atoms = molsimp_obj.getBondedAtoms(atomidx)
-        # print(lst_bonded_atoms)
         return bonded_atom_indices
 
 
@@ -368,89 +358,6 @@ class Electrostatics:
         while readline():
             lines += 1
         return lines
-
-
-    def calcdist(espatom_idx, charge_file):
-        df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
-
-        # Convert each column to list for quicker indexing
-        atoms = df['Atom']
-        charges = df['charge']
-        xs = df['x']
-        ys = df['y']
-        zs = df['z']
-
-        # Pick the index of the atom at which the esp should be calculated
-        idx_atom = espatom_idx
-
-        # Determine position and charge of the target atom
-        xo = xs[idx_atom]
-        yo = ys[idx_atom]
-        zo = zs[idx_atom]
-        chargeo = charges[idx_atom]
-        total_esp = 0
-
-        # Distance to gallium atoms
-        Ga_idxs = [276, 277, 278, 279]
-        Ga_self_dist = np.zeros([4,4])
-        distances_vertices = []
-        counter = 0
-
-        for ga_idx in Ga_idxs:
-            Gax = xs[ga_idx]
-            Gay = ys[ga_idx]
-            Gaz = zs[ga_idx]
-            r = (((Gax - xo))**2 + ((Gay - yo))**2 + ((Gaz - zo))**2)**(0.5)
-            distances_vertices.append(r)
-
-            for new_counter in range(0, 3):
-                if new_counter == counter:
-                    continue
-                else:
-                    newGa_idx = counter + 276
-                    GatoGadist  = (((Gax - xs[newGa_idx]))**2 + ((Gay - ys[newGa_idx]))**2 + ((Gaz - zs[newGa_idx]))**2)**(0.5)
-                    Ga_self_dist[counter, new_counter] = GatoGadist
-            counter = counter + 1
-            
-        return [distances_vertices, Ga_self_dist]
-
-    def calcNearestCageAtom(espatom_idx, charge_file):
-        df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
-
-        # Convert each column to list for quicker indexing
-        atoms = df['Atom']
-        charges = df['charge']
-        xs = df['x']
-        ys = df['y']
-        zs = df['z']
-
-        # Pick the index of the atom at which the esp should be calculated
-        idx_atom = espatom_idx
-
-        # Determine position and charge of the target atom
-        xo = xs[idx_atom]
-        yo = ys[idx_atom]
-        zo = zs[idx_atom]
-        chargeo = charges[idx_atom]
-        total_esp = 0
-
-        # Distance to cage atoms
-        cage_idxs = list(np.arange(0, 280))
-        distances_toCage = []
-        counter = 0
-
-        for cage_idx in cage_idxs:
-            Cax = xs[cage_idx]
-            Cay = ys[cage_idx]
-            Caz = zs[cage_idx]
-            r = (((Cax - xo))**2 + ((Cay - yo))**2 + ((Caz - zo))**2)**(0.5)
-            distances_toCage.append(r)
-        array_dists = np.array(distances_toCage)
-        NearestCageAtom = np.min(array_dists)
-
-        return [NearestCageAtom]
 
 
     def calcesp(self, path_to_xyz, espatom_idx, charge_range, charge_file):
@@ -603,9 +510,17 @@ class Electrostatics:
         KJ_J = 10**-3
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
+
+
         inv_eps = 1/self.dielectric
+
+        #load multipole moments from processed outputs 
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
+
+        #make a list for each term in multipole expansion
         lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
+
+        #This ensure that atoms we would like to exclude from Efield calculation are excluded from every term in the multipole expansion
         multipole_chg_range = [i for i in lst_multipole_idxs if i in charge_range]
         for idx in multipole_chg_range:
             #If the atom idx is outside of the charge range then skip
@@ -615,6 +530,8 @@ class Electrostatics:
             else:
                 # Units of dipole_vec: 
                 dipole_vec = atom_dict["Dipole_Moment"]
+
+                #convention of vector pointing towards atom of interest, so positive charges exert positive Efield
                 dist_vec = np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
                 dist_arr = np.outer(dist_vec, dist_vec)
                 quadrupole_arr = atom_dict['Quadrupole_Moment']
@@ -694,9 +611,6 @@ class Electrostatics:
 
         final_esp = k*total_esp*((C_e))*cal_J*faraday   # Note: cal/kcal * kJ/J gives 1
         return [final_esp, df['Atom'][idx_atom] ]
-
-
-
  
 
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
@@ -922,36 +836,6 @@ class Electrostatics:
         #final_sorted_idx = np.delete(init_sorted_idx, init_sorted_idx[idx_atom])
         return [sorted_dist, sorted_esps, cumulative_esps, sorted_idx, sorted_partial_charges, sorted_atomTypes]
   
-    # Function that can be called on a class object to compute key error analysis metrics for a transition metal complex
-    def errorAnalysis(self, csvName):
-        #import functionalities only for use in this function
-        from pyef.geometry import ErrorAnalysis
-        import molSimplify.Classes.mol3D
-        metal_idxs = self.lst_of_tmcm_idx
-        folder_to_molden = self.folder_to_file_path
-        list_of_file = self.lst_of_folders
-        owd = os.getcwd() # old working directory
-        allspeciesdict = []
-        counter = 0
-        for f in list_of_file:
-            print(f)
-            atom_idx = metal_idxs[counter]
-            counter = counter + 1
-            molsimp_obj = mol3D()
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            results_dir = os.getcwd() + '/'
-            try:
-                [results_dict, final_mol] = pyef.geometry.ErrorAnalysis.optim_rmsd_file(results_dir,atom_idx, False,[], self.inGaCageBool)
-                molsimp_obj.copymol3D(final_mol)
-            except Exception as e:
-                results_dict = {}
-            results_dict['Name'] = f
-            allspeciesdict.append(results_dict)
-        os.chdir(owd)
-        df = pd.DataFrame(allspeciesdict)
-        df.to_csv(csvName + '.csv')
-        return df
 
     # list_of_folders = the list of the folders that contain the desired files
     # new_dir: the [post-folder path to the scr folder that contains the .molden and optim.xyz file themselfs
@@ -1159,6 +1043,7 @@ class Electrostatics:
             bool_manual_mode = True
         
         for f in list_of_file:
+            print(f'--------------file {f}---------------------------')
             atom_idx = metal_idxs[counter] 
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
@@ -1213,10 +1098,12 @@ class Electrostatics:
             try:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
+                    print(f' IN BOOL MANUAL MODE')
                     file_bond_indices = input_bond_indices[counter]
-                    if len(excludeAtoms) > 1:
+                    if len(excludeAtoms) > 0:
                         to_exclude = excludeAtoms[counter]
                         self.excludeAtomsFromEfieldCalc(to_exclude)
+                        print(f'Ecluding atoms:m {to_exclude}')
                     [proj_Efields, bondedAs, bonded_idx, bond_lens, shaik_proj] = self.E_proj_bondIndices(file_bond_indices, xyz_file_path, path_to_pol, all_lines)
                 # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
                 else:
@@ -1318,23 +1205,6 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(partial_chg_filename +'.csv')
         return df
-
-    def testingHomeAdeCharges(self, atmrad_path):
-        folder_to_molden = self.folder_to_file_path
-        list_of_files = self.lst_of_folders
-        molden_file = 'final_optim.molden'
-        owd = os.getcwd() # Old working directory
-        allspeciesdict = []
-        counter = 0  # Iterator to account for atomic indices of interest
-        for f in list_of_files:
-            print('-----------------' + str(f) + '------------------')
-            counter = counter + 1
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            ptchg = IterativeHirshfeld(molden_file, atmrad_path) 
-            max_l = 3
-            charges, multipole_moments = ptchg.run(max_l)
-            print(f'Here are the charges!')
 
     def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
         '''
