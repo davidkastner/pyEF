@@ -43,6 +43,7 @@ class Electrostatics:
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.dielectric = 1
         self.ptChgs = includePtChgs
+        self.ptChgfp = ''
 
         #defauly setting does not generate PDB files
         self.makePDB = False
@@ -89,18 +90,22 @@ class Electrostatics:
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
 
-    def includePtChgs(self):
+    def includePtChgs(self, name_ptch_file):
         ''' Function to include point charges in ESP calculation
+        Input: name_ptch_file: string of point charge filename
         '''
+        self.ptChgfp = name_ptch_file
         self.ptChgs = True
 
     def excludeAtomsFromEfieldCalc(self, atom_to_exclude):
         ''' Function to exclude atoms from Efield calculation
+        Input: atom_to_exclude: list of integers of atom indices
         '''
         self.excludeAtomfromEcalc = atom_to_exclude
 
     def minDielecBonds(self, bool_bonds):
         ''' Function to change dielectric of bound atoms to 1
+        Input: bool_bonds: boolean to change dielectric of bound atoms to 1
         '''
         self.changeDielectBoundBool = bool_bonds
 
@@ -227,8 +232,7 @@ class Electrostatics:
         output_filename: string of output filename
         type_charge: string of type of charge (Monopole or Multipole)
         pdbName: string of output pdb filename
-        
-        Outp ut: .pdb file with partial charges
+        Output: .pdb file with partial charges
         '''
         print(f'Final XYZ filename: {xyzfilename}')
         df = self.getGeomInfo(xyzfilename)
@@ -458,15 +462,12 @@ class Electrostatics:
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
-        chargeo = charges[idx_atom]
         total_esp = 0
 
         # Unit conversion
         A_to_m = 10**(-10)
-        KJ_J = 10**-3
         faraday = 23.06   #kcal/(mol*V)
         C_e = 1.6023*(10**-19)
-        one_mol = 6.02*(10**23)
         cal_J = 4.184
 
         bound_atoms = []
@@ -503,7 +504,6 @@ class Electrostatics:
         k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
 
         # Convert each column to list for quicker indexing
-        atoms = df['Atom']
         charges = df['charge']
         xs = df['x']
         ys = df['y']
@@ -516,7 +516,6 @@ class Electrostatics:
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
-        chargeo = charges[idx_atom]
         position_vec = [xo, yo, zo]
         Ex = 0
         Ey = 0
@@ -524,9 +523,7 @@ class Electrostatics:
 
         # Unit conversion
         A_to_m = 10**(-10)
-        KJ_J = 10**-3
         C_e = 1.6023*(10**-19)
-        one_mol = 6.02*(10**23)
         
         for idx in charge_range:
             if idx == idx_atom:
@@ -556,7 +553,6 @@ class Electrostatics:
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
 
         # Convert each column to list for quicker indexing
-        atoms = df['Atom']
         xs = df['X']
         ys = df['Y']
         zs = df['Z']
@@ -571,16 +567,14 @@ class Electrostatics:
         Ez = 0
         
         # Following derivation of -field strenght from TITAN and TUPÃ
-        Shaik_E = np.array([0, 0, 0])
+        Monopole_E = np.array([0, 0, 0])
 
         # Unit conversion
         A_to_m = 10**(-10)
         # Bohr to meters (atomic units)
         b_to_m = 5.291772109*(10**-11)
         b_to_A = 0.529177
-        KJ_J = 10**-3
         C_e = 1.6023*(10**-19)
-        one_mol = 6.02*(10**23)
 
 
         inv_eps = 1/self.dielectric
@@ -609,7 +603,7 @@ class Electrostatics:
                 
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Shaik_E = Shaik_E + A_to_m*inv_eps*k*C_e*(-atom_dict["Atom_Charge"]*(1/(r**2))*dist_vec/la.norm(dist_vec))
+                Monopole_E = Monopole_E + A_to_m*inv_eps*k*C_e*(-atom_dict["Atom_Charge"]*(1/(r**2))*dist_vec/la.norm(dist_vec))
                 Ex_quad = inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(A_to_m**6)*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
                 Ey_quad = inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
                 Ez_quad = inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
@@ -619,9 +613,9 @@ class Electrostatics:
                 Ez = Ez + inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
         E_vec = [Ex, Ey, Ez]
 
-        #For QMMM calculation, include point charges in Shaik E field calc
+        #For QMMM calculation, include point charges in E field calc
         if self.ptChgs:
-            ptchg_filename = 'ptchrg.xyz'
+            ptchg_filename = self.ptChgfp 
             init_file_path = xyz_file[0:-len('scr/final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
@@ -634,10 +628,14 @@ class Electrostatics:
             for chg_idx in charge_range:
                 r = (((MM_xs[chg_idx] - xo)*A_to_m)**2 + ((MM_ys[chg_idx] - yo)*A_to_m)**2 + ((MM_zs[chg_idx] - zo)*A_to_m)**2)**(0.5)
                 dist_vec = np.array([(MM_xs[chg_idx] - xo), (MM_ys[chg_idx] - yo), (MM_zs[chg_idx] - zo)])
-                Shaik_E = Shaik_E +  A_to_m*inv_eps*k*C_e*(-MM_charges[chg_idx]*(1/(r**2))*dist_vec/la.norm(dist_vec))
-            #Add contributions to Shaik Efield from point charges 
+                E_to_add = A_to_m*inv_eps*k*C_e*(-MM_charges[chg_idx]*(1/(r**2))*dist_vec/la.norm(dist_vec))
+                Monopole_E = Monopole_E +  E_to_add
+                E_vec[0] = E_to_add[0]
+                E_vec[1] = E_to_add[1]
+                E_vec[2] = E_to_add[2]
+            #Add contributions to Monopole E from point charges to total E
            
-        return [E_vec, position_vec, df['Atom'][idx_atom], Shaik_E]
+        return [E_vec, position_vec, df['Atom'][idx_atom], Monopole_E ]
     
     def ESPfromMultipole(self, xyfilepath, atom_multipole_file, charge_range, idx_atom):
         '''
@@ -703,14 +701,14 @@ class Electrostatics:
         '''
         bonded_atoms = []
         E_projected = []
-        E_shaik_proj = []
+        E_monopole_proj = []
         bonded_positions = []
         # Determine the Efield vector at point of central metal stom
         bond_lens = []
         print(f'Here are the bond indices: {bond_indices}')
         for atomidxA, atomidxB in bond_indices:
-            [A_bonded_E, A_bonded_position, A_bonded_atom, A_Shaik_E_bonded]  =  self.calc_fullE(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
-            [B_bonded_E, B_bonded_position, B_bonded_atom, B_Shaik_E_bonded]  =  self.calc_fullE(atomidxB, all_lines, xyz_filepath, atom_multipole_file)  
+            [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded]  =  self.calc_fullE(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
+            [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded]  =  self.calc_fullE(atomidxB, all_lines, xyz_filepath, atom_multipole_file)  
             bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
             bond_len = np.linalg.norm(bond_vec_unnorm)
             bond_vec = bond_vec_unnorm/(bond_len)
@@ -718,17 +716,17 @@ class Electrostatics:
             # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
             # Compute E-field projected along this bond!
             E_proj = (1/2)*np.dot((np.array(A_bonded_E) + np.array(B_bonded_E)), bond_vec)
-            E_proj_Shaik = (1/2)*np.dot((A_Shaik_E_bonded + B_Shaik_E_bonded), bond_vec)
+            E_proj_monopole = (1/2)*np.dot((A_monopole_E_bonded + B_monopole_E_bonded), bond_vec)
             E_projected.append(E_proj)
-            E_shaik_proj.append(E_proj_Shaik)
+            E_monopole_proj.append(E_proj_monopole)
             bonded_atoms.append((A_bonded_atom, B_bonded_atom))
             bonded_positions.append((A_bonded_position, B_bonded_position))
             bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, bond_indices, bond_lens, E_shaik_proj]
+        return [E_projected, bonded_atoms, bond_indices, bond_lens, E_monopole_proj]
     
-    #Calculate Efield projection accounting only for electrostatic effects of directly bound atoms (proxy for inductive effect)
+
     def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file, all_lines):
-        '''
+        '''Function to calculate Efield projection accounting only for electrostatic effects of directly bound atoms 
         Input: metal_idx: integer of atom index
         xyz_file_path: string of xyz filename
         atom_multipole_file: string of multipole filename
@@ -737,7 +735,7 @@ class Electrostatics:
         '''
         bonded_atoms = []
         E_projected = []
-        E_shaik_proj = []
+        E_monopole_proj = []
         bonded_positions = []
         # Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Shaik_E_center]  =  self.calc_fullE(metal_idx, all_lines, xyz_file_path, atom_multipole_file)
@@ -745,7 +743,7 @@ class Electrostatics:
         
         bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
-            [bonded_E, bonded_position, bonded_atom, Shaik_E_bonded]  =  self.calc_fullE(bonded_atom_idx, all_lines, xyz_file_path, atom_multipole_file)    
+            [bonded_E, bonded_position, bonded_atom, monopole_E_bonded]  =  self.calc_fullE(bonded_atom_idx, all_lines, xyz_file_path, atom_multipole_file)    
             bond_vec_unnorm = np.subtract(np.array(center_position), np.array(bonded_position)) 
             bond_len = np.linalg.norm(bond_vec_unnorm)
             bond_vec = bond_vec_unnorm/(bond_len)
@@ -753,17 +751,17 @@ class Electrostatics:
             # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
             # Compute E-field projected along this bond!
             E_proj = (1/2)*np.dot((np.array(bonded_E) + np.array(center_E)), bond_vec)
-            E_proj_Shaik = (1/2)*np.dot((Shaik_E_center + Shaik_E_bonded), bond_vec)
+            E_proj_monopole= (1/2)*np.dot((Shaik_E_center + monopole_E_bonded), bond_vec)
             E_projected.append(E_proj)
-            E_shaik_proj.append(E_proj_Shaik)
+            E_monopole_proj.append(E_proj_monopole)
             bonded_atoms.append(bonded_atom)
             bonded_positions.append(bonded_position)
             bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens, E_shaik_proj]
+        return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens, E_monopole_proj]
             
-    #Calc ESP accounting only for electrostatic contributions for atoms bound to ESP center
+
     def esp_first_coord(self, metal_idx, charge_file, path_to_xyz):
-        '''
+        ''' Calculate ESP accounting for electrostatic contributions for atoms bound to ESP center
         Input: metal_idx: integer of atom index
         charge_file: string of charge filename
         path_to_xyz: string of xyz filename
@@ -774,9 +772,9 @@ class Electrostatics:
         lst_bonded_atoms = self.getBondedAtoms(path_to_xyz, metal_idx)
         [First_coord_ESP, atom_type] = self.calcesp(path_to_xyz, metal_idx, lst_bonded_atoms, charge_file)
         return First_coord_ESP
-    #Calc ESP accounting for first and second coordinating spheres of atom the ESP center atom
+    
     def esp_second_coord(self, metal_idx, charge_file, path_to_xyz):
-        '''
+        '''A Function to calculate ESP including contributions only from first and second coordination spheres
         Input: metal_idx: integer of atom index
             charge_file: string of charge filename
             path_to_xyz: string of xyz filename
@@ -793,9 +791,8 @@ class Electrostatics:
         [second_coord_ESP, atom_type] = self.calcesp(path_to_xyz, metal_idx, final_lst, charge_file)
         return second_coord_ESP
 
-    # Boolean CageTrue
     def charge_atom(filename, atom_idx):
-        '''
+        '''Compute charges and return total charge and partial charge of atom
         Input: filename: string of charge filename
         atom_idx: integer of atom index
         Output: list of total charge and partial charge of atom'''
@@ -909,7 +906,7 @@ class Electrostatics:
 
         #For QMMM calculation, include point charges in ESP calculation 
         if self.ptChgs:
-            ptchg_filename = 'ptchrg.xyz'
+            ptchg_filename = self.ptChgfp
             init_file_path = path_to_xyz[0:-len('scr/final_optim.xyz')]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
@@ -961,8 +958,6 @@ class Electrostatics:
         sorted_partial_charges = chg_arr.take(init_sorted_idx)
         sorted_atomTypes = [atm_lst[i] for i in init_sorted_idx]
        
-        new_bool_still = idx_atom in sorted_idx
-        #final_sorted_idx = np.delete(init_sorted_idx, init_sorted_idx[idx_atom])
         return [sorted_dist, sorted_esps, cumulative_esps, sorted_idx, sorted_partial_charges, sorted_atomTypes]
   
 
@@ -1024,11 +1019,7 @@ class Electrostatics:
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
                     try: 
-                        if self.inGaCageBool:
-                            # With newly analyzed partial charges, re-compute ESP data
-                            [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
-                        else:
-                            [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
+                        [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx)
 
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
                         [sorted_distances, sorted_esps, cum_esps, sorted_cum_idx, sorted_cum_chg, sorted_atomTypes] = self.esp_bydistance(path_to_xyz, atom_idx, full_file_path)
@@ -1049,12 +1040,8 @@ class Electrostatics:
                         output = proc.communicate("\n".join(commands).encode())
                         new_name = 'final_optim_' +key+'.txt'
                         os.rename('final_optim.chg', new_name)
-                        
-                        if self.inGaCageBool:                        
-                            # With newly analyzed partial charges, re-compute ESP data
-                            [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
-                        else:
-                            [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
+             
+                        [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
                         
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
                         [sorted_distances, sorted_esps, cum_esps, sorted_cum_idx, sorted_cum_chg, sorted_atomTypes] = self.esp_bydistance(path_to_xyz, atom_idx, full_file_path)
@@ -1064,11 +1051,6 @@ class Electrostatics:
                     # At this point, all calculations shouldbe complete and succesfull: Add ESP data to dictionary
                     results_dict[str(key) + ' ESP Second Coor Shell (kcal/mol)'] = ESP_scoord
                     results_dict[str(key) + ' ESP First Coor Shell (kcal/mol)'] = ESP_fcoord
-                    if self.inGaCageBool:
-                        results_dict['ESP_ligand '+ str(key)] = ESP_just_ligand
-                        results_dict['ESP_just_cage ' +str(key)] = ESP_just_cage
-                    else:
-                        pass
                     results_dict['Atoms'] = atom_type
                     results_dict['Total Charge'] = total_charge
                     results_dict['Partial Charge '+str(key)] = partial_charge_atom
@@ -1080,15 +1062,6 @@ class Electrostatics:
                     results_dict['Dist Sorted Partial Charges' + str(key)] = sorted_cum_chg
                     results_dict['Dist Sorted Atom Types' + str(key)] = sorted_atomTypes
 
-                    # If .molden files deal with encapsulated TMCS, complete an additional set of analyses
-                    if self.inGaCageBool:
-                        [distoGa, Ga_selfdist]=Electrostatics.calcdist(atom_idx, full_file_path)
-                        [cageAtomdist]=Electrostatics.calcNearestCageAtom(atom_idx, full_file_path)
-                        results_dict['MetaltoGa_dist'] = distoGa
-                        results_dict['GatoGa_dist'] = Ga_selfdist
-                        results_dict['NearestCageAtom'] = cageAtomdist
-                    else:
-                        continue
                 except Exception as e:
                     logging.exception('An Exception was thrown')
                     continue
@@ -1273,7 +1246,6 @@ class Electrostatics:
             try:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
-                    print(f' IN BOOL MANUAL MODE')
                     file_bond_indices = input_bond_indices[counter]
                     if len(excludeAtoms) > 0:
                         to_exclude = excludeAtoms[counter]
