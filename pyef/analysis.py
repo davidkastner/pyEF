@@ -41,6 +41,7 @@ class Electrostatics:
         self.lst_of_tmcm_idx = lst_of_tmcm_idx
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
+        self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],  'Becke': ['1', '2'] }
         self.dielectric = 1
         self.ptChgs = includePtChgs
         self.ptChgfp = ''
@@ -446,10 +447,7 @@ class Electrostatics:
 
         #For QMMM calculation, include point charges in ESP calculation
         if self.ptChgs:
-            ptchg_filename = 'ptchrg.xyz'
-            init_file_path = path_to_xyz[0:-len('scr/final_optim.xyz')]
-            full_ptchg_fp = init_file_path + ptchg_filename
-            df_ptchg = self.getPtChgs(full_ptchg_fp)
+            df_ptchg  = self.ptchgdf
             xs = xs + list(df_ptchg['x'])
             ys = ys + list(df_ptchg['y'])
             zs = zs + list(df_ptchg['z'])
@@ -736,11 +734,9 @@ class Electrostatics:
         E_projected = []
         E_monopole_proj = []
         bonded_positions = []
-        print(f'In line 742: all lines is : {len(all_lines)}')
         # Determine the Efield vector at point of central metal stom
         [center_E, center_position, center_atom, Monopole_E_center]  =  self.calc_fullE(metal_idx, all_lines, xyz_file_path, atom_multipole_file)
         lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
-        print(f'Line 745: Center E: {center_E} and Monopole_E_center: {Monopole_E_center}')
         bond_lens = []
         for bonded_atom_idx in lst_bonded_atoms:
             [bonded_E, bonded_position, bonded_atom, monopole_E_bonded]  =  self.calc_fullE(bonded_atom_idx, all_lines, xyz_file_path, atom_multipole_file)    
@@ -840,6 +836,8 @@ class Electrostatics:
         return [res_charge]
 
 
+
+#IS THIS FUNCTION NEEDED?!!
     def ESP_all_calcs(self, path_to_xyz, filename, atom_idx, cageTrue):
         '''
         Input: path_to_xyz: string of xyz filename
@@ -960,17 +958,17 @@ class Electrostatics:
         return [sorted_dist, sorted_esps, cumulative_esps, sorted_idx, sorted_partial_charges, sorted_atomTypes]
   
 
-    # list_of_folders = the list of the folders that contain the desired files
-    # new_dir: the [post-folder path to the scr folder that contains the .molden and optim.xyz file themselfs
-    # dict of calcs, calculations to be performed by multiwavefunction with the corresponding keys
-    # newfilanme: desired name of the .csv fiole that will be createcd in getData cotnaining all of the ESP/other data extracted un the file
+        # list_of_folders = the list of the folders that contain the desired files
+        # new_dir: the [post-folder path to the scr folder that contains the .molden and optim.xyz file themselfs
+        # dict of calcs, calculations to be performed by multiwavefunction with the corresponding keys
+        # newfilanme: desired name of the .csv fiole that will be createcd in getData cotnaining all of the ESP/other data extracted un the file
 
-    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
+    def getESPDecay(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types.
         Inputs:
         ------- 
-        charge_types: list of strings
+        charge_types: list of strings, possible choices include: 'Hirshfeld', 'Voronoi', 'Mulliken',  'Lowdin', 'SCPA', 'Becke', 'ADCH', 'CHELPG', 'MK', 'AIM', 'Hirshfeld_I', 'CM5', 'EEM', 'RESP', 'PEOE'}
         ESPdata_filename: string
             Name of the output file name
         multiwfn_module: string
@@ -1069,8 +1067,98 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(ESPdata_filename +'.csv')
         return df
+
+    def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
+        '''
+        Function computes a series of ESP data using the charge scheme specified in charge types.
+        Inputs:
+        ------- 
+        charge_types: list of strings, possible choices include: 'Hirshfeld', 'Voronoi', 'Mulliken',  'Lowdin', 'SCPA', 'Becke', 'ADCH', 'CHELPG', 'MK', 'AIM', 'Hirshfeld_I', 'CM5', 'EEM', 'RESP', 'PEOE'}
+        ESPdata_filename: string
+            Name of the output file name
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        multiwfn_path: string
+            Path to the multiwfn executable
+        atmrad_path: string
+            Path to the atmrad executable
+        dielectric: float
+            Dielectric constant of the solvent
     
-    def getESPLargeData(self, ESP_filename, multiwfn_module, multiwfn_path):
+        Outputs:
+        -------
+        ESPdata_filename: string
+            Name of the output file name    '''
+
+        self.dielectric = dielectric
+       # Access Class Variables
+        metal_idxs = self.lst_of_tmcm_idx
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+
+        owd = os.getcwd() # Old working directory
+        allspeciesdict = []
+        counter = 0  # Iterator to account for atomic indices of interest
+        for f in list_of_file:
+            print('-----------------' + str(f) + '------------------')
+            atom_idx = metal_idxs[counter]
+            counter = counter + 1
+            os.chdir(owd)
+            os.chdir(f + folder_to_molden)
+            subprocess.call(multiwfn_module, shell=True)
+            command_A = f"{multiwfn_path} final_optim.molden"
+            results_dir = os.getcwd() + '/'
+            
+            results_dict = {}
+            results_dict['Name'] = f
+
+            for key in charge_types:
+                print('Partial Charge Scheme:' + str(key))
+                try:
+                    full_file_path = f"{os.getcwd()}/final_optim_{key}.txt"
+                    path_to_xyz = f"{os.getcwd()}/final_optim.xyz"
+                    if key == "Hirshfeld_I":
+                        atmrad_src = atmrad_path
+                        copy_tree(atmrad_src, results_dir + 'atmrad/')
+                    try: 
+                        [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx)
+                        [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
+                    
+                    except Exception as e:
+                        print('The Exception is: ' + str(e))
+                        print(traceback.format_exc())
+                        print('Error when trying to access electrostatic information: Attempting to re-compute partial charges of type: ' + str(key))
+
+                        # Re-run multiwfn computation of partial charge 
+                        proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                        calc_command = self.dict_of_calcs[key]
+                        commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                        if key == 'CHELPG':
+                            commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
+                        output = proc.communicate("\n".join(commands).encode())
+                        new_name = 'final_optim_' +key+'.txt'
+                        os.rename('final_optim.chg', new_name)
+             
+                        [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx)
+                        [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
+
+
+                    results_dict['Atoms'] = atom_type
+                    results_dict['Total Charge'] = total_charge
+                    results_dict['Partial Charge '+str(key)] = partial_charge_atom
+                    results_dict['ESP '+ str(key)] = ESP_all
+
+
+                except Exception as e:
+                    logging.exception('An Exception was thrown')
+                    continue
+            allspeciesdict.append(results_dict)
+        os.chdir(owd)
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(ESPdata_filename +'.csv')
+        return df
+    
+    def getESPMultipole(self, ESP_filename, multiwfn_module, multiwfn_path, polarization_scheme='Hirshfeld_I'):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types.
         Inputs:
@@ -1081,6 +1169,8 @@ class Electrostatics:
             Name of the module that contains the multiwfn executable
         multiwfn_path: string
             Path to the multiwfn executable
+        polarization_scheme: string
+            The scheme to use for polarization, default is 'Hirshfeld_I'. Other options can be 'Hirshfeld', 'Becke'
 
         Outputs:
         -------
@@ -1109,7 +1199,7 @@ class Electrostatics:
             multiwfn_path = multiwfn_path
             molden_filename = "final_optim.molden"
             final_structure_file = "final_optim.xyz"
-            polarization_file = "final_optim_polarization.txt"
+            polarization_file = "final_optim_multipole" + polarization_scheme + ".txt"
             
             # Dynamically get path to package settings.ini file
             with resources.path('pyef.resources', 'settings.ini') as ini_path:
@@ -1118,6 +1208,7 @@ class Electrostatics:
 
             # Check if the atomic polarizations have been computed
             path_to_pol = os.path.join(os.getcwd(), polarization_file)
+            backup_path_to_pol = os.path.join(os.getcwd(), "final_optim_polarization.txt")
             xyz_file_path = os.path.join(os.getcwd(), final_structure_file)
             print(f"Attempting polarization file path: {path_to_pol}")
             
@@ -1140,7 +1231,7 @@ class Electrostatics:
                 # Now Run the calculation for atomic dipole and quadrupole moment
                 print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                polarization_commands = ['15', '-1', '3', '2', '0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                polarization_commands = ['15', '-1'] + self.dict_of_multipole[polarization_scheme] + ['0', 'q']
                 proc.communicate("\n".join(polarization_commands).encode())
             try:
                 [final_esp, atom_name] = self.ESPfromMultipole(xyz_file_path, path_to_pol, all_lines, atom_idx)
@@ -1158,7 +1249,7 @@ class Electrostatics:
 
 
     # input_bond_indices is a list of a list of tuples
-    def getEFieldData(self, Efield_data_filename, multiwfn_module, multiwfn_path, atmrad_path, input_bond_indices=[], excludeAtoms=[]):
+    def getEFieldMultipole(self, Efield_data_filename, multiwfn_module, multiwfn_path, atmrad_path, input_bond_indices=[], excludeAtoms=[], polarization_scheme='Hirshfeld_I'):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types.
         Inputs:
@@ -1169,14 +1260,14 @@ class Electrostatics:
             Name of the module that contains the multiwfn executable
         multiwfn_path: string
             Path to the multiwfn executable   
+        polarization_scheme: string
+            The scheme to use for polarization, default is 'Hirshfeld_I'. Other options can be 'Hirshfeld', 'MBIS', 'Becke'
             
         Outputs:    
         -------        
         Efield_data_filename: string
              Name of the output file name
         '''
-        
-        print(f'Exluding atoms on line 1179: {excludeAtoms} ')
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
@@ -1203,7 +1294,7 @@ class Electrostatics:
             multiwfn_path = multiwfn_path
             molden_filename = "final_optim.molden"
             final_structure_file = "final_optim.xyz"
-            polarization_file = "final_optim_polarization.txt"
+            polarization_file = "Multipole" + polarization_scheme + ".txt"
             
             # Dynamically get path to package settings.ini file
             with resources.path('pyef.resources', 'settings.ini') as ini_path:
@@ -1212,6 +1303,8 @@ class Electrostatics:
 
             # Check if the atomic polarizations have been computed
             path_to_pol = os.path.join(os.getcwd(), polarization_file)
+            backup_path_to_pol = os.path.join(os.getcwd(), "final_optim_polarization.txt")
+
             xyz_file_path = os.path.join(os.getcwd(), final_structure_file)
             print(f"Looking for atomic multipole calculations here: {path_to_pol}")
            
@@ -1241,6 +1334,13 @@ class Electrostatics:
                     if "Calculation took up" in contents:
                         print(f"   > Atomic Multipoles already calculated here: {f}!!")
                         need_to_run_calculation = False
+            elif os.path.exists(backup_path_to_pol):
+                path_to_pol = backup_path_to_pol
+                with open(path_to_pol, 'r') as file:
+                    contents = file.read()
+                    if "Calculation took up" in contents:
+                        print(f"   > Atomic Multipoles already calculated here: {f}!!")
+                        need_to_run_calculation = False
 
             if need_to_run_calculation:
                 print('Atomic Multipole Calculation initialized')
@@ -1249,7 +1349,7 @@ class Electrostatics:
                 copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                 print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                 proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                polarization_commands = ['15', '-1', '4', '1', '2','0', 'q'] # For atomic dipole and quadrupole moment of Hirshfeld-I type
+                polarization_commands = ['15', '-1'] + self.dict_of_multipole[polarization_scheme] + ['0', 'q']
                 proc.communicate("\n".join(polarization_commands).encode())
     
             if self.makePDB:
@@ -1359,6 +1459,7 @@ class Electrostatics:
                         new_name = 'final_optim_' +key+'.txt'
                         os.rename('final_optim.chg', new_name)
 
+
                         for atom_idx in lst_atom_idxs:
                             [atom_type, partial_charge_atom] = Electrostatics.getAtomInfo(full_file_path, atom_idx)
                             results_dict[f'{key} Charge {atom_idx} {atom_type}'] = partial_charge_atom
@@ -1372,14 +1473,14 @@ class Electrostatics:
         df.to_csv(partial_chg_filename +'.csv')
         return df
 
-    def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
+    def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path, multipole_mode=True, polarization_scheme='Hirshfeld_I'):
         '''Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
 
         Inputs:
         -------
         charge_types: list(str)
             list of strings
-        res_dict: dictionary with strings mapped to list(int)   
+        res_dict: dictionary with strings mapped to list of lists(int)   
             strings denote name of residues which are mapped to the associated atom indices in the lists(0 indexed!)
         partial_chg_filename: string
             Name of the output file name
@@ -1389,6 +1490,8 @@ class Electrostatics:
             Name of the module that contains the multiwfn executable
         atmrad_path: string
             Path to the atmrad executable
+        multipole_mode: boolean
+            If True, will use multipole mode to compute partial charges, if False will use the standard method
 
          Outputs:
         -------
@@ -1405,59 +1508,119 @@ class Electrostatics:
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
         counter = 0  # Iterator to account for atomic indices of interest
-        for f in list_of_file:
-            print('-----------------' + str(f) + '------------------')
-            counter = counter + 1
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} final_optim.molden"
-            results_dir = os.getcwd() + '/'
 
-            results_dict = {}
-            results_dict['Name'] = f
+        if multipole_mode:
+            final_structure_file = "final_optim.xyz"
+            polarization_file = "Multipole" + polarization_scheme + ".txt"
+            molden_filename = "final_optim.molden"
 
-            for key in charge_types:
-                print('Partial Charge Scheme:' + str(key))
-                try:
-                    full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
-                    path_to_xyz = os.getcwd() + '/final_optim.xyz'
-                    if key == "Hirshfeld_I":
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, results_dir + 'atmrad/')
+            file_idx = 0
+            for f in list_of_file:
+                print('-----------------' + str(f) + '------------------')
+                counter = counter + 1
+                os.chdir(owd)
+                os.chdir(f + folder_to_molden)
+                results_dir = os.getcwd() + '/'
+                # Check if the atomic polarizations have been computed
+                path_to_pol = os.path.join(os.getcwd(), polarization_file)
+                backup_path_to_pol = os.path.join(os.getcwd(), "final_optim_polarization.txt")
+                #Initially we assume that we do need to run the calculation
+                need_to_run_calculation = True
+                if os.path.exists(path_to_pol):
+                    with open(path_to_pol, 'r') as file:
+                        contents = file.read()
+                        if "Calculation took up" in contents:
+                            print(f"   > Atomic Multipoles already calculated here: {f}!!")
+                            need_to_run_calculation = False
+                elif os.path.exists(backup_path_to_pol):    
+                    path_to_pol = backup_path_to_pol
+                    with open(path_to_pol, 'r') as file:
+                        contents = file.read()
+                        if "Calculation took up" in contents:
+                            print(f"   > Atomic Multipoles already calculated here: {f}!!")
+                            need_to_run_calculation = False
+                if need_to_run_calculation:
+                    # Dynamically get path to package settings.ini file
+                    with resources.path('pyef.resources', 'settings.ini') as ini_path:
+                        path_to_ini_file = str(ini_path)
+                        Command_Polarization = f"{multiwfn_path} {molden_filename} -set {path_to_ini_file} > {polarization_file}"
+                    subprocess.call(multiwfn_module, shell=True)
+                    command_A = f"{multiwfn_path} final_optim.molden"
+                    print('Atomic Multipole Calculation initialized')
+                    # Now Run the calculation for atomic dipole and quadrupole moment
+                    atmrad_src = atmrad_path
+                    copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+                    print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
+                    proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                    polarization_commands = ['15', '-1'] + self.dict_of_multipole[polarization_scheme] + ['0', 'q']
+                    proc.communicate("\n".join(polarization_commands).encode())
+              
+
+
+                results_dict = {}
+                results_dict['Name'] = f
+
+
+                lst_multipole_dict = Electrostatics.getmultipoles(path_to_pol)
+                for res_name in res_dict.keys():
+                   all_res_idxs = res_dict[res_name]
+                   res_idxs = all_res_idxs[file_idx]
+                   res_chg = 0
+                   for idx in res_idxs:
+                       atom_dict = lst_multipole_dict[idx]
+                       chg = atom_dict["Atom_Charge"]
+                       res_chg += chg
+                   results_dict[f'{res_name}_{polarization_scheme}_Charge'] = res_chg
+                   print(f'Current charge is: {res_chg}')
+                file_idx += 1
+                allspeciesdict.append(results_dict)
+         
+        else:
+            for f in list_of_file:
+                print('-----------------' + str(f) + '------------------')
+                counter = counter + 1
+                os.chdir(owd)
+                os.chdir(f + folder_to_molden)
+                #working in key mode!
+                for key in charge_types:
                     try:
-                        for res_name in res_dict.keys():
-                            res_indices = res_dict[res_name]
-                            [res_charge] = Electrostatics.getAtomsInfo(full_file_path, res_indices)
-                            results_dict[f'{res_name} Charge'] = res_charge
+                        full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
+                        if key == "Hirshfeld_I":
+                            atmrad_src = atmrad_path
+                            copy_tree(atmrad_src, results_dir + 'atmrad/')
+                        try:
+                            for res_name in res_dict.keys():
+                                res_indices = res_dict[res_name]
+                                [res_charge] = Electrostatics.getAtomsInfo(full_file_path, res_indices)
+                                results_dict[f'{res_name} Charge'] = res_charge
 
+                        except Exception as e:
+                            print('The Exception is: ' + str(e))
+                            print(traceback.format_exc())
+                            print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
+
+                            # Re-run multiwfn computation of partial charge
+                            proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                            calc_command = self.dict_of_calcs[key]
+                            commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                            if key == 'CHELPG':
+                                commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
+                            output = proc.communicate("\n".join(commands).encode())
+                            new_name = 'final_optim_' +key+'.txt'
+                            os.rename('final_optim.chg', new_name)
+
+
+                            for res_name in res_dict.keys():
+                                all_res_idxs = res_dict[res_name]
+                                res_indices= all_res_idxs[file_idx]
+                                [res_charge] = Electrostatics.getAtomsInfo(full_file_path, res_indices)
+                                results_dict[f'{res_name}_{key}_Charge'] = res_charge
+                                file_idx += 1
                     except Exception as e:
-                        print('The Exception is: ' + str(e))
-                        print(traceback.format_exc())
-                        print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
-
-                        # Re-run multiwfn computation of partial charge
-                        proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                        calc_command = self.dict_of_calcs[key]
-                        commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
-                        if key == 'CHELPG':
-                            commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
-                        output = proc.communicate("\n".join(commands).encode())
-                        new_name = 'final_optim_' +key+'.txt'
-                        os.rename('final_optim.chg', new_name)
-
-
-                        for res_name in res_dict.keys():
-                            res_indices = res_dict[res_name]
-                            [res_charge] = Electrostatics.getAtomsInfo(full_file_path, res_indices)
-                            results_dict[f'{res_name} Charge'] = res_charge
-
-                except Exception as e:
-                    logging.exception('An Exception was thrown')
-                    continue
-            allspeciesdict.append(results_dict)
+                        logging.exception('An Exception was thrown')
+                        continue 
+                allspeciesdict.append(results_dict)
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(partial_chg_filename +'.csv')
         return df
-
