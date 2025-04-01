@@ -48,10 +48,10 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric, geom_flag, esp
 
     if esp_flag:
         # Create CSV with ESP data
-        dataObject.getESPData(lst_charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric)
+        dataObject.getESPMultipole(lst_charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric)
 
     # Method to Compute Efield Projections on bonds connected to the atom specified by index in metal_indices
-    dataObject.getEFieldData(job_name, multiwfn_module, multiwfn_path, bond_indices)
+    dataObject.getEFieldMultipole(job_name, multiwfn_module, multiwfn_path, bond_indices)
 
 def read_file_lines(file_path):
     """Reads in auxiliary files containing job information"""
