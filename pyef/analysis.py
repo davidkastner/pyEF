@@ -41,13 +41,13 @@ class Electrostatics:
         self.lst_of_tmcm_idx = lst_of_tmcm_idx
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
-        self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],  'Becke': ['1', '2'] }
+        self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],   'Becke': ['1', '2'] }
         self.dielectric = 1
         self.ptChgs = includePtChgs
         self.ptChgfp = ''
         self.ptchgdf = None
         #default setting does not generate PDB files
-        self.makePDB = False
+        self.makePDBbool = False
         self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
         self.changeDielectBoundBool = False
@@ -56,6 +56,18 @@ class Electrostatics:
         # Dictionary from molsimplify, https://molsimplify.readthedocs.io/en/latest/_modules/molSimplify/Classes/globalvars.html
         # Some covalent radii updated with 2008 updated values from webelements.com accessed 1/18/24 
         #Note that full capitalization also included since some software write ou .xyz with all caps
+        self.periodic_table = {"H": 1, "He": 2,
+            "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8, "F": 9, "Ne": 10,
+            "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15, "S": 16, "Cl": 17, "Ar": 18,
+            "K": 19, "Ca": 20, "Sc": 21, "Ti": 22, "V": 23, "Cr": 24, "Mn": 25, "Fe": 26, "Co": 27, "Ni": 28, "Cu": 29, "Zn": 30,
+            "Ga": 31, "Ge": 32, "As": 33, "Se": 34, "Br": 35, "Kr": 36,
+            "Rb": 37, "Sr": 38, "Y": 39, "Zr": 40, "Nb": 41, "Mo": 42, "Tc": 43, "Ru": 44, "Rh": 45, "Pd": 46, "Ag": 47, "Cd": 48,
+            "In": 49, "Sn": 50, "Sb": 51, "Te": 52, "I": 53, "Xe": 54,
+            "Cs": 55, "Ba": 56, "La": 57, "Ce": 58, "Pr": 59, "Nd": 60, "Pm": 61, "Sm": 62, "Eu": 63, "Gd": 64, "Tb": 65, "Dy": 66, "Ho": 67, "Er": 68, "Tm": 69, "Yb": 70, "Lu": 71,
+            "Hf": 72, "Ta": 73, "W": 74, "Re": 75, "Os": 76, "Ir": 77, "Pt": 78, "Au": 79, "Hg": 80,
+            "Tl": 81, "Pb": 82, "Bi": 83, "Po": 84, "At": 85, "Rn": 86,
+            "Fr": 87, "Ra": 88, "Ac": 89, "Th": 90, "Pa": 91, "U": 92, "Np": 93, "Pu": 94, "Am": 95, "Cm": 96, "Bk": 97, "Cf": 98, "Es": 99, "Fm": 100, "Md": 101, "No": 102, "Lr": 103,
+            "Rf": 104, "Db": 105, "Sg": 106, "Bh": 107, "Hs": 108, "Mt": 109, "Ds": 110, "Rg": 111, "Cn": 112, "Nh": 113, "Fl": 114, "Mc": 115, "Lv": 116, "Ts": 117, "Og": 118}
         self.amassdict = {'X': (1.0, 0, 0.77, 0), 'H': (1.0079, 1, 0.37, 1),
              'D': (2.0141, 1, 0.37, 1), 'He': (4.002602, 2, 0.46, 2),
              'Li': (6.94, 3, 1.33, 1), 'Be': (9.0121831, 4, 1.02, 2), 'B': (10.83, 5, 0.85, 3),
@@ -112,16 +124,21 @@ class Electrostatics:
         '''
         self.changeDielectBoundBool = bool_bonds
 
+    def runlowmemory(self):
+        ''' Run the lower memory, longer time simulations. Useful when using Hirshfeld-I for simulations with more than 300 atoms
+        '''
+        self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '-2', '1', '2'],   'Becke': ['1', '2'] }
+
     def changeDielectric(self, dlc):
         ''' Function to change dielectric of solvent
         Input: dlc: float   dielectric constant of solvent
         '''
         self.dielectric = dlc
 
-    def makePDB(self):
+    def makePDBbool(self):
         ''' Function to generate PDB files with partial charges
         '''
-        self.makePDB = True
+        self.makePDBbool = True
 
     def fix_ECPmolden(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
@@ -242,7 +259,8 @@ class Electrostatics:
         #get out the xyz coords, charges, and atoms!
         #run the outpute_filename
         obConversion = openbabel.OBConversion()
-
+        obConversion.SetOutFormat("pdb")
+        mol = openbabel.OBMol()
         if type_charge == 'Monopole':
             df = pd.read_csv(output_filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
             atoms = df['Atom']
@@ -256,6 +274,59 @@ class Electrostatics:
                 atom.SetVector(xs[idx], ys[idx], zs[idx])
                 atom.SetPartialCharge(charges[idx])
             obConversion.WriteFile(mol, pdbName)
+        elif type_charge == 'ChargeFile':
+            # Read the file and strip whitespace
+            mol = openbabel.OBMol()
+            obConversion.ReadFile(mol, xyzfilename)
+            mol.ConnectTheDots()
+            mol.PerceiveBondOrders()
+            mol.FindRingAtomsAndBonds
+
+            with open(output_filename) as f:
+                charges = [float(line.strip()) for line in f]
+            #atom_names = df['Atom']
+            #print(f'Here are the atom names: {atom_names}')
+            #xs = df['X']
+            #ys = df['Y']
+            #zs = df['Z']
+            #for idx in range(0, len(charges)):
+            #    print(f'Index is: {idx}')
+            #    #Use the output from the getGeomInfo to carry out the following:
+            #    atom = mol.NewAtom()
+            #    atom_num = self.periodic_table[atom_names[idx]]
+            #    atom.SetAtomicNum(atom_num)
+            #    atom.SetVector(xs[idx], ys[idx], zs[idx])
+            #    atom.SetPartialCharge(charges[idx])
+            #    #atom.GetResidue().SetAtomID(atom, atom_names[idx])
+
+
+            #print("Unique atom symbols in input:", set(atom_names))
+            obConversion.WriteFile(mol, pdbName)
+            #print(f"Added {mol.NumAtoms()} atoms to OBMol")
+            #print(f"Number of charges: {len(charges)}")
+            ppdb = PandasPdb()
+            ppdb.read_pdb(pdbName)
+            #df_all = pd.concat([
+            #    ppdb.df.get('ATOM', pd.DataFrame()),
+            #    ppdb.df.get('HETATM', pd.DataFrame())
+            #], ignore_index=True)
+
+            # Check consistency
+            #if len(charges) != len(df_all):
+            #    raise ValueError(f"Length mismatch: {len(charges)} charges vs {len(df_all)} atoms")
+
+            # Assign charges to b_factor column
+            #df_all['b_factor'] = charges
+            #atom_mask = df_all['record_name'] == 'ATOM'
+            #hetatm_mask = df_all['record_name'] == 'HETATM'
+            #ppdb.df['ATOM'] = df_all[atom_mask].copy()
+            #ppdb.df['HETATM'] = df_all[hetatm_mask].copy()
+            #ppdb.to_pdb(path=pdbName,records=['ATOM','HETATM'],gz=False,append_newline=True)
+            #print(ppdb.df.columns)
+            #print(f"PDB has {len(ppdb.df['HETATM'])} HETATM entries")
+            ppdb.df['HETATM']['b_factor'] = charges
+            ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
+
         elif type_charge == 'Multipole':
             charge_lst = []
             lst_multipole_dict = Electrostatics.getmultipoles(output_filename)
@@ -1384,6 +1455,10 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(f"{Efield_data_filename}.csv")
 
+
+
+    def image_partial_chgs(self, xyz_file_path, path_to_charge, pdb_name):
+        self.makePDB(xyz_file_path, path_to_charge, 'ChargeFile', pdb_name)
 
     def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
         '''
