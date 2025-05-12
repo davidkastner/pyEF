@@ -9,12 +9,14 @@ import subprocess
 import numpy as np
 import pandas as pd
 import scipy.linalg as la
+from scipy.optimize import LinearConstraint
+from scipy.optimize import minimize
 from collections import deque
 from importlib import resources
 from distutils.dir_util import copy_tree
 import openbabel
 from biopandas.pdb import PandasPdb
-
+import math
 
 class Electrostatics:
     '''
@@ -42,6 +44,7 @@ class Electrostatics:
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],   'Becke': ['1', '2'] }
+        self.dielectric_scale = 1
         self.dielectric = 1
         self.ptChgs = includePtChgs
         self.ptChgfp = ''
@@ -111,7 +114,8 @@ class Electrostatics:
         self.ptChgfp = name_ptch_file
         self.ptChgs = True
         print(f'Point charges to be included via {name_ptch_file}')
-
+    def set_dielec_scale(self, dielec):
+        self.dielectric_scale = dielec
     def excludeAtomsFromEfieldCalc(self, atom_to_exclude):
         ''' Function to exclude atoms from Efield calculation
         Input: atom_to_exclude: list of integers of atom indices
@@ -609,6 +613,70 @@ class Electrostatics:
         E_vec = [Ex, Ey, Ez]
         return [E_vec, position_vec, df['Atom'][idx_atom]]
 
+    #Helper functions for resp-based adjustement of MD point charges
+
+    def compute_esp(q_coords, q_vals, probe_coords):
+        """
+        Compute ESP at probe_coords due to point charges at q_coords.
+        """
+        diff = probe_coords[:, np.newaxis, :] - q_coords[np.newaxis, :, :] 
+        dists = np.linalg.norm(diff, axis=2)  # shape: (P, Q)
+        mask = dists > 1e-8 
+        # Avoid division by zero by masking
+        inv_dists = np.zeros_like(dists)
+        inv_dists[mask] = 1.0 / dists[mask]
+        
+        esp = np.dot(inv_dists, q_vals) 
+        return esp
+    def compute_esp_from_qm(qm_coords, qm_charges, mm_coords):
+        '''
+        Compute the ESP at MM atoms due to QM charges.
+        '''
+        return Electrostatics.compute_esp(qm_coords, qm_charges, mm_coords)
+
+    def update_mm_charges_based_on_esp(esp, mm_charges, alpha=0.01):
+        '''
+        Update the MM charges based on the ESP
+        '''
+        delta_q = alpha * esp  # Simple linear response
+        updated_mm_charges = mm_charges + delta_q
+        return updated_mm_charges
+
+    def update_mm_charges_drude(esp, mm_charges, polarization, beta=0.01):
+        delta_p = beta * esp  # Induced dipole change
+        polarization += delta_p
+        updated_mm_charges = mm_charges + polarization
+        return updated_mm_charges, polarization
+
+
+    def resp_correction_objective(delta_q, mm_coords, q_mm_orig, qm_coords, esp_target, restraint=0.1):
+        """
+        Objective function: least-squares ESP error + restraint term.
+        """
+        q_new = q_mm_orig + delta_q
+        print(f'delta q: {delta_q}')
+        esp_fit = Electrostatics.compute_esp(mm_coords, q_new, qm_coords)
+        esp_err = np.sum((esp_fit - esp_target) ** 2)
+        penalty = restraint * np.sum(q_mm_orig ** 2)
+        restraint_term = restraint * np.sum(delta_q ** 2)
+        return esp_err + restraint_term
+
+    def correct_mm_charges( qm_coords, qm_charges, mm_coords, mm_charges):
+        """
+        Apply minimal correction to existing MM charges to match QM ESP.
+        """
+
+        #esp_target = Electrostatics.compute_esp(qm_coords, qm_charges, mm_coords)
+        #delta_q0 = np.zeros_like(q_mm_orig)
+
+        esp_from_QM = Electrostatics.compute_esp_from_qm(qm_coords, qm_charges, mm_coords)
+        alpha = 1/2.97
+        new_chgs = Electrostatics.update_mm_charges_based_on_esp(esp_from_QM, mm_charges, alpha)
+
+        return list(new_chgs)
+
+
+
     def calc_fullE(self, idx_atom, charge_range, xyz_file, atom_multipole_file):
         '''
         
@@ -659,6 +727,9 @@ class Electrostatics:
         #make a list for each term in multipole expansion
         lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
 
+       
+        QM_charges = [lst_multipole_dict[idx]["Atom_Charge"] for idx in range(0, len(xs))]
+        QM_coords = np.column_stack((np.array(xs), np.array(ys), np.array(zs)))
         #This ensure that atoms we would like to exclude from Efield calculation are excluded from every term in the multipole expansion
         multipole_chg_range = [i for i in lst_multipole_idxs if i in charge_range]
         for idx in multipole_chg_range:
@@ -669,7 +740,6 @@ class Electrostatics:
             else:
                 # Units of dipole_vec: 
                 dipole_vec = atom_dict["Dipole_Moment"]
-
                 #convention of vector pointing towards atom of interest, so positive charges exert positive Efield
                 dist_vec = np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
                 dist_arr = np.outer(dist_vec, dist_vec)
@@ -693,7 +763,16 @@ class Electrostatics:
             MM_xs = list(df_ptchg['x'])
             MM_ys = list(df_ptchg['y'])
             MM_zs = list(df_ptchg['z'])
-            MM_charges = list(df_ptchg['charge'])
+            init_MM_charges = list(df_ptchg['charge'])
+ 
+            #make new MM_charges by scaling!
+            mm_coords = np.column_stack((np.array(MM_xs), np.array(MM_ys), np.array(MM_zs)))
+            mm_charges = np.array(init_MM_charges)
+            qm_charges = np.array(QM_charges)
+            print(f'Size of mm_coords: {np.shape(mm_coords)} and qm coords: {np.shape(QM_coords)}; mm charges: {np.shape(mm_charges)} and qm_charges: {np.shape(qm_charges)}')
+            MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
+
+            MM_charges = mm_charges*(1/(math.sqrt(self.dielectric_scale)))
             #change charge range to include these new partial charges!
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
@@ -1405,7 +1484,7 @@ class Electrostatics:
                     if "Calculation took up" in contents:
                         print(f"   > Atomic Multipoles already calculated here: {f}!!")
                         need_to_run_calculation = False
-            elif os.path.exists(backup_path_to_pol):
+            elif polarization_scheme == 'Hirshfeld_I' and os.path.exists(backup_path_to_pol):
                 path_to_pol = backup_path_to_pol
                 with open(path_to_pol, 'r') as file:
                     contents = file.read()
@@ -1423,9 +1502,9 @@ class Electrostatics:
                 polarization_commands = ['15', '-1'] + self.dict_of_multipole[polarization_scheme] + ['0', 'q']
                 proc.communicate("\n".join(polarization_commands).encode())
     
-            if self.makePDB:
-                pdbName = f + '.pdb'
-                self.makePDB(xyz_file_path, path_to_pol, 'Multipole', pdbName)
+            #if self.makePDB:
+            #    pdbName = f + '.pdb'
+            #    self.makePDB(xyz_file_path, path_to_pol, 'Multipole', pdbName)
             try:
                 # If bond_indices is longer then one, default to manually entry mode
                 if bool_manual_mode:
