@@ -495,7 +495,7 @@ class Electrostatics:
 
     def calcesp(self, path_to_xyz, espatom_idx, charge_range, charge_file):
         """
-        Calculate the esp
+        Calculate the esp in units of Volts
         Input: path_to_xyz: string of xyz filename
         espatom_idx: integer of atom index
         charge_range: list of integers of atom indices
@@ -511,7 +511,7 @@ class Electrostatics:
         """
         dielectric = self.dielectric
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2) aka N*m^2/C^2
 
         # Convert each column to list for quicker indexing
         atoms = list(df['Atom'])
@@ -541,9 +541,9 @@ class Electrostatics:
 
         # Unit conversion
         A_to_m = 10**(-10)
-        faraday = 23.06   #kcal/(mol*V)
+        #faraday = 23.06   #kcal/(mol*V)
         C_e = 1.6023*(10**-19)
-        cal_J = 4.184
+        #cal_J = 4.184
 
         bound_atoms = []
         #create list of bound atoms, these are treated with a different dielectric
@@ -562,7 +562,7 @@ class Electrostatics:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 total_esp = total_esp + (1/dielectric)*(charges[idx]/r)
 
-        final_esp = k*total_esp*((C_e))*cal_J*faraday   # Note: cal/kcal * kJ/J gives 1
+        final_esp = k*total_esp*((C_e))  #N*m^2/(C^2)*(C/m) = N*m/C = J/C = Volt
         return [final_esp, df['Atom'][idx_atom]]
 
 
