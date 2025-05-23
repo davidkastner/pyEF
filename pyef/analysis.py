@@ -17,7 +17,7 @@ from distutils.dir_util import copy_tree
 import openbabel
 from biopandas.pdb import PandasPdb
 import math
-
+import time
 class Electrostatics:
     '''
     A class to compute Electrostatic properties for series of computations housed in folders that contain .molden output files
@@ -599,7 +599,7 @@ class Electrostatics:
         # Unit conversion
         A_to_m = 10**(-10)
         C_e = 1.6023*(10**-19)
-        
+        bohr_to_m = 0.52918*10**(-10) 
         for idx in charge_range:
             if idx == idx_atom:
                 continue
@@ -684,28 +684,20 @@ class Electrostatics:
         charge_range: list of integers of atom indices
         xyz_file: string of xyz filename
         atom_multipole_file: string of multipole filename
-        Output: list of E-field vector and atomic symbol
+        Output: list of E-field vector and atomic symbol, Efields are reported in units of Volts/Angstrom
         '''
 
         df = self.getGeomInfo(xyz_file)
         #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2 =  N*m^2/C^2)
 
         # Convert each column to list for quicker indexing
         xs = df['X']
         ys = df['Y']
         zs = df['Z']
 
-        # Determine position and charge of the target atom
-        xo = xs[idx_atom]
-        yo = ys[idx_atom]
-        zo = zs[idx_atom]
-        position_vec = [xo, yo, zo]
-        Ex = 0
-        Ey = 0
-        Ez = 0
         
-        # Following derivation of -field strenght from TITAN and TUPÃ
+        # Following derivation of E-field strength 
         Monopole_E = np.array([0, 0, 0])
 
         # Unit conversion
@@ -714,6 +706,16 @@ class Electrostatics:
         b_to_m = 5.291772109*(10**-11)
         b_to_A = 0.529177
         C_e = 1.6023*(10**-19)
+        Vm_to_VA = 10**(-10)
+        Ex = 0
+        Ey = 0
+        Ez = 0
+
+        xo = xs[idx_atom]
+        yo = ys[idx_atom]
+        zo = zs[idx_atom]
+
+        position_vec = A_to_m*np.array([xo, yo, zo])
 
 
         inv_eps = 1/self.dielectric
@@ -739,22 +741,22 @@ class Electrostatics:
                 continue
             else:
                 # Units of dipole_vec: 
-                dipole_vec = atom_dict["Dipole_Moment"]
+                dipole_vec = b_to_m*np.array(atom_dict["Dipole_Moment"])
                 #convention of vector pointing towards atom of interest, so positive charges exert positive Efield
-                dist_vec = np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
+                dist_vec = A_to_m*np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
                 dist_arr = np.outer(dist_vec, dist_vec)
-                quadrupole_arr = atom_dict['Quadrupole_Moment']
+                quadrupole_arr = b_to_m*b_to_m*atom_dict['Quadrupole_Moment']
                 
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Monopole_E = Monopole_E + A_to_m*inv_eps*k*C_e*(-atom_dict["Atom_Charge"]*(1/(r**2))*dist_vec/la.norm(dist_vec))
-                Ex_quad = inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(A_to_m**6)*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
-                Ey_quad = inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
-                Ez_quad = inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(A_to_m**6)*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
+                Monopole_E = Monopole_E - inv_eps*k*C_e*atom_dict["Atom_Charge"]*(1/(r**3))*dist_vec  #neg for sign convention so Efield points toward neg charge
+                Ex_quad = inv_eps*k*C_e*(1/(r**3))*(A_to_m*(xs[idx] - xo))*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
+                Ey_quad = inv_eps*k*C_e*(1/(r**3))*(A_to_m*(ys[idx] - yo))*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
+                Ez_quad = inv_eps*k*C_e*(1/(r**3))*(A_to_m*(zs[idx] - zo))*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
 
-                Ex = Ex + inv_eps*k*C_e*(1/(r**3))*((xs[idx] - xo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[1:], dist_vec[1:]))-(1/3)*Ex_quad.sum()
-                Ey = Ey + inv_eps*k*C_e*(1/(r**3))*((ys[idx] - yo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
-                Ez = Ez + inv_eps*k*C_e*(1/(r**3))*((zs[idx] - zo))*(-atom_dict["Atom_Charge"]*(A_to_m**2) + (A_to_m**4)*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
+                Ex = Ex + inv_eps*k*(1/(r**3))*dist_vec[0]*( -C_e*atom_dict["Atom_Charge"] + C_e*(1/r**2)*np.dot(dipole_vec[1:], dist_vec[1:]))-(1/3)*Ex_quad.sum()
+                Ey = Ey + inv_eps*k*(1/(r**3))*dist_vec[1]*( -C_e*atom_dict["Atom_Charge"] + C_e*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
+                Ez = Ez + inv_eps*k*(1/(r**3))*dist_vec[2]*( -C_e*atom_dict["Atom_Charge"] + C_e*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
         E_vec = [Ex, Ey, Ez]
 
 
@@ -777,14 +779,14 @@ class Electrostatics:
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
                 r = (((MM_xs[chg_idx] - xo)*A_to_m)**2 + ((MM_ys[chg_idx] - yo)*A_to_m)**2 + ((MM_zs[chg_idx] - zo)*A_to_m)**2)**(0.5)
-                dist_vec = np.array([(MM_xs[chg_idx] - xo), (MM_ys[chg_idx] - yo), (MM_zs[chg_idx] - zo)])
-                E_to_add = A_to_m*inv_eps*k*C_e*(-MM_charges[chg_idx]*(1/(r**2))*dist_vec/la.norm(dist_vec))
+                dist_vec = A_to_m*np.array([(MM_xs[chg_idx] - xo), (MM_ys[chg_idx] - yo), (MM_zs[chg_idx] - zo)])
+                E_to_add = -inv_eps*k*C_e*MM_charges[chg_idx]*(1/(r**3))*dist_vec
                 Monopole_E = Monopole_E +  E_to_add
                 E_vec[0] += E_to_add[0]
                 E_vec[1] += E_to_add[1]
                 E_vec[2] += E_to_add[2]
             #Add contributions to Monopole E from point charges to total E
-        return [E_vec, position_vec, df['Atom'][idx_atom], Monopole_E ]
+        return [Vm_to_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], Vm_to_VA*np.array(Monopole_E) ]
     
     def ESPfromMultipole(self, xyfilepath, atom_multipole_file, charge_range, idx_atom):
         '''
@@ -793,11 +795,11 @@ class Electrostatics:
         charge_range: list of integers of atom indices
         xyfilepath: string of xyz filename
         atom_multipole_file: string of multipole filename
-        Output: list of ESP and atomic symbol
+        Output: list of ESP and atomic symbol Units of ESP is Volts!
         '''
         df = self.getGeomInfo(xyfilepath)
         #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2) also N*m^2/C^2
 
         # Convert each column to list for quicker indexing
         atoms = df['Atom']
@@ -812,11 +814,11 @@ class Electrostatics:
 
          # Unit conversion
         A_to_m = 10**(-10)
-        KJ_J = 10**-3
-        faraday = 23.06   #kcal/(mol*V)
+        #KJ_J = 10**-3
+        #faraday = 23.06   #kcal/(mol*V)
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
-        cal_J = 4.184
+        #cal_J = 4.184
         dielectric = self.dielectric
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
         #create list of bound atoms, these are treated with a different dielectric
@@ -827,7 +829,7 @@ class Electrostatics:
             if idx == idx_atom:
                 continue
             elif idx in bound_atoms:
-                #now account for bound atoms
+                #default it to exclude bound atoms
                  r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                  total_esp = total_esp + (atom_dict["Atom_Charge"]/r)
             else:
@@ -835,7 +837,7 @@ class Electrostatics:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 total_esp = total_esp + (1/dielectric)*(atom_dict["Atom_Charge"]/r)
 
-        final_esp = k*total_esp*((C_e))*cal_J*faraday   # Note: cal/kcal * kJ/J gives 1
+        final_esp = k*total_esp*((C_e))  #Units: N*m^2/(C^2)*(C/m) = N*m/C = J/C = Volt
         return [final_esp, df['Atom'][idx_atom] ]
  
 
@@ -846,8 +848,9 @@ class Electrostatics:
         xyz_filepath: string of xyz filename
         atom_multipole_file: string of multipole filename
         all_lines: list of strings of lines in xyz file
-        Output: list of E-field vector and atomic symbol
+        Output: list of E-field vector and atomic symbol in units of V/Angstrom
         '''
+        A_to_m = 10**(-10)
         bonded_atoms = []
         E_projected = []
         E_monopole_proj = []
@@ -987,34 +990,6 @@ class Electrostatics:
 
 
 
-#IS THIS FUNCTION NEEDED?!!
-    def ESP_all_calcs(self, path_to_xyz, filename, atom_idx, cageTrue):
-        '''
-        Input: path_to_xyz: string of xyz filename
-        filename: string of charge filename
-        atom_idx: integer of atom index
-        cageTrue: boolean
-        Output: list of ESP and atomic symbol'''
-        # Get the number of lines in the txt file
-        dlc = self.dielectric
-        total_lines =Electrostatics.mapcount(filename)
-        all_lines = range(0, total_lines)
-        [ESP_all, atom_type] = self.calcesp(path_to_xyz, atom_idx, all_lines, filename)
-        if cageTrue:
-            cage_lines = range(0, 280)
-            guest_lines = range(280, total_lines)
-            # print('Cage indices: ' + str(cage_lines))
-            # print('Guest indices: ' + str(guest_lines))
-            ESP_just_ligand = self.calcesp(path_to_xyz, atom_idx, guest_lines, filename)[0]
-            ESP_just_cage = self.calcesp(path_to_xyz, atom_idx, cage_lines, filename)[0]
-            print('ESP for all atoms: ' + str(ESP_all) + ' kJ/(mol*e)')
-            print('ESP just ligand: ' + str(ESP_just_ligand) + ' kJ/(mol*e)')
-            print('ESP just cage: ' + str(ESP_just_cage) + ' kJ/(mol*e)')
-            return [ESP_all, ESP_just_ligand, ESP_just_cage, atom_type]
-        else:
-            print('ESP at '+str(atom_type) + ' (index = ' + str(atom_idx) + ') : ' + str(ESP_all) + ' kJ/(mol*e)') 
-            return [ESP_all, atom_type]
-
 
     def esp_bydistance(self, path_to_xyz, espatom_idx,  charge_file):
         '''
@@ -1025,7 +1000,7 @@ class Electrostatics:
         '''
         dielectric = self.dielectric
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2)
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2) = N*m^2/(C^2)
 
         # Unit conversion
         A_to_m = 10**(-10)
@@ -1076,12 +1051,12 @@ class Electrostatics:
                 continue
             elif idx in bound_atoms:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                esps.append(k*C_e*cal_J*faraday*charges[idx]/r)
+                esps.append(k*C_e*charges[idx]/r) #units of N*m/C =Volt
                 distances.append(r)
             else:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
                 distances.append(r)
-                esps.append(k*(1/dielectric)*C_e*cal_J*faraday*charges[idx]/r)
+                esps.append(k*(1/dielectric)*C_e*charges[idx]/r) #untis of N*m/C = Volt
         # Now we sort the distance list, and use sorted indices to sort the
         atm_lst = list(atoms)
         atm_lst.pop(idx_atom)
@@ -1220,7 +1195,7 @@ class Electrostatics:
 
     def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
         '''
-        Function computes a series of ESP data using the charge scheme specified in charge types.
+        Function computes a series of ESP data using the charge scheme specified in charge types. All ESPs in Units of Volts
         Inputs:
         ------- 
         charge_types: list of strings, possible choices include: 'Hirshfeld', 'Voronoi', 'Mulliken',  'Lowdin', 'SCPA', 'Becke', 'ADCH', 'CHELPG', 'MK', 'AIM', 'Hirshfeld_I', 'CM5', 'EEM', 'RESP', 'PEOE'}
@@ -1250,6 +1225,7 @@ class Electrostatics:
         allspeciesdict = []
         counter = 0  # Iterator to account for atomic indices of interest
         for f in list_of_file:
+            start_time = time.time()
             print('-----------------' + str(f) + '------------------')
             atom_idx = metal_idxs[counter]
             counter = counter + 1
@@ -1303,6 +1279,9 @@ class Electrostatics:
                     logging.exception('An Exception was thrown')
                     continue
             allspeciesdict.append(results_dict)
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"Elapsed time: {elapsed_time:.4f} seconds")
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(ESPdata_filename +'.csv')
@@ -1310,7 +1289,7 @@ class Electrostatics:
     
     def getESPMultipole(self, ESP_filename, multiwfn_module, multiwfn_path, polarization_scheme='Hirshfeld_I'):
         '''
-        Function computes a series of ESP data using the charge scheme specified in charge types.
+        Function computes a series of ESP data using the charge scheme specified in charge types. All ESPs are in units of Volts
         Inputs:
         -------
         ESP_filename: string
@@ -1336,8 +1315,8 @@ class Electrostatics:
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
         counter = 0
-        
         for f in list_of_file:
+            start_time = time.time()
             atom_idx = metal_idxs[counter] 
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
@@ -1391,6 +1370,9 @@ class Electrostatics:
                 print(repr(e))
                 traceback_str = ''.join(traceback.format_tb(e.__traceback__))
                 print(traceback_str)
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f'Time for Efield calc: {elapsed_time}')
             allspeciesdict.append(results_dict)
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
@@ -1401,7 +1383,8 @@ class Electrostatics:
     # input_bond_indices is a list of a list of tuples
     def getEFieldMultipole(self, Efield_data_filename, multiwfn_module, multiwfn_path, atmrad_path, input_bond_indices=[], excludeAtoms=[], polarization_scheme='Hirshfeld_I'):
         '''
-        Function computes a series of ESP data using the charge scheme specified in charge types.
+        Function computes a series of Efield data using the charge scheme specified in charge types; All in Units of Volts/Angstrom
+
         Inputs:
         -------
         Efield_data_filename: string
@@ -1432,6 +1415,7 @@ class Electrostatics:
             bool_manual_mode = True
         
         for f in list_of_file:
+            start_time = time.time()
             print(f'--------------file {f}---------------------------')
             atom_idx = metal_idxs[counter] 
             os.chdir(owd)
@@ -1529,7 +1513,9 @@ class Electrostatics:
 
             # Probably want to add other bonds to this list!
             allspeciesdict.append(results_dict)
-
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"Elapsed time: {elapsed_time:.4f} seconds")
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(f"{Efield_data_filename}.csv")
