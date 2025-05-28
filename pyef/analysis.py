@@ -955,11 +955,12 @@ class Electrostatics:
         return [total_charge, partial_charge_atom]
 
     #This just gets the charge if the charge is in monopole setup
-    def charge_atoms(self, filename, xyzfilename=''):
+    def charge_atoms(self, chg_filename, xyzfilename):
         '''Input: filename: string of charge filename or multipole filename... if the xyzfilename is included must be multipole! '''
-        if xyzfilename:
-            df_multipole = getmultipoles(multipole_name)  #Index, Element, Atom_Charge, Dipole_Moment....
-            df_geom = getGeomInfo(self, filepathtoxyz)
+        if len(xyzfilename) > 1:
+            dict_multipole = Electrostatics.getmultipoles(chg_filename)  #Index, Element, Atom_Charge, Dipole_Moment....
+            df_multipole = pd.DataFrame(dict_multipole)
+            df_geom = self.getGeomInfo(xyzfilename)
             merged_df = pd.merge(df_geom, df_multipole, left_index=True, right_index=True)
             merged_df['charge'] = merged_df['Atom_Charge']
             merged_df['x'] = merged_df['X']
@@ -967,8 +968,7 @@ class Electrostatics:
             merged_df['z'] = merged_df['Z']
             df = merged_df[["Atom",'x', 'y', 'z', "charge"]]
         else:
-            df = getmultipoles(multipole_name)
-            df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+            df = pd.read_csv(chg_filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         return df
 
 
@@ -1222,7 +1222,8 @@ class Electrostatics:
             res_dict['Solute'] = solute_idxs
             solvent_idxs = solute_solvent_dict['Solvent Indices']
             num_atoms_solvent = solute_solvent_dict['Num Atoms in Solvent']
-            num_solvent_res = len(solvent_idxs)/num_atoms_solvents
+            num_solvent_res = int(len(solvent_idxs)/num_atoms_solvent)
+            print(f'Num solvents: {num_solvent_res}')
             for solv_num in range(0, num_solvent_res):
                 res_dict[f'Solvent_{solv_num}'] = solvent_idxs[solv_num*num_atoms_solvent:(solv_num+1)*(num_atoms_solvent)]
         return res_dict
@@ -1248,6 +1249,7 @@ class Electrostatics:
         final_structure_file = 'final_optim.xyz'
 
         for f in list_of_folders:
+            print(f'I am in {f}')
             need_to_run_calculation = True
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
@@ -1295,52 +1297,57 @@ class Electrostatics:
                     output = proc.communicate("\n".join(commands).encode())
                     os.rename('final_optim.chg', file_path_monopole)
                  
-                if multipole_bool:
-                    xyz_fp = file_path_xyz 
-                    chg_fp = file_path_multipole
-                else:
-                    chg_fp = file_path_monopole
-                    xyz_fp = ''
-                df_charge_atoms = Electrostatics.charge_atoms(chg_fp, xyz_fp)
+            if multipole_bool:
+                xyz_fp = file_path_xyz 
+                chg_fp = file_path_multipole
+            else:
+                chg_fp = file_path_monopole
+                xyz_fp = ''
+            df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
 
-                lst_dfs.append(df_charge_atoms)
-
-                solute_solvent_dict = {}
-                solute_solvent_dict['Solute Indices'] = solute_indices
-                solute_solvent_dict['Num Atoms in Solvent'] = num_atoms_solvent
-                total_lines = Electrostatics.mapcount(file_path_xyz)
-                all_indices = list(np.arange(0, total_lines))
-                solute_solvent_dict['Solvent Indices'] = [x for x in all_indices if x not in solute_indices]
-                res_dict = get_residues(False, solute_solvent_dict)
-                df_dip = self.getdipole_residues(res_dict, df_charge_atoms)
+            solute_solvent_dict = {}
+            solute_solvent_dict['Solute Indices'] = solute_indices
+            solute_solvent_dict['Num Atoms in Solvent'] = num_atoms_solvent
+            total_atoms = Electrostatics.mapcount(file_path_xyz) -2
+            all_indices = list(np.arange(0, total_atoms))
+            solute_solvent_dict['Solvent Indices'] = [x for x in all_indices if x not in solute_indices]
+            res_dict = self.get_residues(False, solute_solvent_dict)
+            df_dip = self.getdipole_residues(res_dict, df_charge_atoms)
                 
-                #re-order res by closest to the solute
-                all_centroids = np.array(df_dip['centroid'])
-                solute_name = 'Solute'
-                ref_coord = df_dip.loc[df_dip['Label'] == solute_name, 'centroid']
+            #re-order res by closest to the solute
+            all_centroids = np.vstack(df_dip['centroid'].values)
+            solute_name = 'Solute'
+            ref_coord = df_dip.loc[df_dip['Label'] == solute_name, 'centroid']
 
-                # Compute distances to reference
-                distances = np.linalg.norm(xyz_list - ref_coord, axis=1)
-                # Get sort order (indices of sorted distances)
-                df_dip['Distance from solute'] = distances
-                df_dip.sort_values(by='Distance from solute', ascending=True)
+            ref_coord_arr = ref_coord.values[0]
+            print(f'red coord: {ref_coord_arr}')
+            # Compute distances to reference
+            distances = np.linalg.norm(all_centroids - ref_coord_arr, axis=1)
+            print(f'distances: {distances}')
+            # Get sort order (indices of sorted distances)
+            df_dip['Distance from solute'] = distances
+            init_dipole = df_dip['Dipole']
+            print(f'unsorted dipoles: {init_dipole} which pairs with: {distances}')
+            df_dip.sort_values(by='Distance from solute', ascending=True)
 
-                sorted_dips = df_dip['Dipole']
-                avg_dips = np.average(sorted_dips)
+            sorted_dips = df_dip['Dipole']
+            print(f'sorted dipoles: {sorted_dips[0]}')
+            avg_dips = np.average(sorted_dips[1:])
 
-                avg_first_3A = np.average(df_dip[df_dip['Distance from solute'] < 3])
-                avg_first_5A = np.average(df_dip[df_dip['Distance from solute'] < 5])
-                avg_first_7A = np.average(df_dip[df_dip['Distance from solute'] < 7])
-                avg_first_11A = np.average(df_dip[df_dip['Distance from solute'] < 11])
+            avg_first_5A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:])
+            avg_5to7A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole'])
+            avg_7to11A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 11) & (df_dip['Distance from solute'] > 7), 'Dipole'])
+            avg_above11A = np.average(df_dip.loc[df_dip['Distance from solute'] > 11, 'Dipole'])
 
 
-                #return a list of the solvents
-                #return an average of the dipoles in first x closests; next x closest, etc.
+            #return a list of the solvents
+             #return an average of the dipoles in first x closests; next x closest, etc.
 
-                dip_dict = {'Avg Dip': avg_dips, 'Avg3Ang': avg_first_3A, 'Avg5Ang': avg_first_5A, 'Avg7Ang': avg_first_7A,'Avg11Ang': avg_first_11A,}
-                lst_dicts.append(dip_dict)
-            all_file_df = pd.DataFrame(lst_dicts)
-            return all_file_df
+            dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': avg_first_5A, 'Avg5to7Ang': avg_5to7A , 'Avg7to11Ang': avg_7to11A, 'Avgabove11Ang': avg_above11A}
+            print(dip_dict)
+            lst_dicts.append(dip_dict)
+        all_file_df = pd.DataFrame(lst_dicts)
+        return all_file_df
 
 
     def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
@@ -1777,18 +1784,23 @@ class Electrostatics:
         dipole_magnitudes = []
         res_labels = []
         centroid_lst = []
-
-        arr_coords = np.array(df['x', 'y', 'z'])
+        print(f'The values of the columns of df: {df.columns}')
+        arr_coords = np.array(df[['x', 'y', 'z']])
+        print(f'all coords: {arr_coords}')
         arr_chgs = np.array(df['charge'])
         for res_name in res_dict.keys():
+            print(f'res_name: {res_name}')
+            res_labels.append(res_name)
             res_indices = res_dict[res_name]
             res_coords = arr_coords[res_indices]
+            print(f'res_coords: {res_coords}')
             res_centroid = res_coords.mean(axis=0)
+            print(f'res_centroid: {res_centroid}')
             res_chgs = arr_chgs[res_indices]
             dip_vec, dip_mag = Electrostatics.compute_dipole(res_coords, res_chgs)
             dipole_vectors.append(dip_vec)
             dipole_magnitudes.append(dip_mag)
-            centroid_lst = [res_centroid]
+            centroid_lst.append(res_centroid)
         
         df = pd.DataFrame({
            'Label': res_labels,
