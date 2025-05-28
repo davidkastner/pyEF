@@ -954,6 +954,25 @@ class Electrostatics:
         partial_charge_atom = charges[atom_idx]
         return [total_charge, partial_charge_atom]
 
+    #This just gets the charge if the charge is in monopole setup
+    def charge_atoms(self, filename, xyzfilename=''):
+        '''Input: filename: string of charge filename or multipole filename... if the xyzfilename is included must be multipole! '''
+        if xyzfilename:
+            df_multipole = getmultipoles(multipole_name)  #Index, Element, Atom_Charge, Dipole_Moment....
+            df_geom = getGeomInfo(self, filepathtoxyz)
+            merged_df = pd.merge(df_geom, df_multipole, left_index=True, right_index=True)
+            merged_df['charge'] = merged_df['Atom_Charge']
+            merged_df['x'] = merged_df['X']
+            merged_df['y'] = merged_df['Y']
+            merged_df['z'] = merged_df['Z']
+            df = merged_df[["Atom",'x', 'y', 'z', "charge"]]
+        else:
+            df = getmultipoles(multipole_name)
+            df = pd.read_csv(filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+        return df
+
+
+
     def getAtomInfo(filename, atom_idx):
         '''
         Input: filename: string of charge filename
@@ -1192,6 +1211,137 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(ESPdata_filename +'.csv')
         return df
+
+
+    def get_residues(self, auto_gen, solute_solvent_dict):
+        res_dict = {}
+        if auto_gen:
+            print(f'I am automatically determining the residues and then assigning to a dict')
+        else:
+            solute_idxs = solute_solvent_dict['Solute Indices']
+            res_dict['Solute'] = solute_idxs
+            solvent_idxs = solute_solvent_dict['Solvent Indices']
+            num_atoms_solvent = solute_solvent_dict['Num Atoms in Solvent']
+            num_solvent_res = len(solvent_idxs)/num_atoms_solvents
+            for solv_num in range(0, num_solvent_res):
+                res_dict[f'Solvent_{solv_num}'] = solvent_idxs[solv_num*num_atoms_solvent:(solv_num+1)*(num_atoms_solvent)]
+        return res_dict
+
+
+
+    def get_residueDipoles(self, charge_type,  multiwfn_module, multiwfn_path, atmrad_path, multipole_bool, solute_indices = [], num_atoms_solvent=0):
+        '''
+        Function computes a partial charges of all atoms in one system... if the desired file already exists the just return it!!
+        Inputs:
+        ------- 
+        charge_type: string, possible choices include: 'Hirshfeld', 'Voronoi', 'Mulliken',  'Lowdin', 'SCPA', 'Becke', 'ADCH', 'CHELPG', 'MK', 'AIM', 'Hirshfeld_I', 'CM5', 'EEM', 'RESP', 'PEOE'}
+        '''
+        lst_dicts = []
+        need_to_run_calculation = True
+
+
+        # Access Class Variables
+        folder_to_molden = self.folder_to_file_path
+        list_of_folders = self.lst_of_folders
+        owd = os.getcwd() # Old working directory
+        molden_filename = 'final_optim.molden'
+        final_structure_file = 'final_optim.xyz'
+
+        for f in list_of_folders:
+            need_to_run_calculation = True
+            os.chdir(owd)
+            os.chdir(f + folder_to_molden)
+            subprocess.call(multiwfn_module, shell=True)
+            file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
+            file_path_monopole = f"{os.getcwd()}/Charges{charge_type}.txt"
+            file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
+
+            #check if previous calculations fully converged for desired multipole/charge scheme 
+            if multipole_bool:
+                if os.path.exists(file_path_multipole):
+                    with open(file_path_multipole, 'r') as file:
+                        contents = file.read()
+                        if "Calculation took up" in contents:
+                            print(f" > Previously completed multipole {charge_type} calculation for {f}")
+                            need_to_run_calculation = False
+            else:
+                if os.path.exists(file_path_monopole):
+                    need_to_run_calculation = False
+                    #Dynamically get path to package settings.ini file
+                    path_to_ini_file = str(ini_path)
+            
+
+            #If you need to run the calculations, urn either the multipole or the monopole calculation!
+            if need_to_run_calculation:
+                if multipole_bool:
+                    #Dynamically get path to package settings.ini file
+                    with resources.path('pyef.resources', 'settings.ini') as ini_path:
+                        path_to_ini_file = str(ini_path)
+                        Command_Multipole = f"{multiwfn_path} {molden_filename} -set {path_to_init_file} > {file_path_multipole}"
+                    proc = subprocess.Peopen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                    multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
+                    proc.communicate("\n".join(multiwfn_commands).encode())
+                    os.rename('final_optim.chg', file_path_multipole)
+
+
+
+                else:
+                    command_A = f"{multiwfn_path} final_optim.molden"
+                    proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                    calc_command = self.dict_of_calcs[charge_type]
+                    commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                    if charge_type == 'CHELPG':
+                        commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
+                    output = proc.communicate("\n".join(commands).encode())
+                    os.rename('final_optim.chg', file_path_monopole)
+                 
+                if multipole_bool:
+                    xyz_fp = file_path_xyz 
+                    chg_fp = file_path_multipole
+                else:
+                    chg_fp = file_path_monopole
+                    xyz_fp = ''
+                df_charge_atoms = Electrostatics.charge_atoms(chg_fp, xyz_fp)
+
+                lst_dfs.append(df_charge_atoms)
+
+                solute_solvent_dict = {}
+                solute_solvent_dict['Solute Indices'] = solute_indices
+                solute_solvent_dict['Num Atoms in Solvent'] = num_atoms_solvent
+                total_lines = Electrostatics.mapcount(file_path_xyz)
+                all_indices = list(np.arange(0, total_lines))
+                solute_solvent_dict['Solvent Indices'] = [x for x in all_indices if x not in solute_indices]
+                res_dict = get_residues(False, solute_solvent_dict)
+                df_dip = self.getdipole_residues(res_dict, df_charge_atoms)
+                
+                #re-order res by closest to the solute
+                all_centroids = np.array(df_dip['centroid'])
+                solute_name = 'Solute'
+                ref_coord = df_dip.loc[df_dip['Label'] == solute_name, 'centroid']
+
+                # Compute distances to reference
+                distances = np.linalg.norm(xyz_list - ref_coord, axis=1)
+                # Get sort order (indices of sorted distances)
+                df_dip['Distance from solute'] = distances
+                df_dip.sort_values(by='Distance from solute', ascending=True)
+
+                sorted_dips = df_dip['Dipole']
+                avg_dips = np.average(sorted_dips)
+
+                avg_first_3A = np.average(df_dip[df_dip['Distance from solute'] < 3])
+                avg_first_5A = np.average(df_dip[df_dip['Distance from solute'] < 5])
+                avg_first_7A = np.average(df_dip[df_dip['Distance from solute'] < 7])
+                avg_first_11A = np.average(df_dip[df_dip['Distance from solute'] < 11])
+
+
+                #return a list of the solvents
+                #return an average of the dipoles in first x closests; next x closest, etc.
+
+                dip_dict = {'Avg Dip': avg_dips, 'Avg3Ang': avg_first_3A, 'Avg5Ang': avg_first_5A, 'Avg7Ang': avg_first_7A,'Avg11Ang': avg_first_11A,}
+                lst_dicts.append(dip_dict)
+            all_file_df = pd.DataFrame(lst_dicts)
+            return all_file_df
+
 
     def getESPData(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
         '''
@@ -1612,6 +1762,43 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(partial_chg_filename +'.csv')
         return df
+
+    def compute_dipole(res_coords, res_chgs):
+        dipole_vector = np.sum(res_coords*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
+        dipole_magnitude = np.linalg.norm(dipole_vector)
+        return dipole_vector * 4.80320427, dipole_magnitude * 4.80320427  # Convert to Debye
+
+
+    def getdipole_residues(self, res_dict, df):
+        ''' res_dict: dictionary with strings mapped to list of lists(int)   
+          strings denote name of residues which are mapped to the associated atom indices in the lists(0 indexed!)
+        '''
+        dipole_vectors = []
+        dipole_magnitudes = []
+        res_labels = []
+        centroid_lst = []
+
+        arr_coords = np.array(df['x', 'y', 'z'])
+        arr_chgs = np.array(df['charge'])
+        for res_name in res_dict.keys():
+            res_indices = res_dict[res_name]
+            res_coords = arr_coords[res_indices]
+            res_centroid = res_coords.mean(axis=0)
+            res_chgs = arr_chgs[res_indices]
+            dip_vec, dip_mag = Electrostatics.compute_dipole(res_coords, res_chgs)
+            dipole_vectors.append(dip_vec)
+            dipole_magnitudes.append(dip_mag)
+            centroid_lst = [res_centroid]
+        
+        df = pd.DataFrame({
+           'Label': res_labels,
+           'Dipole_vec': dipole_vectors,
+           'Dipole' : dipole_magnitudes,
+           'centroid' : centroid_lst
+        })
+        return df
+
+
 
     def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path, multipole_mode=True, polarization_scheme='Hirshfeld_I'):
         '''Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
