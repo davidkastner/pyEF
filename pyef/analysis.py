@@ -1245,13 +1245,18 @@ class Electrostatics:
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd() # Old working directory
+        print(f'Currently the owd is: {owd}')
         molden_filename = 'final_optim.molden'
         final_structure_file = 'final_optim.xyz'
 
         for f in list_of_folders:
+            comp_cost = 'Na'
+            num_atoms = 0
             print(f'I am in {f}')
             need_to_run_calculation = True
             os.chdir(owd)
+            print(f'Current directory: {owd}')
+            print(f'From here I am trying to go to : {f + folder_to_molden}')
             os.chdir(f + folder_to_molden)
             subprocess.call(multiwfn_module, shell=True)
             file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
@@ -1270,11 +1275,12 @@ class Electrostatics:
                 if os.path.exists(file_path_monopole):
                     need_to_run_calculation = False
                     #Dynamically get path to package settings.ini file
-                    path_to_ini_file = str(ini_path)
+                    #path_to_ini_file = str(ini_path)
             
 
             #If you need to run the calculations, urn either the multipole or the monopole calculation!
             if need_to_run_calculation:
+                start = time.time()
                 if multipole_bool:
                     #Dynamically get path to package settings.ini file
                     with resources.path('pyef.resources', 'settings.ini') as ini_path:
@@ -1296,7 +1302,8 @@ class Electrostatics:
                         commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
                     output = proc.communicate("\n".join(commands).encode())
                     os.rename('final_optim.chg', file_path_monopole)
-                 
+                end = time.time()
+                comp_cost = end - start
             if multipole_bool:
                 xyz_fp = file_path_xyz 
                 chg_fp = file_path_multipole
@@ -1320,18 +1327,14 @@ class Electrostatics:
             ref_coord = df_dip.loc[df_dip['Label'] == solute_name, 'centroid']
 
             ref_coord_arr = ref_coord.values[0]
-            print(f'red coord: {ref_coord_arr}')
             # Compute distances to reference
             distances = np.linalg.norm(all_centroids - ref_coord_arr, axis=1)
-            print(f'distances: {distances}')
             # Get sort order (indices of sorted distances)
             df_dip['Distance from solute'] = distances
             init_dipole = df_dip['Dipole']
-            print(f'unsorted dipoles: {init_dipole} which pairs with: {distances}')
             df_dip.sort_values(by='Distance from solute', ascending=True)
 
             sorted_dips = df_dip['Dipole']
-            print(f'sorted dipoles: {sorted_dips[0]}')
             avg_dips = np.average(sorted_dips[1:])
 
             avg_first_5A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:])
@@ -1343,10 +1346,12 @@ class Electrostatics:
             #return a list of the solvents
              #return an average of the dipoles in first x closests; next x closest, etc.
 
-            dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': avg_first_5A, 'Avg5to7Ang': avg_5to7A , 'Avg7to11Ang': avg_7to11A, 'Avgabove11Ang': avg_above11A}
+            dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': avg_first_5A, 'Avg5to7Ang': avg_5to7A , 'Avg7to11Ang': avg_7to11A, 'Avgabove11Ang': avg_above11A, 'CompCost': comp_cost, 'Total_atoms': total_atoms}
             print(dip_dict)
             lst_dicts.append(dip_dict)
+            os.chdir(owd)
         all_file_df = pd.DataFrame(lst_dicts)
+        all_file_df.to_csv('Dipoles.csv')
         return all_file_df
 
 
@@ -1771,6 +1776,7 @@ class Electrostatics:
         return df
 
     def compute_dipole(res_coords, res_chgs):
+        print(f'Value of the res_coords: {res_coords}')
         dipole_vector = np.sum(res_coords*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
         dipole_magnitude = np.linalg.norm(dipole_vector)
         return dipole_vector * 4.80320427, dipole_magnitude * 4.80320427  # Convert to Debye
@@ -1786,16 +1792,12 @@ class Electrostatics:
         centroid_lst = []
         print(f'The values of the columns of df: {df.columns}')
         arr_coords = np.array(df[['x', 'y', 'z']])
-        print(f'all coords: {arr_coords}')
         arr_chgs = np.array(df['charge'])
         for res_name in res_dict.keys():
-            print(f'res_name: {res_name}')
             res_labels.append(res_name)
             res_indices = res_dict[res_name]
             res_coords = arr_coords[res_indices]
-            print(f'res_coords: {res_coords}')
             res_centroid = res_coords.mean(axis=0)
-            print(f'res_centroid: {res_centroid}')
             res_chgs = arr_chgs[res_indices]
             dip_vec, dip_mag = Electrostatics.compute_dipole(res_coords, res_chgs)
             dipole_vectors.append(dip_vec)
