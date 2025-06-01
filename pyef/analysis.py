@@ -49,6 +49,8 @@ class Electrostatics:
         self.ptChgs = includePtChgs
         self.ptChgfp = ''
         self.ptchgdf = None
+        self.molden_filename = 'final_optim.molden'
+        self.xyzfilename = 'final_optim.xyz'
         #default setting does not generate PDB files
         self.makePDBbool = False
         self.excludeAtomfromEcalc = []
@@ -144,6 +146,14 @@ class Electrostatics:
         '''
         self.makePDBbool = True
 
+
+    def set_molden_filename(self, new_name):
+        self.molden_filename = new_name
+        self.prepData()
+    def set_xyzfilename(self, new_name):
+        self.xyzfilename = new_name
+        self.prepData()
+
     def fix_ECPmolden(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
 
@@ -155,7 +165,7 @@ class Electrostatics:
             os.chdir(owd)
             print('   > Changing directory: ' + str(f + folder_to_molden))
             os.chdir(f + folder_to_molden)
-            with open('final_optim.molden', 'r') as file:
+            with open(self.molden_filename, 'r') as file:
                 content = file.read()
             pattern_au = re.compile(r'(Au\s+\d+\s+)(\d+)')
             content = pattern_au.sub(r'\g<1>19', content)
@@ -166,26 +176,55 @@ class Electrostatics:
             pattern_i = re.compile(r'(I\s+\d+\s+)(\d+)')
             content = pattern_i.sub(r'\g<1>7', content)
 
-            with open('final_optim.molden', 'w') as file:
+            with open(self.molden_filename, 'w') as file:
                 file.write(content)
             print("      > Molden file is fixed\n")
         os.chdir(owd)
 
     def prepData(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
+
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd()
         print('   > Pre-processing data')
+        backup_xyz = 'xyz.xyz'
 
         for f in list_of_folders:
             folder_path = os.path.join(owd, f + folder_to_molden)
-            print('      > optim_path: ' + folder_path)
+            print('      > .molden and .xyz file should be located here: ' + folder_path)
 
             # Processing optim.xyz to create final_optim.xyz
+            final_optim_xyz = os.path.join(folder_path, self.xyzfilename)
+
+            # Copying .molden files to final_optim.molden
+            final_optim_molden = os.path.join(folder_path, self.molden_filename)
+
+            #this is for the full optimization cycle
             optim_file_path = os.path.join(folder_path, 'optim.xyz')
-            final_optim_xyz = os.path.join(folder_path, 'final_optim.xyz')
+
+
+            if not os.path.exists(final_optim_molden):
+                print(f'Expected .molden with filename: {self.molden_filename} in {folder_path}. We could not find a .molden filename with the default prefix, you can alter using: set_molden_filename()')
+                print(f"For now searching for all .molden files in directory. If you only have one .molden file in this directory, the defauly prefix will be altered ")
+                try:
+                    files = glob.iglob(os.path.join(folder_path, "*.molden"))
+                    for file in files:
+                        if os.path.abspath(file) != os.path.abspath(final_optim_molden):
+                            #change the defauly path the the molden file!
+                            self.set_molden_filename(os.path.basename(file))
+                            #set the backup_xyz filename to this prefix here. Generally a good guess!
+                            file_prefix, _ = os.path.splitext(os.path.basename(file))
+                            backup_xyz = file_prefix + '.xyz'
+                            print(f'Default .molden file name is now changed to {self.molden_filename}')
+                            break
+                except Exception as e:
+                    logging.exception('An Exception was thrown while copying molden files.')
+            else:
+                print(f"      > {self.molden_filename} sucessflly located in {folder_path}.")
+
+
 
             if not os.path.exists(final_optim_xyz):
                 try:
@@ -201,28 +240,21 @@ class Electrostatics:
                         with open(final_optim_xyz, 'w') as finalxyz:
                             finalxyz.writelines(deque(full_traj, num_lines))
                 except Exception as e:
-                    backup_file = os.path.join(folder_path, 'xyz.xyz')
+                    print(f'Expected .xyz with filename: {self.xyzfilename} in {folder_path}. If your xyz filename does NOT match the default, you can alter using: set_xyzfilename()')
+                    print(f'We will try to use the anticipated prefix from the associated molden file: {backup_xyz}')
+                    backup_file = os.path.join(folder_path, backup_xyz)
                     if os.path.exists(backup_file):
-                        shutil.copy2(backup_file, final_optim_xyz)
-                        logging.info('Single point data found. Using xyz.xyz as fallback.')
+                        self.xyzfilename = backup_xyz
+                        logging.info(f'Single point data found. Using {backup_xyz} as fallback.')
+
                     else:
                         logging.exception(f'An unexpected error occurred while processing optim.xyz: {e}')
             else:
-                print(f'      > {final_optim_xyz} already exists.')            
+                print(f'      > {self.xyzfilename} succesfully located in {folder_path}.')            
 
             # Copying .molden files to final_optim.molden
-            final_optim_molden = os.path.join(folder_path, 'final_optim.molden')
-            
-            if not os.path.exists(final_optim_molden):
-                try:
-                    files = glob.iglob(os.path.join(folder_path, "*.molden"))
-                    for file in files:
-                        if os.path.abspath(file) != os.path.abspath(final_optim_molden):
-                            shutil.copy2(file, final_optim_molden)
-                except Exception as e:
-                    logging.exception('An Exception was thrown while copying molden files.')
-            else:
-                print(f"      > {final_optim_molden} already exists.")
+            final_optim_molden = os.path.join(folder_path, self.molden_filename)
+            backup_xyz = 'final_optim'
 
         os.chdir(owd)
 
@@ -1246,8 +1278,8 @@ class Electrostatics:
         list_of_folders = self.lst_of_folders
         owd = os.getcwd() # Old working directory
         print(f'Currently the owd is: {owd}')
-        molden_filename = 'final_optim.molden'
-        final_structure_file = 'final_optim.xyz'
+        molden_filename = self.molden_filename
+        final_structure_file = self.xyzfilename
 
         for f in list_of_folders:
             comp_cost = 'Na'
@@ -1282,6 +1314,7 @@ class Electrostatics:
             if need_to_run_calculation:
                 start = time.time()
                 if multipole_bool:
+                    chg_prefix, _ = os.path.splitext(molden_filename)
                     #Dynamically get path to package settings.ini file
                     with resources.path('pyef.resources', 'settings.ini') as ini_path:
                         path_to_ini_file = str(ini_path)
@@ -1289,23 +1322,24 @@ class Electrostatics:
                     proc = subprocess.Peopen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                     multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
                     proc.communicate("\n".join(multiwfn_commands).encode())
-                    os.rename('final_optim.chg', file_path_multipole)
+                    os.rename(f'{chg_prefix}.chg', file_path_multipole)
 
 
 
                 else:
-                    command_A = f"{multiwfn_path} final_optim.molden"
+                    command_A = f"{multiwfn_path} {molden_filename}"
+                    chg_prefix,  _ = os.path.splitext(molden_filename)
                     proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                     calc_command = self.dict_of_calcs[charge_type]
                     commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                     if charge_type == 'CHELPG':
                         commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
                     output = proc.communicate("\n".join(commands).encode())
-                    os.rename('final_optim.chg', file_path_monopole)
+                    os.rename(f'{chg_prefix}.chg', file_path_monopole)
                 end = time.time()
                 comp_cost = end - start
             if multipole_bool:
-                xyz_fp = file_path_xyz 
+                xyz_fp =  final_structure_file
                 chg_fp = file_path_multipole
             else:
                 chg_fp = file_path_monopole
