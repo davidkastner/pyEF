@@ -134,6 +134,7 @@ class Electrostatics:
         ''' Run the lower memory, longer time simulations. Useful when using Hirshfeld-I for simulations with more than 300 atoms
         '''
         self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '-2', '1', '2'],   'Becke': ['1', '2'] }
+        self.dict_of_calcs = {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': ['15','-2'], 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
 
     def changeDielectric(self, dlc):
         ''' Function to change dielectric of solvent
@@ -1324,8 +1325,6 @@ class Electrostatics:
                     proc.communicate("\n".join(multiwfn_commands).encode())
                     os.rename(f'{chg_prefix}.chg', file_path_multipole)
 
-
-
                 else:
                     command_A = f"{multiwfn_path} {molden_filename}"
                     chg_prefix,  _ = os.path.splitext(molden_filename)
@@ -1334,6 +1333,9 @@ class Electrostatics:
                     commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                     if charge_type == 'CHELPG':
                         commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
+                    elif charge_type == 'Hirshfeld_I':
+                        atmrad_src = atmrad_path
+                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                     output = proc.communicate("\n".join(commands).encode())
                     os.rename(f'{chg_prefix}.chg', file_path_monopole)
                 end = time.time()
