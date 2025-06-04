@@ -1812,10 +1812,27 @@ class Electrostatics:
         return df
 
     def compute_dipole(res_coords, res_chgs):
-        print(f'Value of the res_coords: {res_coords}')
-        dipole_vector = np.sum(res_coords*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
+        B_Ls = []
+        convert_Debye = 4.80320427
+        total_atoms = len(res_coords[:, 0])
+        for atom_idx in range(0, total_atoms):
+            atom_coords = np.array(res_coords[atom_idx, :])
+            for other_idx in range(atom_idx + 1, total_atoms):
+                other_atom = np.array(res_coords[other_idx, :])
+                print(f'Atom coords: {np.shape(atom_coords)} and other atom: {np.shape(other_atom)})')
+                BL = la.norm(atom_coords - other_atom)
+                print(f'BL between atom: {atom_idx} and {other_idx} is {BL}')
+                print(f'With charges: {res_chgs[atom_idx]} and {res_chgs[other_idx]}')
+
+        print(f'Here are the charges on solvent: {res_chgs}')
+
+
+        #center coordinates
+        center = np.average(res_coords, axis=0)
+        coords_centered = res_coords - center
+        dipole_vector = convert_Debye*np.sum(coords_centered*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
         dipole_magnitude = np.linalg.norm(dipole_vector)
-        return dipole_vector * 4.80320427, dipole_magnitude * 4.80320427  # Convert to Debye
+        return dipole_vector, dipole_magnitude
 
 
     def getdipole_residues(self, res_dict, df):
@@ -1826,7 +1843,6 @@ class Electrostatics:
         dipole_magnitudes = []
         res_labels = []
         centroid_lst = []
-        print(f'The values of the columns of df: {df.columns}')
         arr_coords = np.array(df[['x', 'y', 'z']])
         arr_chgs = np.array(df['charge'])
         for res_name in res_dict.keys():
