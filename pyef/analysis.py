@@ -52,7 +52,6 @@ class Electrostatics:
         self.molden_filename = 'final_optim.molden'
         self.xyzfilename = 'final_optim.xyz'
         #default setting does not generate PDB files
-        self.makePDBbool = False
         self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
         self.changeDielectBoundBool = False
@@ -141,12 +140,6 @@ class Electrostatics:
         Input: dlc: float   dielectric constant of solvent
         '''
         self.dielectric = dlc
-
-    def makePDBbool(self):
-        ''' Function to generate PDB files with partial charges
-        '''
-        self.makePDBbool = True
-
 
     def set_molden_filename(self, new_name):
         self.molden_filename = new_name
@@ -258,188 +251,6 @@ class Electrostatics:
             backup_xyz = 'final_optim'
 
         os.chdir(owd)
-
-    def createpdbfromcoords(xyz_coords, charges, atoms, output_filename):
-        '''
-        Input: xyz_coords: list of tuples of coordinates
-        charges: list of charges
-        atoms: list of atomic symbols
-        output_filename: string of output filename
-
-        Output: .pdb file with partial charges
-        '''
-        obConversion = openbabel.OBConversion()
-        obConversion.SetOutFormat("pdb")
-        mol = openbabel.OBMol()
-        for coords, charge, symbol in zip(xyz_coords, charges, atoms):
-             x, y, z = coords
-
-             # Create a new atom and set its properties
-             atom = mol.NewAtom()
-             atom.SetType(symbol)  # Use the atomic symbol, e.g., 'C' for carbon
-             atom.SetVector(x, y, z)
-             atom.SetPartialCharge(charge)
-
-        # Write the molecule to a PDB file
-        obConversion.WriteFile(mol, output_filename)
-
-    def makePDB(self, xyzfilename, output_filename, type_charge, pdbName):
-        ''' Function to generate PDB files with partial charges
-        Input: xyzfilename: string of xyz filename
-        output_filename: string of output filename
-        type_charge: string of type of charge (Monopole or Multipole)
-        pdbName: string of output pdb filename
-        Output: .pdb file with partial charges
-        '''
-        print(f'Final XYZ filename: {xyzfilename}')
-        df = self.getGeomInfo(xyzfilename)
-        #get out the xyz coords, charges, and atoms!
-        #run the outpute_filename
-        obConversion = openbabel.OBConversion()
-        obConversion.SetOutFormat("pdb")
-        mol = openbabel.OBMol()
-        if type_charge == 'Monopole':
-            df = pd.read_csv(output_filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-            atoms = df['Atom']
-            charges = df['charge']
-            xs = df['x']
-            ys = df['y']
-            zs = df['z']
-            for idx in range(0, len(charges)):
-                atom = mol.NewAtom()
-                atom.SetType(atoms[idx])
-                atom.SetVector(xs[idx], ys[idx], zs[idx])
-                atom.SetPartialCharge(charges[idx])
-            obConversion.WriteFile(mol, pdbName)
-        elif type_charge == 'ChargeFile':
-            # Read the file and strip whitespace
-            mol = openbabel.OBMol()
-            obConversion.ReadFile(mol, xyzfilename)
-            mol.ConnectTheDots()
-            mol.PerceiveBondOrders()
-            mol.FindRingAtomsAndBonds
-
-            with open(output_filename) as f:
-                charges = [float(line.strip()) for line in f]
-            #atom_names = df['Atom']
-            #print(f'Here are the atom names: {atom_names}')
-            #xs = df['X']
-            #ys = df['Y']
-            #zs = df['Z']
-            #for idx in range(0, len(charges)):
-            #    print(f'Index is: {idx}')
-            #    #Use the output from the getGeomInfo to carry out the following:
-            #    atom = mol.NewAtom()
-            #    atom_num = self.periodic_table[atom_names[idx]]
-            #    atom.SetAtomicNum(atom_num)
-            #    atom.SetVector(xs[idx], ys[idx], zs[idx])
-            #    atom.SetPartialCharge(charges[idx])
-            #    #atom.GetResidue().SetAtomID(atom, atom_names[idx])
-
-
-            #print("Unique atom symbols in input:", set(atom_names))
-            obConversion.WriteFile(mol, pdbName)
-            #print(f"Added {mol.NumAtoms()} atoms to OBMol")
-            #print(f"Number of charges: {len(charges)}")
-            ppdb = PandasPdb()
-            ppdb.read_pdb(pdbName)
-            #df_all = pd.concat([
-            #    ppdb.df.get('ATOM', pd.DataFrame()),
-            #    ppdb.df.get('HETATM', pd.DataFrame())
-            #], ignore_index=True)
-
-            # Check consistency
-            #if len(charges) != len(df_all):
-            #    raise ValueError(f"Length mismatch: {len(charges)} charges vs {len(df_all)} atoms")
-
-            # Assign charges to b_factor column
-            #df_all['b_factor'] = charges
-            #atom_mask = df_all['record_name'] == 'ATOM'
-            #hetatm_mask = df_all['record_name'] == 'HETATM'
-            #ppdb.df['ATOM'] = df_all[atom_mask].copy()
-            #ppdb.df['HETATM'] = df_all[hetatm_mask].copy()
-            #ppdb.to_pdb(path=pdbName,records=['ATOM','HETATM'],gz=False,append_newline=True)
-            #print(ppdb.df.columns)
-            #print(f"PDB has {len(ppdb.df['HETATM'])} HETATM entries")
-            ppdb.df['HETATM']['b_factor'] = charges
-            ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
-
-        elif type_charge == 'Multipole':
-            charge_lst = []
-            lst_multipole_dict = Electrostatics.getmultipoles(output_filename)
-            obConversion.SetInAndOutFormats("xyz", "pdb")
-            mol = openbabel.OBMol()
-            obConversion.ReadFile(mol, xyzfilename)
-
-            if len(lst_multipole_dict) != mol.NumAtoms():
-                print('Unable to generate .pdb with partial charges')
-            else:
-                for idx in range(0, len(lst_multipole_dict)):
-                    atom = mol.GetAtom(idx + 1)
-                    atom_dict = lst_multipole_dict[idx] 
-                    charge = atom_dict["Atom_Charge"]
-                    atom.SetPartialCharge(charge)
-                    charge_lst.append(charge)
-                obConversion.WriteFile(mol, pdbName)
-                ppdb = PandasPdb()
-                ppdb.read_pdb(pdbName)
-                ppdb.df['HETATM']['b_factor'] = charge_lst
-                ppdb.to_pdb(path=pdbName,records=None,gz=False,append_newline=True)
-
-    #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
-    def getGeomInfo(self, filepathtoxyz):
-        '''
-        Input: 
-        filepathtoxyz: string of xyz filename
-        Output: dataframe with atomic symbols and coordinates
-        '''
-        data = []
-        counter_idx = 0
-        with open(filepathtoxyz, 'r') as file:
-            # Skip the first two lines since they contain meta-deta
-            next(file)
-            next(file)
-            for line in file:
-                tokens = line.split()
-                if len(tokens) == 4:  # Assuming atom name and x, y, z coordinates are present
-                    atom_name = tokens[0].capitalize()
-                #for xyz in QMMM simulation, pnt charges at end of file, skip them!
-                if atom_name == 'pnt':
-                    break
-                x, y, z = map(float, tokens[1:])
-                rad = self.amassdict[atom_name][2]
-                data.append([counter_idx, atom_name, x, y, z, rad])
-                counter_idx += 1
-
-        columns = ['Index', 'Atom', 'X', 'Y', 'Z', 'Radius']
-        df = pd.DataFrame(data, columns=columns)
-        # Define upper limit for bond cutoff depending on the two atoms involved
-        return df
-
-    # Accepts an atom and will determine indices of atoms bound, based on implementation in molsimp
-    def getBondedAtoms(self, filepathtoxyz, atomidx):
-        '''
-        Input:
-        filepathtoxyz: string of xyz filename
-        atomidx: integer of atom index
-        Output: list of integers of bonded atom indices
-
-        ''' 
-        bonded_atom_indices = []
-        df_mol = self.getGeomInfo(filepathtoxyz)
-        atm_rad = df_mol['Radius'][atomidx]
-        atm_X = df_mol['X'][atomidx]
-        atm_Y = df_mol['Y'][atomidx]
-        atm_Z = df_mol['Z'][atomidx]
-        df_mol['BondCutoff'] = df_mol['Radius'].apply(lambda y: y + atm_rad)
-        distsq = df_mol['X'].apply(lambda x: (x - atm_X)**2) + df_mol['Y'].apply(lambda y: (y - atm_Y)**2) + df_mol['Z'].apply(lambda z: (z - atm_Z)**2)
-        dist = distsq.apply(lambda d: d**(1/2))
-        for dist_idx in range(0, len(dist)):
-            if df_mol['BondCutoff'][dist_idx] > dist[dist_idx]:
-                bonded_atom_indices.append(dist_idx)
-        bonded_atom_indices.remove(atomidx)
-        
-        return bonded_atom_indices
 
 
     def getmultipoles(multipole_name):
@@ -1005,7 +816,6 @@ class Electrostatics:
         return df
 
 
-
     def getAtomInfo(filename, atom_idx):
         '''
         Input: filename: string of charge filename
@@ -1039,8 +849,6 @@ class Electrostatics:
             print(f'Atom index: {atm_idx} and charge: {charges[atm_idx]}')
             res_charge = res_charge + charges[atm_idx]
         return [res_charge]
-
-
 
 
     def esp_bydistance(self, path_to_xyz, espatom_idx,  charge_file):
@@ -1288,8 +1096,6 @@ class Electrostatics:
             print(f'I am in {f}')
             need_to_run_calculation = True
             os.chdir(owd)
-            print(f'Current directory: {owd}')
-            print(f'From here I am trying to go to : {f + folder_to_molden}')
             os.chdir(f + folder_to_molden)
             subprocess.call(multiwfn_module, shell=True)
             file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
@@ -1313,40 +1119,58 @@ class Electrostatics:
 
             #If you need to run the calculations, urn either the multipole or the monopole calculation!
             if need_to_run_calculation:
-                start = time.time()
-                if multipole_bool:
-                    chg_prefix, _ = os.path.splitext(molden_filename)
-                    #Dynamically get path to package settings.ini file
-                    with resources.path('pyef.resources', 'settings.ini') as ini_path:
-                        path_to_ini_file = str(ini_path)
-                        Command_Multipole = f"{multiwfn_path} {molden_filename} -set {path_to_init_file} > {file_path_multipole}"
-                    proc = subprocess.Peopen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                    multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
-                    proc.communicate("\n".join(multiwfn_commands).encode())
-                    os.rename(f'{chg_prefix}.chg', file_path_multipole)
+                try: 
+                    start = time.time()
+                    if multipole_bool:
+                        chg_prefix, _ = os.path.splitext(molden_filename)
+                        #Dynamically get path to package settings.ini file
+                        with resources.path('pyef.resources', 'settings.ini') as ini_path:
+                            path_to_ini_file = str(ini_path)
+                            Command_Multipole = f"{multiwfn_path} {molden_filename} -set {path_to_init_file} > {file_path_multipole}"
+                        proc = subprocess.Peopen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                        multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
+                        proc.communicate("\n".join(multiwfn_commands).encode())
+                        os.rename(f'{chg_prefix}.chg', file_path_multipole)
 
-                else:
-                    command_A = f"{multiwfn_path} {molden_filename}"
-                    chg_prefix,  _ = os.path.splitext(molden_filename)
-                    proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                    calc_command = self.dict_of_calcs[charge_type]
-                    commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
-                    if charge_type == 'CHELPG':
-                        commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
-                    elif charge_type == 'Hirshfeld_I':
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
-                    output = proc.communicate("\n".join(commands).encode())
-                    os.rename(f'{chg_prefix}.chg', file_path_monopole)
-                end = time.time()
-                comp_cost = end - start
+                    else:
+                        command_A = f"{multiwfn_path} {molden_filename}"
+                        chg_prefix,  _ = os.path.splitext(molden_filename)
+                        proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                        calc_command = self.dict_of_calcs[charge_type]
+                        commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
+                        if charge_type == 'CHELPG':
+                            commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
+                        elif charge_type == 'Hirshfeld_I':
+                            atmrad_src = atmrad_path
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+                        output = proc.communicate("\n".join(commands).encode())
+                        os.rename(f'{chg_prefix}.chg', file_path_monopole)
+                    end = time.time()
+                    comp_cost = end - start
+                except Exception as e:
+                    print(e)
+                    #Issue could be from lost memorry
+                    if charge_type =='Hirshfeld_I':
+                        print(f'Trying to remedy the OOM error often found in I-Hirshfeld calculations')
+                        start = time.time()
+                        if multipole_bool:
+                             multiwfn_commands = ['15', '-1', '4', '-2', '1', '2', '0', 'q']
+                             proc.communicate("\n".join(multiwfn_commands).encode())
+                             os.rename(f'{chg_prefix}.chg', file_path_multipole)
+                        else:
+                            commands = ['7', '15', '-2', '1', 'y', '0', 'q']
+                            output = proc.communicate("\n".join(commands).encode())
+                            os.rename(f'{chg_prefix}.chg', file_path_monopole)
+                        end = time.time()
+                        comp_cost = end - start
+                    
             if multipole_bool:
                 xyz_fp =  final_structure_file
                 chg_fp = file_path_multipole
             else:
                 chg_fp = file_path_monopole
                 xyz_fp = ''
-            df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
+                df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
 
             solute_solvent_dict = {}
             solute_solvent_dict['Solute Indices'] = solute_indices
@@ -1719,10 +1543,6 @@ class Electrostatics:
         df.to_csv(f"{Efield_data_filename}.csv")
 
 
-
-    def image_partial_chgs(self, xyz_file_path, path_to_charge, pdb_name):
-        self.makePDB(xyz_file_path, path_to_charge, 'ChargeFile', pdb_name)
-
     def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
         '''
         Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
@@ -1812,20 +1632,11 @@ class Electrostatics:
         return df
 
     def compute_dipole(res_coords, res_chgs):
-        B_Ls = []
-        convert_Debye = 4.80320427
-        total_atoms = len(res_coords[:, 0])
-        for atom_idx in range(0, total_atoms):
-            atom_coords = np.array(res_coords[atom_idx, :])
-            for other_idx in range(atom_idx + 1, total_atoms):
-                other_atom = np.array(res_coords[other_idx, :])
-                print(f'Atom coords: {np.shape(atom_coords)} and other atom: {np.shape(other_atom)})')
-                BL = la.norm(atom_coords - other_atom)
-                print(f'BL between atom: {atom_idx} and {other_idx} is {BL}')
-                print(f'With charges: {res_chgs[atom_idx]} and {res_chgs[other_idx]}')
-
-        print(f'Here are the charges on solvent: {res_chgs}')
-
+        '''
+           res_coords in units of angstroms, res_chgs are in a.u. units
+           returns dipole in units of Debye
+        '''
+        convert_Debye = 4.80320427 
 
         #center coordinates
         center = np.average(res_coords, axis=0)
