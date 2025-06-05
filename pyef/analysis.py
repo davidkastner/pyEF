@@ -16,6 +16,7 @@ from importlib import resources
 from distutils.dir_util import copy_tree
 import openbabel
 from biopandas.pdb import PandasPdb
+from .geometry import Geometry
 import math
 import time
 class Electrostatics:
@@ -1093,7 +1094,7 @@ class Electrostatics:
         for f in list_of_folders:
             comp_cost = 'Na'
             num_atoms = 0
-            print(f'I am in {f}')
+            print(f'Current folder: {f}')
             need_to_run_calculation = True
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
@@ -1119,6 +1120,7 @@ class Electrostatics:
 
             #If you need to run the calculations, urn either the multipole or the monopole calculation!
             if need_to_run_calculation:
+                print(f'Running Calculation')
                 try: 
                     start = time.time()
                     if multipole_bool:
@@ -1141,8 +1143,13 @@ class Electrostatics:
                         if charge_type == 'CHELPG':
                             commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
                         elif charge_type == 'Hirshfeld_I':
+                            num_atoms = Electrostatics.mapcount(final_structure_file) - 2
+                            print(f'Number of atoms: {num_atoms}')
+                            if num_atoms > 720:
+                                commands = ['7', '15', '-2', '1', '\n', 'y', '0', 'q']
                             atmrad_src = atmrad_path
                             copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+                            #if too many atoms will need to change calc to run with reasonable memory 
                         output = proc.communicate("\n".join(commands).encode())
                         os.rename(f'{chg_prefix}.chg', file_path_monopole)
                     end = time.time()
@@ -1150,19 +1157,7 @@ class Electrostatics:
                 except Exception as e:
                     print(e)
                     #Issue could be from lost memorry
-                    if charge_type =='Hirshfeld_I':
-                        print(f'Trying to remedy the OOM error often found in I-Hirshfeld calculations')
-                        start = time.time()
-                        if multipole_bool:
-                             multiwfn_commands = ['15', '-1', '4', '-2', '1', '2', '0', 'q']
-                             proc.communicate("\n".join(multiwfn_commands).encode())
-                             os.rename(f'{chg_prefix}.chg', file_path_multipole)
-                        else:
-                            commands = ['7', '15', '-2', '1', 'y', '0', 'q']
-                            output = proc.communicate("\n".join(commands).encode())
-                            os.rename(f'{chg_prefix}.chg', file_path_monopole)
-                        end = time.time()
-                        comp_cost = end - start
+                    continue
                     
             if multipole_bool:
                 xyz_fp =  final_structure_file
