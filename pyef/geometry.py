@@ -17,7 +17,6 @@ from biopandas.pdb import PandasPdb
 import math
 import time
 
-
 class Geometry:
 
     def __init__(self, filexyz):
@@ -157,21 +156,34 @@ class Geometry:
 
 class Visualize:
 
+    def __init__(self, filexyz):
+        self.lst = lst
+        self.xyzfile = filexyz
 
-    def makePDBpercentEfield():
+    def makePDBpercentEfield(self):
         #make PDB with b-factor cols colored by percent of final efield 
+        xyzfie = self.filexyz
+        from .analysis import Electrostatics
 
-    def makePDBcontributionEfield():
+    def makePDBcontributionEfield(self):
         #make PDB with b-factor column color by the total E-field contribution from each atom
+        xyzfie = self.filexyz
+        from .analysis import Electrostatics
 
-    def makePDBcontributionESP():
+    def makePDBcontributionESP(self):
         #make PDB with b-factor columned colored by the total contribution form each atom to the ESP
+        xyzfie = self.filexyz
+        from .analysis import Electrostatics
 
-    def compareESP():
+    def compareESP(self):
         #compare the ESP at each atom, show how it differs betwen two differ
+        xyzfie = self.filexyz
+        from .analysis import Electrostatics
 
     def PDBESP():
         #visualize the ESP of the full system
+        xyzfie = self.filexyz
+        from .analysis import Electrostatics
 
     def makePDB(self, xyzfilename, output_filename, b_col, pdbName):
         ''' Function to generate PDB files with partial charges
