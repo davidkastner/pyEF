@@ -805,7 +805,7 @@ class Electrostatics:
         if len(xyzfilename) > 1:
             dict_multipole = Electrostatics.getmultipoles(chg_filename)  #Index, Element, Atom_Charge, Dipole_Moment....
             df_multipole = pd.DataFrame(dict_multipole)
-            df_geom = self.getGeomInfo(xyzfilename)
+            df_geom = Geometry(xyzfilename).getGeomInfo()
             merged_df = pd.merge(df_geom, df_multipole, left_index=True, right_index=True)
             merged_df['charge'] = merged_df['Atom_Charge']
             merged_df['x'] = merged_df['X']
@@ -1078,6 +1078,7 @@ class Electrostatics:
         Inputs:
         ------- 
         charge_type: string, possible choices include: 'Hirshfeld', 'Voronoi', 'Mulliken',  'Lowdin', 'SCPA', 'Becke', 'ADCH', 'CHELPG', 'MK', 'AIM', 'Hirshfeld_I', 'CM5', 'EEM', 'RESP', 'PEOE'}
+                    Also accepts multipole options including: 'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],   'Becke': ['1', '2']
         '''
         lst_dicts = []
         need_to_run_calculation = True
@@ -1098,7 +1099,7 @@ class Electrostatics:
             need_to_run_calculation = True
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
-            subprocess.call(multiwfn_module, shell=True)
+            #subprocess.call(multiwfn_module, shell=True)
             file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
             file_path_monopole = f"{os.getcwd()}/Charges{charge_type}.txt"
             file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
@@ -1127,12 +1128,13 @@ class Electrostatics:
                         chg_prefix, _ = os.path.splitext(molden_filename)
                         #Dynamically get path to package settings.ini file
                         with resources.path('pyef.resources', 'settings.ini') as ini_path:
-                            path_to_ini_file = str(ini_path)
+                            path_to_init_file = str(ini_path)
                             Command_Multipole = f"{multiwfn_path} {molden_filename} -set {path_to_init_file} > {file_path_multipole}"
-                        proc = subprocess.Peopen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                        proc = subprocess.Popen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                         multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
+                        if charge_type == 'Hirshfeld_I' and  num_atoms > 320:
+                            multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q'] 
                         proc.communicate("\n".join(multiwfn_commands).encode())
-                        os.rename(f'{chg_prefix}.chg', file_path_multipole)
 
                     else:
                         command_A = f"{multiwfn_path} {molden_filename}"
@@ -1157,11 +1159,13 @@ class Electrostatics:
                 except Exception as e:
                     print(e)
                     #Issue could be from lost memorry
+                    os.chdir(owd)
                     continue
                     
             if multipole_bool:
                 xyz_fp =  final_structure_file
                 chg_fp = file_path_multipole
+                df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
             else:
                 chg_fp = file_path_monopole
                 xyz_fp = ''
@@ -1174,8 +1178,7 @@ class Electrostatics:
             all_indices = list(np.arange(0, total_atoms))
             solute_solvent_dict['Solvent Indices'] = [x for x in all_indices if x not in solute_indices]
             res_dict = self.get_residues(False, solute_solvent_dict)
-            df_dip = self.getdipole_residues(res_dict, df_charge_atoms)
-                
+            df_dip = self.getdipole_residues(res_dict, df_charge_atoms) 
             #re-order res by closest to the solute
             all_centroids = np.vstack(df_dip['centroid'].values)
             solute_name = 'Solute'
@@ -1191,7 +1194,7 @@ class Electrostatics:
 
             sorted_dips = df_dip['Dipole']
             avg_dips = np.average(sorted_dips[1:])
-
+            
             avg_first_5A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:])
             avg_5to7A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole'])
             avg_7to11A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 11) & (df_dip['Distance from solute'] > 7), 'Dipole'])
