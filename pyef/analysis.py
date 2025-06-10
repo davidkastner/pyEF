@@ -1133,9 +1133,12 @@ class Electrostatics:
                         proc = subprocess.Popen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                         multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
                         num_atoms = Electrostatics.mapcount(final_structure_file) - 2
-                        if charge_type == 'Hirshfeld_I' and  num_atoms > 320:
-                            multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q'] 
-                            print(f'I-Hirshfeld command should be low memory and slow to accomodate large system')
+                        if charge_type == 'Hirshfeld_I':
+                            atmrad_src = atmrad_path
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+                            if  num_atoms > 320:
+                                multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q'] 
+                                print(f'I-Hirshfeld command should be low memory and slow to accomodate large system')
                         proc.communicate("\n".join(multiwfn_commands).encode())
 
                     else:
