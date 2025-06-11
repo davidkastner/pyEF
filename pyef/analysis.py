@@ -171,6 +171,32 @@ class Electrostatics:
             pattern_i = re.compile(r'(I\s+\d+\s+)(\d+)')
             content = pattern_i.sub(r'\g<1>7', content)
 
+            pattern_i = re.compile(r'(Pd\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>18', content)
+
+            pattern_i = re.compile(r'(Ni\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>10', content)
+
+            pattern_i = re.compile(r'(Cu\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>11', content)
+
+            pattern_i = re.compile(r'(Zn\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>12', content)
+
+            pattern_i = re.compile(r'(Ag\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>19', content)
+
+            pattern_i = re.compile(r'(Mn\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>7', content)
+
+            pattern_i = re.compile(r'(Rh\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>17', content)
+
+            pattern_i = re.compile(r'(Ti\s+\d+\s+)(\d+)')
+            content = pattern_i.sub(r'\g<1>4', content)
+
+
+
             with open(self.molden_filename, 'w') as file:
                 file.write(content)
             print("      > Molden file is fixed\n")
@@ -178,7 +204,7 @@ class Electrostatics:
 
     def prepData(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
-
+        self.fix_ECPmolden()
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
@@ -1195,22 +1221,20 @@ class Electrostatics:
             # Get sort order (indices of sorted distances)
             df_dip['Distance from solute'] = distances
             init_dipole = df_dip['Dipole']
+            
             df_dip.sort_values(by='Distance from solute', ascending=True)
 
             sorted_dips = df_dip['Dipole']
             avg_dips = np.average(sorted_dips[1:])
             
-            avg_first_5A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:])
-            avg_5to7A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole'])
-            avg_7to11A = np.average(df_dip.loc[(df_dip['Distance from solute'] < 11) & (df_dip['Distance from solute'] > 7), 'Dipole'])
-            avg_above11A = np.average(df_dip.loc[df_dip['Distance from solute'] > 11, 'Dipole'])
-
+            first_5A = df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:]
+            v5to7A = df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole']
+            v7to11A = df_dip.loc[(df_dip['Distance from solute'] < 11) & (df_dip['Distance from solute'] > 7), 'Dipole']
+            above11A = df_dip.loc[(df_dip['Distance from solute'] > 11), 'Dipole']
 
             #return a list of the solvents
-             #return an average of the dipoles in first x closests; next x closest, etc.
 
-            dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': avg_first_5A, 'Avg5to7Ang': avg_5to7A , 'Avg7to11Ang': avg_7to11A, 'Avgabove11Ang': avg_above11A, 'CompCost': comp_cost, 'Total_atoms': total_atoms}
-            print(dip_dict)
+            dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': np.average(first_5A), 'Avg5to7Ang': np.average(v5to7A) , 'Avg7to11Ang': np.average(v7to11A), 'Avgabove11Ang': np.average(above11A), 'CompCost': comp_cost, 'Num5Avg':len(first_5A), 'Num5to7':len(v5to7A), 'Num7to11A': len(v7to11A), 'Numabove11A': len(above11A), 'Total_atoms': total_atoms}
             lst_dicts.append(dip_dict)
             os.chdir(owd)
         all_file_df = pd.DataFrame(lst_dicts)
