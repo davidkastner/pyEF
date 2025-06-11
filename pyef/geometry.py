@@ -102,6 +102,23 @@ class Geometry:
         # Define upper limit for bond cutoff depending on the two atoms involved
         return df
 
+    def getCentroidDistance(substrate_xyz, ref_xyz):
+        centroid_sub = np.mean(np.array(substrate_xyz), axis=1)
+        centroid_ref = np.mean(np.array(ref_xyz), axis=1)
+        distance = np.linalg.norm(centroid_ref - centroid_sub)
+        return distance
+
+    def getSubstrateFramePosition(self, idx_substrate):
+        filepathtoxyz  = self.xyzfile
+        df_mol = self.getGeomInfo()
+
+        sub_X = df_mol['X'][idx_substrate]
+        sub_Y = df_mol['Y'][idx_substrate]
+        sub_Z = df_mol['Z'][idx_substrate]
+
+        sub_xyz = np.array([sub_X, sub_Y, sub_Z])
+        all_xyz = np.array([df_mol['X'], df_mol['Y'], df_mol['Z']])
+        return Geometry.getCentroidDistance(sub_xyz, all_xyz)
 
     def getBondedAtoms(self, filepathtoxyz, atomidx):
         '''
@@ -113,7 +130,7 @@ class Geometry:
         '''
         filepathtoxyz  = self.xyzfile
         bonded_atom_indices = []
-        df_mol = self.getGeomInfo(filepathtoxyz)
+        df_mol = self.getGeomInfo()
         atm_rad = df_mol['Radius'][atomidx]
         atm_X = df_mol['X'][atomidx]
         atm_Y = df_mol['Y'][atomidx]
