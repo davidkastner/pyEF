@@ -17,6 +17,7 @@ from distutils.dir_util import copy_tree
 import openbabel
 from biopandas.pdb import PandasPdb
 from .geometry import Geometry
+from .geometry import Visualize
 import math
 import time
 class Electrostatics:
@@ -118,10 +119,11 @@ class Electrostatics:
         print(f'Point charges to be included via {name_ptch_file}')
     def set_dielec_scale(self, dielec):
         self.dielectric_scale = dielec
-    def excludeAtomsFromEfieldCalc(self, atom_to_exclude):
+    def initialize_excludeAtomsFromEfieldCalc(self, atom_to_exclude):
         ''' Function to exclude atoms from Efield calculation
         Input: atom_to_exclude: list of integers of atom indices
         '''
+        
         self.excludeAtomfromEcalc = atom_to_exclude
 
     def minDielecBonds(self, bool_bonds):
@@ -524,7 +526,7 @@ class Electrostatics:
         C_e = 1.6023*(10**-19)
         bohr_to_m = 0.52918*10**(-10) 
         atom_wise_additions = []
-        for idx in charge_range:
+        for idx in range(0, len(xs)):
             if idx == idx_atom:
                 atom_wise_additions.append([0,0,0])
                 continue
@@ -719,8 +721,6 @@ class Electrostatics:
                 E_vec[2] += E_to_add[2]
             #Add contributions to Monopole E from point charges to total E
         return [Vm_to_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], Vm_to_VA*np.array(Monopole_E) ]
-
-
 
 
 
@@ -1702,7 +1702,13 @@ class Electrostatics:
             else:
                 path_to_pol = file_path_charges
             [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_indices, file_path_xyz, path_to_pol, all_lines, multipole_bool)
-                    # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
+
+
+            pdbName = 'Efield_cont'+ str(f)+ str(charge_type)+'_.pdb'
+            b_col = E_proj_atomwise
+            output_file = path_to_pol
+            Visualize(file_path_xyz).makePDB(output_file, b_col, pdbName)
+            # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
            
             #Get non bool manual mode functionality later!!
             #[proj_Efields, bondedAs, bonded_idx, bond_lens, monopole_proj] = self.E_proj_first_coord(atom_idx,file_path_xyz, path_to_pol, all_lines)

@@ -173,7 +173,6 @@ class Geometry:
 class Visualize:
 
     def __init__(self, filexyz):
-        self.lst = lst
         self.xyzfile = filexyz
 
     def makePDBpercentEfield(self):
@@ -184,6 +183,10 @@ class Visualize:
     def makePDBcontributionEfield(self):
         #make PDB with b-factor column color by the total E-field contribution from each atom
         xyzfie = self.filexyz
+
+
+        ppdb.df['HETATM']['b_factor'] = charges
+        ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
         from .analysis import Electrostatics
 
     def makePDBcontributionESP(self):
@@ -201,7 +204,7 @@ class Visualize:
         xyzfie = self.filexyz
         from .analysis import Electrostatics
 
-    def makePDB(self, xyzfilename, output_filename, b_col, pdbName):
+    def makePDB(self, output_filename, b_col, pdbName):
         ''' Function to generate PDB files with partial charges
         Input: xyzfilename: string of xyz filename
         output_filename: string of output filename
@@ -209,8 +212,46 @@ class Visualize:
         pdbName: string of output pdb filename
         Output: .pdb file with partial charges
         '''
+        xyzfilename = self.xyzfile
+        df = Geometry(self.xyzfile).getGeomInfo()
+        #get out the xyz coords, charges, and atoms!
+        #run the outpute_filename
+        obConversion = openbabel.OBConversion()
+        obConversion.SetOutFormat("pdb")
+        #mol = openbabel.OBMol()
+        #df = pd.read_csv(output_filename, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+        #atoms = df['Atom']
+        #charges = df['charge']
+        #xs = df['x']
+        #ys = df['y']
+        #zs = df['z']
+
+        obConversion = openbabel.OBConversion()
+        obConversion.SetInAndOutFormats("xyz", "pdb")
+  
+        mol = openbabel.OBMol()
+        obConversion.ReadFile(mol, xyzfilename)
+        mol.ConnectTheDots()
+        mol.PerceiveBondOrders()
+        mol.FindRingAtomsAndBonds()
+
+        obConversion.WriteFile(mol, pdbName)
+        ppdb = PandasPdb()
+        ppdb.read_pdb(pdbName)
+        ppdb.df['HETATM']['b_factor'] = b_col
+        ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
+
+    def makePDBcharges(self, output_filename, b_col, pdbName):
+        ''' Function to generate PDB files with partial charges
+        Input: xyzfilename: string of xyz filename
+        output_filename: string of output filename
+        type_charge: string of type of charge (Monopole or Multipole)
+        pdbName: string of output pdb filename
+        Output: .pdb file with partial charges
+        '''
+        xyzfile = self.xyzfile
         print(f'Final XYZ filename: {xyzfilename}')
-        df = self.getGeomInfo(xyzfilename)
+        df = self.getGeomInfo()
         #get out the xyz coords, charges, and atoms!
         #run the outpute_filename
         obConversion = openbabel.OBConversion()
