@@ -120,7 +120,7 @@ class Geometry:
         all_xyz = np.array([df_mol['X'], df_mol['Y'], df_mol['Z']])
         return Geometry.getCentroidDistance(sub_xyz, all_xyz)
 
-    def getBondedAtoms(self, filepathtoxyz, atomidx):
+    def getBondedAtoms(self,  atomidx):
         '''
         Input:
         filepathtoxyz: string of xyz filename
