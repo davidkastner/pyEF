@@ -215,23 +215,23 @@ class Electrostatics:
         backup_xyz = 'xyz.xyz'
 
         for f in list_of_folders:
-            folder_path = os.path.join(owd, f + folder_to_molden)
-            print('      > .molden and .xyz file should be located here: ' + folder_path)
+            try:
+                folder_path = os.path.join(owd, f + folder_to_molden)
+                print('      > .molden and .xyz file should be located here: ' + folder_path)
 
-            # Processing optim.xyz to create final_optim.xyz
-            final_optim_xyz = os.path.join(folder_path, self.xyzfilename)
+                # Processing optim.xyz to create final_optim.xyz
+                final_optim_xyz = os.path.join(folder_path, self.xyzfilename)
 
-            # Copying .molden files to final_optim.molden
-            final_optim_molden = os.path.join(folder_path, self.molden_filename)
+                # Copying .molden files to final_optim.molden
+                final_optim_molden = os.path.join(folder_path, self.molden_filename)
 
-            #this is for the full optimization cycle
-            optim_file_path = os.path.join(folder_path, 'optim.xyz')
+                #this is for the full optimization cycle
+                optim_file_path = os.path.join(folder_path, 'optim.xyz')
 
 
-            if not os.path.exists(final_optim_molden):
-                print(f'Expected .molden with filename: {self.molden_filename} in {folder_path}. We could not find a .molden filename with the default prefix, you can alter using: set_molden_filename()')
-                print(f"For now searching for all .molden files in directory. If you only have one .molden file in this directory, the defauly prefix will be altered ")
-                try:
+                if not os.path.exists(final_optim_molden):
+                    print(f'Expected .molden with filename: {self.molden_filename} in {folder_path}. We could not find a .molden filename with the default prefix, you can alter using: set_molden_filename()')
+                    print(f"For now searching for all .molden files in directory. If you only have one .molden file in this directory, the defauly prefix will be altered ")
                     files = glob.iglob(os.path.join(folder_path, "*.molden"))
                     for file in files:
                         if os.path.abspath(file) != os.path.abspath(final_optim_molden):
@@ -242,45 +242,51 @@ class Electrostatics:
                             backup_xyz = file_prefix + '.xyz'
                             print(f'Default .molden file name is now changed to {self.molden_filename}')
                             break
-                except Exception as e:
-                    logging.exception('An Exception was thrown while copying molden files.')
-            else:
-                print(f"      > {self.molden_filename} sucessflly located in {folder_path}.")
-
-
-
-            if not os.path.exists(final_optim_xyz):
-                try:
-                    with open(optim_file_path, 'r') as full_traj:
-                        num_atoms = int(full_traj.readline())
-                        num_lines = num_atoms + 2
-                        # If ends on first optimization of cycle, change cutting pattern
-                        full_traj.seek(0)
-                        head = [next(full_traj) for _ in range(num_lines)]
-                        full_traj.seek(0)
-                        with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
-                            initxyz.writelines(head)
-                        with open(final_optim_xyz, 'w') as finalxyz:
-                            finalxyz.writelines(deque(full_traj, num_lines))
-                except Exception as e:
-                    print(f'Expected .xyz with filename: {self.xyzfilename} in {folder_path}. If your xyz filename does NOT match the default, you can alter using: set_xyzfilename()')
-                    print(f'We will try to use the anticipated prefix from the associated molden file: {backup_xyz}')
-                    backup_file = os.path.join(folder_path, backup_xyz)
-                    if os.path.exists(backup_file):
-                        self.xyzfilename = backup_xyz
-                        logging.info(f'Single point data found. Using {backup_xyz} as fallback.')
-
                     else:
-                        logging.exception(f'An unexpected error occurred while processing optim.xyz: {e}')
-            else:
-                print(f'      > {self.xyzfilename} succesfully located in {folder_path}.')            
+                        raise Exception("Unable to locate any .molden file in directory: {f}")
+                else:
+                    print(f"      > {self.molden_filename} sucessflly located in {folder_path}.")
 
-            # Copying .molden files to final_optim.molden
-            final_optim_molden = os.path.join(folder_path, self.molden_filename)
-            backup_xyz = 'final_optim'
 
+
+                if not os.path.exists(final_optim_xyz):
+                    try:
+                        with open(optim_file_path, 'r') as full_traj:
+                            num_atoms = int(full_traj.readline())
+                            num_lines = num_atoms + 2
+                            # If ends on first optimization of cycle, change cutting pattern
+                            full_traj.seek(0)
+                            head = [next(full_traj) for _ in range(num_lines)]
+                            full_traj.seek(0)
+                            with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
+                                initxyz.writelines(head)
+                            with open(final_optim_xyz, 'w') as finalxyz:
+                                finalxyz.writelines(deque(full_traj, num_lines))
+                    except Exception as e:
+                        print(f'Expected .xyz with filename: {self.xyzfilename} in {folder_path}. If your xyz filename does NOT match the default, you can alter using: set_xyzfilename()')
+                        print(f'We will try to use the anticipated prefix from the associated molden file: {backup_xyz}')
+                        backup_file = os.path.join(folder_path, backup_xyz)
+                        if os.path.exists(backup_file):
+                            self.xyzfilename = backup_xyz
+                            logging.info(f'Single point data found. Using {backup_xyz} as fallback.')
+                        else:
+                            raise Exception("Could not locate .molden or corresponding .xyz file in directory {f}")
+
+                else:
+                    print(f'      > {self.xyzfilename} succesfully located in {folder_path}.')            
+
+                # Copying .molden files to final_optim.molden
+                final_optim_molden = os.path.join(folder_path, self.molden_filename)
+                backup_xyz = 'final_optim'
+            except Exception as e:
+                print(f'Could not locate molden and corresponding xyz file in {f} please rename these files if they exist')
+                print(f'For now I am just taking this folder out of the list')
+
+                list_of_folders.remove(f)
+                os.chdir(owd)
+        self.lst_of_folders = list_of_folders
         os.chdir(owd)
-        self.fix_ECPmolden()
+        #self.fix_ECPmolden()
 
 
     def getmultipoles(multipole_name):
@@ -973,7 +979,9 @@ class Electrostatics:
             print(bond_indices)
             for atomidxA, atomidxB in bond_indices:
                 [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  Electrostatics.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file)   
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  Electrostatics.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file)  
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  Electrostatics.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file) 
+
+                print(f'Here I have A: {A_bonded_atom} with b: {B_bonded_atom}')
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
                 bond_len = np.linalg.norm(bond_vec_unnorm)
                 bond_vec = bond_vec_unnorm/(bond_len)
@@ -1337,7 +1345,6 @@ class Electrostatics:
             solvent_idxs = solute_solvent_dict['Solvent Indices']
             num_atoms_solvent = solute_solvent_dict['Num Atoms in Solvent']
             num_solvent_res = int(len(solvent_idxs)/num_atoms_solvent)
-            print(f'Num solvents: {num_solvent_res}')
             for solv_num in range(0, num_solvent_res):
                 res_dict[f'Solvent_{solv_num}'] = solvent_idxs[solv_num*num_atoms_solvent:(solv_num+1)*(num_atoms_solvent)]
         return res_dict
@@ -1445,63 +1452,66 @@ class Electrostatics:
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd() # Old working directory
-        print(f'Currently the owd is: {owd}')
         molden_filename = self.molden_filename
         final_structure_file = self.xyzfilename
+        frame_num_lst = []
 
 
         for f in list_of_folders:
-            comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd) 
-            #If the calculation is not succesfully, continue
-            if comp_cost == 'Na':
-                continue
-            file_path_multipole = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
-            file_path_monopole = f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
-            file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
+            try:
+                comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd) 
+                #If the calculation is not succesfully, continue
+                if comp_cost == 'Na':
+                    continue
+                file_path_multipole = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
+                file_path_monopole = f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
+                file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
                     
-            if multipole_bool:
-                xyz_fp =  final_structure_file
-                chg_fp = file_path_multipole
-                df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
-            else:
-                chg_fp = file_path_monopole
-                xyz_fp = ''
-                df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
-
-            solute_solvent_dict = {}
-            solute_solvent_dict['Solute Indices'] = solute_indices
-            solute_solvent_dict['Num Atoms in Solvent'] = num_atoms_solvent
-            total_atoms = Electrostatics.mapcount(file_path_xyz) -2
-            all_indices = list(np.arange(0, total_atoms))
-            solute_solvent_dict['Solvent Indices'] = [x for x in all_indices if x not in solute_indices]
-            res_dict = self.get_residues(False, solute_solvent_dict)
-            df_dip = self.getdipole_residues(res_dict, df_charge_atoms) 
-            #re-order res by closest to the solute
-            all_centroids = np.vstack(df_dip['centroid'].values)
-            solute_name = 'Solute'
-            ref_coord = df_dip.loc[df_dip['Label'] == solute_name, 'centroid']
-
-            ref_coord_arr = ref_coord.values[0]
-            # Compute distances to reference
-            distances = np.linalg.norm(all_centroids - ref_coord_arr, axis=1)
-            # Get sort order (indices of sorted distances)
-            df_dip['Distance from solute'] = distances
-            init_dipole = df_dip['Dipole']
+                if multipole_bool:
+                    xyz_fp =  final_structure_file
+                    chg_fp = file_path_multipole
+                    df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
+                else:
+                    chg_fp = file_path_monopole
+                    xyz_fp = ''
+                    df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
+                solute_solvent_dict = {}
+                solute_solvent_dict['Solute Indices'] = solute_indices
+                solute_solvent_dict['Num Atoms in Solvent'] = num_atoms_solvent
+                total_atoms = Electrostatics.mapcount(file_path_xyz) -2
+                all_indices = list(np.arange(0, total_atoms))
+                solute_solvent_dict['Solvent Indices'] = [x for x in all_indices if x not in solute_indices]
+                res_dict = self.get_residues(False, solute_solvent_dict)
+                df_dip = self.getdipole_residues(res_dict, df_charge_atoms) 
+                #re-order res by closest to the solute
+                all_centroids = np.vstack(df_dip['centroid'].values)
+                solute_name = 'Solute'
+                ref_coord = df_dip.loc[df_dip['Label'] == solute_name, 'centroid']
+                ref_coord_arr = ref_coord.values[0]
+                # Compute distances to reference
+                distances = np.linalg.norm(all_centroids - ref_coord_arr, axis=1)
+                # Get sort order (indices of sorted distances)
+                df_dip['Distance from solute'] = distances
+                init_dipole = df_dip['Dipole']
             
-            df_dip.sort_values(by='Distance from solute', ascending=True)
+                df_dip.sort_values(by='Distance from solute', ascending=True)
 
-            sorted_dips = df_dip['Dipole']
-            avg_dips = np.average(sorted_dips[1:])
+                sorted_dips = df_dip['Dipole']
+                avg_dips = np.average(sorted_dips[1:])
             
-            first_5A = df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:]
-            v5to7A = df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole']
-            v7to11A = df_dip.loc[(df_dip['Distance from solute'] < 11) & (df_dip['Distance from solute'] > 7), 'Dipole']
-            above11A = df_dip.loc[(df_dip['Distance from solute'] > 11), 'Dipole']
+                first_5A = df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:]
+                v5to7A = df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole']
+                v7to11A = df_dip.loc[(df_dip['Distance from solute'] < 11) & (df_dip['Distance from solute'] > 7), 'Dipole']
+                above11A = df_dip.loc[(df_dip['Distance from solute'] > 11), 'Dipole']
 
-            #return a list of the solvents
+                #return a list of the solvents
 
-            dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': np.average(first_5A), 'Avg5to7Ang': np.average(v5to7A) , 'Avg7to11Ang': np.average(v7to11A), 'Avgabove11Ang': np.average(above11A), 'CompCost': comp_cost, 'Num5Avg':len(first_5A), 'Num5to7':len(v5to7A), 'Num7to11A': len(v7to11A), 'Numabove11A': len(above11A), 'Total_atoms': total_atoms}
-            lst_dicts.append(dip_dict)
+                dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': np.average(first_5A), 'Avg5to7Ang': np.average(v5to7A) , 'Avg7to11Ang': np.average(v7to11A), 'Avgabove11Ang': np.average(above11A), 'CompCost': comp_cost, 'Num5Avg':len(first_5A), 'Num5to7':len(v5to7A), 'Num7to11A': len(v7to11A), 'Numabove11A': len(above11A), 'Total_atoms': total_atoms, 'FrameNum': f }
+                lst_dicts.append(dip_dict)
+            except Exception as e:
+                print(e)
+                print(f'Calcualtion failed')
+                continue
 
         all_file_df = pd.DataFrame(lst_dicts)
         all_file_df.to_csv('Dipoles.csv')
@@ -1708,6 +1718,18 @@ class Electrostatics:
             b_col = E_proj_atomwise
             output_file = path_to_pol
             Visualize(file_path_xyz).makePDB(output_file, b_col, pdbName)
+
+            if multipole_bool:
+                path_to_pol = file_path_multipole
+                temp_xyz = file_path_xyz
+            else:
+                path_to_pol = file_path_charges
+                temp_xyz = ''
+
+            df  = Electrostatics.charge_atoms(self, path_to_pol, temp_xyz)
+            charge_b_col = df['charge']
+            pdbName = 'Charges_'+ str(f)+ str(charge_type)+'_.pdb'
+            Visualize(file_path_xyz).makePDB(output_file, charge_b_col, pdbName)
             # Otherwise, automatically sense atoms bonded to metal and output E-fields of those
            
             #Get non bool manual mode functionality later!!
@@ -1964,7 +1986,7 @@ class Electrostatics:
         df.to_csv(partial_chg_filename +'.csv')
         return df
 
-    def compute_dipole(res_coords, res_chgs):
+    def compute_dipole(res_coords, res_chgs, nuc_chgs):
         '''
            res_coords in units of angstroms, res_chgs are in a.u. units
            returns dipole in units of Debye
@@ -1972,10 +1994,15 @@ class Electrostatics:
         convert_Debye = 4.80320427 
 
         #center coordinates
-        center = np.average(res_coords, axis=0)
+        #center = np.average(res_coords, axis=0)
+        center = res_coords[0, :]
+        #center = np.average(res_coords, axis=0, weights=nuc_chgs)
         coords_centered = res_coords - center
         dipole_vector = convert_Debye*np.sum(coords_centered*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
         dipole_magnitude = np.linalg.norm(dipole_vector)
+        print(f'Dipole: {dipole_vector}')
+        print(f'Sum charges: {np.sum(res_chgs)}')
+        print(f'Dipole magnitude: {dipole_magnitude}')
         return dipole_vector, dipole_magnitude
 
 
@@ -1987,15 +2014,20 @@ class Electrostatics:
         dipole_magnitudes = []
         res_labels = []
         centroid_lst = []
-        arr_coords = np.array(df[['x', 'y', 'z']])
+
+        arr_coords = df[['x', 'y', 'z']].to_numpy()
+        atoms = df['Atom']
         arr_chgs = np.array(df['charge'])
         for res_name in res_dict.keys():
+            print(f'res_name')
             res_labels.append(res_name)
             res_indices = res_dict[res_name]
             res_coords = arr_coords[res_indices]
             res_centroid = res_coords.mean(axis=0)
             res_chgs = arr_chgs[res_indices]
-            dip_vec, dip_mag = Electrostatics.compute_dipole(res_coords, res_chgs)
+            atom_vals = [atoms[i] for i in res_indices]
+            nuc_chgs = [self.amassdict[atom_val][1] for atom_val in atom_vals]
+            dip_vec, dip_mag = Electrostatics.compute_dipole(res_coords, res_chgs, nuc_chgs)
             dipole_vectors.append(dip_vec)
             dipole_magnitudes.append(dip_mag)
             centroid_lst.append(res_centroid)
