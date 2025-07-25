@@ -53,6 +53,8 @@ class Electrostatics:
         self.ptchgdf = None
         self.molden_filename = 'final_optim.molden'
         self.xyzfilename = 'final_optim.xyz'
+        self.chgprefix = ''
+        self.rerun = False
         #default setting does not generate PDB files
         self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
@@ -110,6 +112,11 @@ class Electrostatics:
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
 
+    def setRunrunBool(self, rename, setbool=True):
+        self.chgprefix = rename
+        self.rerun = setbool
+    def setExcludeAtomFromCalc(self, lstExcludeAtoms):
+        self.excludeAtomfromEcalc = lstExcludeAtoms
     def includePtChgs(self, name_ptch_file):
         ''' Function to include point charges in ESP calculation
         Input: name_ptch_file: string of point charge filename
@@ -349,6 +356,7 @@ class Electrostatics:
         Input: filename_pt: string of point charge filename
         Output: dataframe with partial charges and coordinates
         '''
+        print(f'Looking for point charge file: {filename_pt} from {os.getcwd()}')
         chg_df = pd.read_table(filename_pt, skiprows=2, delim_whitespace=True, names=['charge', 'x', 'y', 'z'])
         atm_name = ['pnt']
         atoms = atm_name*len(chg_df['charge'])
@@ -497,7 +505,7 @@ class Electrostatics:
 
 
 
-    def calc_firstTermE_atom_decomposable(espatom_idx, charge_range, charge_file):
+    def calc_firstTermE_atom_decomposable(self, espatom_idx, charge_range, charge_file):
         '''
         Input: espatom_idx: integer of atom index
         charge_range: list of integers of atom indices
@@ -505,6 +513,9 @@ class Electrostatics:
         Output: list of E-field vector and atomic symbol
         '''
 
+        inv_eps = 1/(self.dielectric)
+        A_to_m = 10**(-10)
+        Vm_to_VA = 10**(-10)
         # E in units of V/(ansgrom) = N*m/(C*Angstrom)
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  #Coulombic constant in kg*m**3/(s**4*A**2)
@@ -522,13 +533,12 @@ class Electrostatics:
         xo = xs[idx_atom]
         yo = ys[idx_atom]
         zo = zs[idx_atom]
-        position_vec = [xo, yo, zo]
+        position_vec = A_to_m*np.array([xo, yo, zo])
         Ex = 0
         Ey = 0
         Ez = 0
 
         # Unit conversion
-        A_to_m = 10**(-10)
         C_e = 1.6023*(10**-19)
         bohr_to_m = 0.52918*10**(-10) 
         atom_wise_additions = []
@@ -542,16 +552,45 @@ class Electrostatics:
             else:
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Ex_contrib = -k*C_e*(charges[idx]/r)*(1/(xs[idx] - xo)) 
-                Ey_contrib = -k*C_e*(charges[idx]/r)*(1/(ys[idx] - yo))
-                Ez_contrib = -k*C_e*(charges[idx]/r)*(1/(zs[idx] - zo))
+                Ex_contrib = -k*C_e*(charges[idx])*((xs[idx] - xo)*A_to_m)/(r**3)
+                Ey_contrib = -k*C_e*(charges[idx])*((ys[idx] - yo)*A_to_m)/(r**3)
+                Ez_contrib = -k*C_e*(charges[idx])*((zs[idx] - zo)*A_to_m)/(r**3)
                 Ex = Ex + Ex_contrib   
                 Ey = Ey + Ey_contrib 
                 Ez = Ez + Ez_contrib
                 atom_wise_additions.append([Ex_contrib, Ey_contrib,Ez_contrib ])
 
+
         E_vec = [Ex, Ey, Ez]
-        return [E_vec, position_vec, df['Atom'][idx_atom], atom_wise_additions ]
+        QM_charges = charges
+                #For QMMM calculation, include point charges in E field calc
+        if self.ptChgs:
+            qm_charges = charges
+            QM_coords = [xs, ys, zs]
+            df_ptchg  = self.ptchgdf
+            MM_xs = list(df_ptchg['x'])
+            MM_ys = list(df_ptchg['y'])
+            MM_zs = list(df_ptchg['z'])
+            init_MM_charges = list(df_ptchg['charge'])
+
+            #make new MM_charges by scaling!
+            mm_coords = np.column_stack((np.array(MM_xs), np.array(MM_ys), np.array(MM_zs)))
+            mm_charges = np.array(init_MM_charges)
+            qm_charges = np.array(QM_charges)
+            #MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
+
+            MM_charges = mm_charges*(1/(math.sqrt(self.dielectric_scale)))
+            #change charge range to include these new partial charges!
+            charge_range = range(0, len(MM_xs))
+            for chg_idx in charge_range:
+                r = (((MM_xs[chg_idx] - xo)*A_to_m)**2 + ((MM_ys[chg_idx] - yo)*A_to_m)**2 + ((MM_zs[chg_idx] - zo)*A_to_m)**2)**(0.5)
+                dist_vec = A_to_m*np.array([(MM_xs[chg_idx] - xo), (MM_ys[chg_idx] - yo), (MM_zs[chg_idx] - zo)])
+                E_to_add = -inv_eps*k*C_e*MM_charges[chg_idx]*(1/(r**3))*dist_vec
+                E_vec[0] += E_to_add[0]
+                E_vec[1] += E_to_add[1]
+                E_vec[2] += E_to_add[2]
+
+        return [Vm_to_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], Vm_to_VA*np.array(atom_wise_additions)]
 
     #Helper functions for resp-based adjustement of MD point charges
 
@@ -978,8 +1017,8 @@ class Electrostatics:
         else:
             print(bond_indices)
             for atomidxA, atomidxB in bond_indices:
-                [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  Electrostatics.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file)   
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  Electrostatics.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file) 
+                [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file)   
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file) 
 
                 print(f'Here I have A: {A_bonded_atom} with b: {B_bonded_atom}')
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
@@ -1358,6 +1397,7 @@ class Electrostatics:
         final_structure_file = self.xyzfilename
         '''
 
+        print(f'Getting charge info')
         molden_filename = self.molden_filename
         final_structure_file = self.xyzfilename
         comp_cost = -1
@@ -1367,8 +1407,8 @@ class Electrostatics:
         os.chdir(owd)
         os.chdir(f + folder_to_molden)
         #subprocess.call(multiwfn_module, shell=True)
-        file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
-        file_path_monopole = f"{os.getcwd()}/Charges{charge_type}.txt"
+        file_path_multipole = f"{os.getcwd()}/{self.chgprefix}Multipole{charge_type}.txt"
+        file_path_monopole = f"{os.getcwd()}/{self.chgprefix}Charges{charge_type}.txt"
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
 
         #check if previous calculations fully converged for desired multipole/charge scheme 
@@ -1387,7 +1427,7 @@ class Electrostatics:
             
 
         #If you need to run the calculations, urn either the multipole or the monopole calculation!
-        if need_to_run_calculation:
+        if need_to_run_calculation or self.rerun:
             print(f'Running Calculation')
             try: 
                 start = time.time()
@@ -1495,7 +1535,7 @@ class Electrostatics:
                 init_dipole = df_dip['Dipole']
             
                 df_dip.sort_values(by='Distance from solute', ascending=True)
-
+                df_dip.to_csv(f'frm{f}_chg{charge_type}_DistDependentDipoles.csv')
                 sorted_dips = df_dip['Dipole']
                 avg_dips = np.average(sorted_dips[1:])
             
@@ -1647,6 +1687,108 @@ class Electrostatics:
         return df
 
 
+#this should work both for polarizable and non-polarizable!! But all Efield contributiosn will be imaged atom-wise!
+#recalc is true will run no matter
+    def getEfield_acrossBond(self, charge_type, Efielddata_filename, multiwfn_module, multiwfn_path, atmrad_path, multipole_bool, input_bond_indices=[], dielectric=1):
+        '''
+        Function computes a series of ESP data using the charge scheme specified in charge types. All ESPs in Units of Volts
+        Inputs:
+        ------- 
+        charge_type: a string, possibel choices include: 'Hirshfeld', 'Becke', 'Hirshfeld_I', }
+        ESPdata_filename: string
+            Name of the output file name
+        multiwfn_module: string
+            Name of the module that contains the multiwfn executable
+        multiwfn_path: string
+            Path to the multiwfn executable
+        atmrad_path: string
+            Path to the atmrad executable
+        dielectric: float
+            Dielectric constant of the solvent
+    
+        Outputs:
+        -------
+        ESPdata_filename: string
+            Name of the output file name    '''
+
+        self.dielectric = dielectric
+       # Access Class Variables
+        metal_idxs = self.lst_of_tmcm_idx
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+        final_structure_file = self.xyzfilename
+
+        owd = os.getcwd() # Old working directory
+        allspeciesdict = []
+        counter = 0  # Iterator to account for atomic indices of interest
+        for f in list_of_file:
+            try:
+                input_bond_idx = input_bond_indices[counter]
+                results_dict = {}
+                file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
+                atom_idx = metal_idxs[counter]
+                total_lines = Electrostatics.mapcount(file_path_xyz)
+                print(f'total_lines: {total_lines}')
+                init_all_lines = range(0, total_lines - 2)
+                print(f'Counter: {counter}')
+                if len(self.excludeAtomfromEcalc) > 1:
+                    all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc[counter]]
+                else:
+                    all_lines = [x for x in init_all_lines]
+                comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
+                #If the calculation is not succesfully, continue
+                if comp_cost == 'Na':
+                    continue
+
+                file_path_multipole = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
+                file_path_charges= f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
+
+                #Account for point charges!!
+                num_pt_chgs = 0
+                if self.ptChgs:
+                    ptchg_filename = self.ptChgfp
+                    full_ptchg_fp = os.getcwd() + '/' + f + '/' + ptchg_filename
+                    df_ptchg = self.getPtChgs(full_ptchg_fp)
+                    num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom'])
+
+
+                #if bool_manual_mode:
+                #file_bond_indices = input_bond_indices[counter]
+
+                if multipole_bool:
+                    path_to_pol = file_path_multipole
+                else:
+                    path_to_pol = file_path_charges
+
+                [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool)
+
+
+                if multipole_bool:
+                    path_to_pol = file_path_multipole
+                    temp_xyz = file_path_xyz
+                else:
+                    path_to_pol = file_path_charges
+                    temp_xyz = ''
+
+                df  = Electrostatics.charge_atoms(self, path_to_pol, temp_xyz)
+
+                results_dict['Max Eproj'] = max(abs(np.array(proj_Efields)))
+                results_dict['Projected_Efields V/Angstrom'] = proj_Efields
+                results_dict['Bonded Atoms'] = bondedAs
+                results_dict['Bonded Indices'] = bonded_idx
+                results_dict['Bond Lengths']= bond_lens
+                results_dict['Comp Cost'] =comp_cost
+                results_dict['Folder'] = f
+                counter = counter + 1
+                allspeciesdict.append(results_dict)
+
+            except Exception as e:
+                print(e)
+                counter = counter + 1
+        os.chdir(owd)
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(f"{Efielddata_filename}.csv")
+        return df
 
 #this should work both for polarizable and non-polarizable!! But all Efield contributiosn will be imaged atom-wise!
     def getEfield_decomposable(self, charge_type, Efielddata_filename, multiwfn_module, multiwfn_path, atmrad_path, multipole_bool, input_bond_indices=[], dielectric=1):
@@ -1682,12 +1824,14 @@ class Electrostatics:
         allspeciesdict = []
         counter = 0  # Iterator to account for atomic indices of interest
         for f in list_of_file:
+            input_bond_idx = input_bond_indices[counter]
             results_dict = {}
             file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
             atom_idx = metal_idxs[counter]
             total_lines = Electrostatics.mapcount(file_path_xyz)
+            print(f'total_lines: {total_lines}')
             init_all_lines = range(0, total_lines - 2)
-            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
+            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc[counter]]
             comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd) 
             #If the calculation is not succesfully, continue
             if comp_cost == 'Na':
@@ -1700,7 +1844,8 @@ class Electrostatics:
             num_pt_chgs = 0
             if self.ptChgs:
                 ptchg_filename = self.ptChgfp
-                df_ptchg = self.getPtChgs(ptchg_filename)
+                full_ptchg_fp = os.getcwd() + '/' + f + '/' + ptchg_filename
+                df_ptchg = self.getPtChgs(full_ptchg_fp)
                 num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom']) 
 
 
@@ -1711,7 +1856,7 @@ class Electrostatics:
                 path_to_pol = file_path_multipole
             else:
                 path_to_pol = file_path_charges
-            [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_indices, file_path_xyz, path_to_pol, all_lines, multipole_bool)
+            [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool)
 
 
             pdbName = 'Efield_cont'+ str(f)+ str(charge_type)+'_.pdb'
@@ -1742,7 +1887,8 @@ class Electrostatics:
             results_dict['Bonded Atoms'] = bondedAs
             results_dict['Bonded Indices'] = bonded_idx
             results_dict['Bond Lengths']= bond_lens
-
+            results_dict['Comp Cost'] =comp_cost
+            results_dict['Folder'] = f
             #Make .pdb file from the E_proj_atomwise!!
 
             counter = counter + 1
@@ -2000,9 +2146,6 @@ class Electrostatics:
         coords_centered = res_coords - center
         dipole_vector = convert_Debye*np.sum(coords_centered*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
         dipole_magnitude = np.linalg.norm(dipole_vector)
-        print(f'Dipole: {dipole_vector}')
-        print(f'Sum charges: {np.sum(res_chgs)}')
-        print(f'Dipole magnitude: {dipole_magnitude}')
         return dipole_vector, dipole_magnitude
 
 
@@ -2019,7 +2162,6 @@ class Electrostatics:
         atoms = df['Atom']
         arr_chgs = np.array(df['charge'])
         for res_name in res_dict.keys():
-            print(f'res_name')
             res_labels.append(res_name)
             res_indices = res_dict[res_name]
             res_coords = arr_coords[res_indices]
