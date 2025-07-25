@@ -68,8 +68,42 @@ class Geometry:
              'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}
 
+        #taken from here: https://periodictable.com/Properties/A/VanDerWaalsRadius.v.html
 
-
+        self.vdwdict = {'X': (1.0, 0, 0.77, 0), 'H':1.2,
+             'D': (2.0141, 1, 0.37, 1), 'He': (1.4),
+             'Li': (6.94, 3, 1.33, 1), 'Be': (9.0121831, 4, 1.02, 2), 'B': (10.83, 5, 0.85, 3),
+             'C': 1.70, 'N': 1.55, 'O':1.52,
+             'F':  1.47, 'Ne': (20.1797, 10, 0.67, 8), 'Na': (22.99, 11, 1.55, 1),
+             'Mg': (24.30, 12, 1.39, 2), 'Al': (26.98, 13, 1.26, 3), 'Si': (28.08, 14, 1.16, 4),
+             'P': 1.75, 'S': 1.8, 'Cl':  1.75,
+             'Ar': (39.948, 18, 0.96, 8), 'K': (39.10, 19, 1.96, 1), 'Ca': (40.08, 20, 1.71, 2),
+             'Sc': (44.96, 21, 1.7, 3), 'Ti': (47.867, 22, 1.36, 4), 'V': (50.94, 23, 1.34, 5),
+             'Cr': (51.9961, 24, 1.27, 6), 'Mn': (54.938, 25, 1.39, 7), 'Fe': (55.84526, 26, 1.32, 8),
+             'Co': (58.9332, 27, 1.26, 9), 'Ni': (58.4934, 28, 1.24, 10), 'Cu': (63.546, 29, 1.38, 11),
+             'Zn': (65.39, 30, 1.31, 12), 'Ga': (69.72, 31, 1.26, 3), 'Ge': (72.63, 32, 1.22, 4),
+             'As': (74.92, 33, 1.21, 5), 'Se': (78.96, 34, 1.16, 6), 'Br': (79.904, 35, 1.14, 7),
+             'Kr': (83.798, 36, 1.17, 8), 'Rb': (85.47, 37, 2.10, 1), 'Sr': (87.62, 38, 1.85, 2),
+             'Y': (88.91, 39, 1.63, 3), 'Zr': (91.22, 40, 1.48, 4), 'Nb': (92.91, 41, 1.47, 5),
+             'Mo': (95.96, 42, 1.45, 6), 'Tc': (98.9, 43, 1.56, 7), 'Ru': (101.1, 44, 1.25, 8),
+             'Rh': (102.9, 45, 1.35, 9), 'Pd': (106.4, 46, 1.38, 10), 'Ag': (107.9, 47, 1.45, 11),
+             'Cd': (112.4, 48, 1.48, 12), 'In': (111.818, 49, 1.42, 3), 'Sn': (118.710, 50, 1.41, 4),
+             'Sb': (121.760, 51, 1.40, 5), 'Te': (127.60, 52, 1.99, 6), 'I': (126.90447, 53, 1.40, 7),
+             'Xe': (131.293, 54, 1.31, 8), 'Cs': (132.9055, 55, 2.44, 1), 'Ba': (137.327, 56, 1.96, 2),
+             'La': (138.9, 57, 1.69, 3), 'Ce': (140.116, 58, 1.63, 4), 'Pr': (140.90766, 59, 1.76, 5),
+             'Nd': (144.242, 60, 1.74, 6), 'Pm': (145, 61, 1.73, 7), 'Sm': (150.36, 62, 1.72, 8),
+             'Eu': (151.964, 63, 1.68, 9), 'Gd': (157.25, 64, 1.69, 10), 'Tb': (158.92535, 65, 1.68, 11),
+             'Dy': (162.500, 66, 1.67, 12), 'Ho': (164.93033, 67, 1.66, 13), 'Er': (167.259, 68, 1.65, 14),
+             'Tm': (168.93422, 69, 1.64, 15), 'Yb': (173.045, 70, 1.70, 16), 'Lu': (174.9668, 71, 1.62, 3),
+             'Hf': (178.5, 72, 1.50, 8), 'Ta': (180.9, 73, 1.38, 5), 'W': (183.8, 74, 1.46, 6),
+             'Re': (186.2, 75, 1.59, 7), 'Os': (190.2, 76, 1.28, 8), 'Ir': (192.2, 77, 1.37, 9),
+             'Pt': (195.1, 78, 1.36, 10), 'Au': (197.0, 79, 1.44, 11), 'Hg': (200.6, 80, 1.49, 2),
+             'Tl': (204.38, 81, 1.44, 3), 'Pb': (207.2, 82, 1.47, 4), 'Bi': (208.9804, 83, 1.51, 5),
+             'Po': (208.98, 84, 1.90, 6), 'At': (209.99, 85, 2.00, 7), 'Rn': (222.6, 86, 142, 4),
+             'Fr': (223.02, 87, 3.48, 8), 'Ra': (226.03, 88, 2.01, 2), 'Ac': (277, 89, 1.86, 3),
+             'Th': (232.0377, 90, 1.75, 4), 'Pa': (231.04, 91, 2.00, 5), 'U': (238.02891, 92, 1.70, 6),
+             'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
+             'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}
 
         #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
     def getGeomInfo(self):
@@ -94,6 +128,39 @@ class Geometry:
                     break
                 x, y, z = map(float, tokens[1:])
                 rad = self.amassdict[atom_name][2]
+                data.append([counter_idx, atom_name, x, y, z, rad])
+                counter_idx += 1
+
+        columns = ['Index', 'Atom', 'X', 'Y', 'Z', 'Radius']
+        df = pd.DataFrame(data, columns=columns)
+        # Define upper limit for bond cutoff depending on the two atoms involved
+        return df
+
+
+
+            #Accepts path to the xyz file and returns a dataframe containing the atoms names and the coordinates
+    def getGeomInfovDW(self):
+        '''
+        Input:
+        filepathtoxyz: string of xyz filename
+        Output: dataframe with atomic symbols and coordinates
+        '''
+        filepathtoxyz  = self.xyzfile
+        data = []
+        counter_idx = 0
+        with open(filepathtoxyz, 'r') as file:
+            # Skip the first two lines since they contain meta-deta
+            next(file)
+            next(file)
+            for line in file:
+                tokens = line.split()
+                if len(tokens) == 4:  # Assuming atom name and x, y, z coordinates are present
+                    atom_name = tokens[0].capitalize()
+                #for xyz in QMMM simulation, pnt charges at end of file, skip them!
+                if atom_name == 'pnt':
+                    break
+                x, y, z = map(float, tokens[1:])
+                rad = self.vdwdict[atom_name]
                 data.append([counter_idx, atom_name, x, y, z, rad])
                 counter_idx += 1
 
@@ -145,6 +212,75 @@ class Geometry:
 
         return bonded_atom_indices
 
+
+    def weak_Hbond_check(self,donors_weak, hydrogens, acceptors_weak, CH_bond_cutoff, HA_bond_cutoff,  weak_angle_cutoff):
+        # ---- Weak C?~@~SH...O H-bonds ----
+        hbond_weak = []
+        for _, donor in donors_weak.iterrows():
+            d_pos = np.array(donor['pos'])
+            bonded_Hs = hydrogens.copy()
+            bonded_Hs['dist'] = bonded_Hs['pos'].apply(lambda h: np.linalg.norm(d_pos - np.array(h)))
+            bonded_Hs = bonded_Hs[bonded_Hs['dist'] < CH_bond_cutoff]
+
+            for _, H in bonded_Hs.iterrows():
+                h_pos = np.array(H['pos'])
+                DH_vec = d_pos - h_pos 
+                DH_unit = DH_vec / np.linalg.norm(DH_vec)
+
+                for _, acc in acceptors_weak.iterrows():
+                    a_pos = np.array(acc['pos'])
+                    DA_vec = a_pos - h_pos
+                    Dfull_vec = a_pos - d_pos
+                    DA_dist = np.linalg.norm(DA_vec)
+                    if DA_dist > HA_bond_cutoff:
+                        continue
+                    DA_unit = DA_vec / DA_dist
+                    angle = np.degrees(np.arccos(np.clip(np.dot(DH_unit, DA_unit), -1.0, 1.0)))
+                    if angle >= weak_angle_cutoff:
+                        hbond_weak.append({
+                            'Type': 'Weak_C-H...O',
+                            'Donor': donor['Atom'], 'H': H['Atom'], 'Acceptor': acc['Atom'],
+                            'Donor_Index': donor['Index'], 'Acceptor_Index': acc['Index'],
+                            'Distance': DA_dist, 'Angle': angle})
+
+        return hbond_weak
+
+
+
+
+    def Hbond_check(self,donors_strong, hydrogens, acceptors_strong, hconv_cutoff, hcoor_cutoff,  strong_angle_cutoff):
+        hbond_strong = []
+        for _, donor in donors_strong.iterrows():
+            d_pos = np.array(donor['pos'])
+            bonded_Hs = hydrogens.copy()
+            bonded_Hs['dist'] = bonded_Hs['pos'].apply(lambda h: np.linalg.norm(d_pos - np.array(h)))
+            bonded_Hs = bonded_Hs[bonded_Hs['dist'] < hconv_cutoff]
+
+            for _, H in bonded_Hs.iterrows():
+                h_pos = np.array(H['pos'])
+                DH_vec = h_pos - d_pos
+
+                DH_unit = DH_vec / np.linalg.norm(DH_vec)
+
+                for _, acc in acceptors_strong.iterrows():
+                    a_pos = np.array(acc['pos'])
+                    DA_vec = a_pos - d_pos
+                    DA_dist = np.linalg.norm(DA_vec)
+
+                    if DA_dist > hcoor_cutoff:
+                        continue
+                    DA_unit = DA_vec / DA_dist
+                    angle = np.degrees(np.arccos(np.clip(np.dot(DH_unit, DA_unit), -1.0, 1.0)))
+                    if angle >= strong_angle_cutoff:
+                        hbond_strong.append({
+                            'Type': 'Classical',
+                            'Donor': donor['Atom'], 'H': H['Atom'], 'Acceptor': acc['Atom'],
+                            'Donor_Index': donor['Index'], 'Acceptor_Index': acc['Index'],
+                            'Distance': DA_dist, 'Angle': angle })
+
+        return hbond_strong
+
+
     def createpdbfromcoords(xyz_coords, charges, atoms, output_filename):
         '''
         Input: xyz_coords: list of tuples of coordinates
@@ -168,7 +304,130 @@ class Geometry:
 
         # Write the molecule to a PDB file
         obConversion.WriteFile(mol, output_filename)
+    def getCloseHcontacts(self, res_atoms):
+        print('Looking for close contacts between res atoms: {res_atoms} and environment')
+        #definition of a weak Ch..O coordination
+        df = self.getGeomInfo()
 
+        # Geometric parameters
+        hconv_cutoff = 1.2 #cutoff for h bonded to donor
+        hcoor_cutoff = 2.5 #cutoff for h distance from acceptor atom
+
+        CH_bond_cutoff = 1.1
+        HA_bond_cutoff = 3.0
+
+        strong_angle_cutoff = 120
+        weak_dist_cutoff = 3.2
+        weak_angle_cutoff = 100
+        bond_cutoff = 1.2
+        df['pos'] = df[['X', 'Y', 'Z']].apply(lambda row: np.array([row['X'], row['Y'], row['Z']]), axis=1)
+        all_indices = np.arange(0, len(df))
+        env_atoms = [val for val in all_indices if val not in res_atoms]
+        #CH and O within 3.2
+        solute_df = df[df['Index'].isin(res_atoms)]
+        env_df = df[df['Index'].isin(env_atoms)]
+
+
+
+        # ---- All hydrogens ----
+        hydrogens = df[df['Atom'].str.startswith('H')]
+
+        # Results lists
+
+        hbond_strong = []
+
+        ##---- Classical donors and acceptors ----
+        donor_atoms_strong = ('O', 'N', 'S', 'F')
+        acceptor_atoms_strong = ('O', 'N', 'S', 'F', 'Cl', 'Br', 'I')
+
+        solute_donors_strong = solute_df[solute_df['Atom'].str.startswith(donor_atoms_strong)]
+        env_acceptors_strong = env_df[env_df['Atom'].str.startswith(acceptor_atoms_strong)]
+
+        env_donors_strong = env_df[env_df['Atom'].str.startswith(donor_atoms_strong)]
+        solute_acceptors_strong = solute_df[solute_df['Atom'].str.startswith(acceptor_atoms_strong)]
+
+        str_Hbonds_solute = self.Hbond_check(solute_donors_strong, hydrogens, env_acceptors_strong, hconv_cutoff, hcoor_cutoff,  strong_angle_cutoff)
+        str_Hbonds_solvent = self.Hbond_check(env_donors_strong, hydrogens, solute_acceptors_strong, hconv_cutoff, hcoor_cutoff, strong_angle_cutoff)
+
+
+        # ---- Weak donors (C–H) and acceptors (include halogens) ----
+
+        donors_weak = solute_df[solute_df['Atom'].str.startswith('C')]
+        acceptors_weak = env_df[env_df['Atom'].str.startswith(('O', 'N', 'S', 'F', 'Cl', 'Br', 'I'))]
+        hydrogens = df[df['Atom'].str.startswith('H')]
+
+        solv_donors_weak = env_df[env_df['Atom'].str.startswith('C')]
+        solute_acceptors_weak = solute_df[solute_df['Atom'].str.startswith(('O', 'N', 'S', 'F', 'Cl', 'Br', 'I'))]
+
+        Hbonds_C_solute = self.weak_Hbond_check(donors_weak, hydrogens, acceptors_weak, CH_bond_cutoff, HA_bond_cutoff, weak_angle_cutoff)
+        Hbonds_C_solvent = self.weak_Hbond_check(solv_donors_weak, hydrogens, solute_acceptors_weak, CH_bond_cutoff, HA_bond_cutoff, weak_angle_cutoff)
+
+        # ---- Classical H-bonds (from solute to environment) ----
+
+        hbond_weak = Hbonds_C_solute + Hbonds_C_solvent
+        hbond_strong = str_Hbonds_solute + str_Hbonds_solvent
+
+        print(f"🔗 Classical H-bonds from solute → environment: {len(hbond_strong)}")
+
+        for hb in hbond_strong:
+            print(f"  {hb['Donor']}({hb['Donor_Index']})–{hb['H']}...{hb['Acceptor']}({hb['Acceptor_Index']}) "
+                    f"| dist = {hb['Distance']:.2f} Å, angle = {hb['Angle']:.1f}°")
+            print(f"\n🟡 Weak C–H...O interactions: {len(hbond_weak)}")
+
+        print(f"?~_~T~W weak H-bonds from solute ?~F~R environment: {len(hbond_weak)}")
+        for hb in hbond_weak:
+            print(f"  {hb['Donor']}({hb['Donor_Index']})–{hb['H']}...{hb['Acceptor']}({hb['Acceptor_Index']}) "
+                    f"| dist = {hb['Distance']:.2f} Å, angle = {hb['Angle']:.1f}°")
+
+
+        all_contacts_dict = {'NumHbonds' : len(hbond_strong), 'NumWeakHbonds': len(hbond_weak)}
+        return  all_contacts_dict
+
+    def countCloseContacts(self, res_atoms, factor):
+        contacts = []
+        total_close_atoms = []
+        df = self.getGeomInfovDW()
+        df['pos'] = df[['X', 'Y', 'Z']].apply(lambda row: np.array([row['X'], row['Y'], row['Z']]), axis=1)
+        all_indices = np.arange(0, len(df))
+        env_atoms = [val for val in all_indices if val not in res_atoms]
+
+        solute_df = df[df['Index'].isin(res_atoms)]
+        env_df = df[df['Index'].isin(env_atoms)]
+
+
+        for i, atom1 in solute_df.iterrows():
+            r1= atom1['Radius']
+            pos1 = atom1['pos']
+
+            for j, atom2 in env_df.iterrows():
+                pos2 = atom2['pos']
+                r2 = atom2['Radius']
+
+                dist = np.linalg.norm(pos1 - pos2)
+                contact_threshold = factor * (r1 + r2)
+
+
+                if dist < contact_threshold :
+                    contacts.append({
+                    'Atom1_Index': atom1['Index'],
+                    'Atom1_Type': atom1['Atom'],
+                    'Atom2_Index': atom2['Index'],
+                    'Atom2_Type': atom2['Atom'],
+                    'Distance': dist,
+                    'Threshold': contact_threshold})
+
+        num_contacts = len(contacts)
+        df = pd.DataFrame(contacts)
+
+        if num_contacts > 0:
+            percent_dist_thrsh = np.array(df['Distance'])/np.array(df['Threshold'])
+            avg_percent_dist = np.average(percent_dist_thrsh)
+
+        else:
+            avg_percent_dist = 1.1
+
+        new_dict = {f'Contacts_{factor}vdW':num_contacts, 'Avg_dist_vs{factor}perc': avg_percent_dist }
+        return new_dict
 
 class Visualize:
 
