@@ -111,6 +111,7 @@ class Electrostatics:
              'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
+        self.fix_ECPmolden()
 
     def setRunrunBool(self, rename, setbool=True):
         self.chgprefix = rename
@@ -203,8 +204,6 @@ class Electrostatics:
 
             pattern_i = re.compile(r'(Ti\s+\d+\s+)(\d+)')
             content = pattern_i.sub(r'\g<1>4', content)
-
-
 
             with open(self.molden_filename, 'w') as file:
                 file.write(content)
