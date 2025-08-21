@@ -886,8 +886,49 @@ class Electrostatics:
                 multipole_Efield_contribution.append(E_to_add)
             #Add contributions to Monopole E from point charges to total E
         return [Vm_to_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], Vm_to_VA*np.array(Monopole_E), Vm_to_VA*multipole_Efield_contribution.append(E_to_add) ]
-    
-    
+    def ESP_multipleAtoms(self, xyzfilepath, atom_multipole_file, df_substrate, df_env):
+        #will return a list of multipole moments where each is 
+        df = Geometry(xyzfilepath).getGeomInfo()
+        #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
+        k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2) also N*m^2/C^2
+
+        # Convert each column to list for quicker indexing
+        atoms = df['Atom']
+        xs = df['X']
+        ys = df['Y']
+        zs = df['Z']
+
+        A_to_m = 10**(-10)
+        #KJ_J = 10**-3
+        #faraday = 23.06   #kcal/(mol*V)
+        C_e = 1.6023*(10**-19)
+        one_mol = 6.02*(10**23)
+
+        dielectric = self.dielectric
+
+        substrate_idxs = df_substrate['Index']
+        env_idxs = df_env['Index']
+
+        env_charges = df_env['Atom_Charge']
+        env_dipoles = df_env['Dipole_Moment']
+        env_quadrupole = df_env['Quadrupole_Moment']
+
+        total_ESPs = []
+        for sub_idx in substrate_idxs:
+            sub_esp = 0 
+            xo = xs[sub_idx]
+            yo = ys[sub_idx]
+            zo = zs[sub_idx]
+            for idx in env_idxs:
+                r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
+                sub_esp = sub_esp + (df_env['Atom_Charges'].loc(df_env['Index'] == idx)/r)
+            total_ESPs.append(sub_esp)
+
+        final_esp = C_e*k*np.array(total_ESPs)  #Units: N*m^2/(C^2)*(C/m) = N*m/C = J/C = Volt
+        df_substrate['ESP'] = final_esp
+
+        return df_substrate
+
     def ESPfromMultipole(self, xyzfilepath, atom_multipole_file, charge_range, idx_atom):
         '''
 
@@ -1624,7 +1665,6 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(ESPdata_filename +'.csv')
         return df
-
     def getESPMultipole(self, charge_type, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path, dielectric=1):
         '''
         Function computes a series of ESP data using the charge scheme specified in charge types. All ESPs in Units of Volts
@@ -2334,3 +2374,59 @@ class Electrostatics:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(partial_chg_filename +'.csv')
         return df
+
+
+    def get_Electrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path, substrate_idxs, num_terms=2, charge_type='Hirshfeld', name_dataStorage='estaticFile', env_idxs=None):
+        #compute the electrostatic stabilization associated with some chemical env and a substrate
+        #If env_idxs=None will defauly to just including all of the non-substrate indices in environment
+        dielectric = self.dielectric
+       # Access Class Variables
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+        final_structure_file = self.xyzfilename
+
+        multipole_bool =True
+        owd = os.getcwd() # Old working directory
+        allspeciesdict = []
+        first_order_electrostatic_stabilization = []
+        counter = 0  # Iterator to account for atomic indices of interest
+        for f in list_of_file:  
+            substrate_idx = substrate_idxs[counter]
+            print(f'Here are the substrate indices: {substrate_idx}')
+            results_dict = {}
+            file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
+            total_lines = Electrostatics.mapcount(file_path_xyz)
+            init_all_lines = range(0, total_lines - 2)
+            if not env_idxs:
+                env_idx = [x for x in init_all_lines if x not in substrate_idx]
+            else:
+                env_idx = env_idxs[counter]
+
+            comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
+            #If the calculation is not succesfully, continue
+            if comp_cost == 'Na':
+                continue
+            multipole_name = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
+
+            #Use the path to the multipole file to get information about the atomic charges, dipole and multipole
+            #Index, Element, Atom_Charge, Dipole_Moment, Quadrupole_Moment
+            atomicDict = Electrostatics.getmultipoles(multipole_name)
+            df_multipoles = pd.DataFrame(atomicDict) 
+            print(f'Here is atomicDict: {type(atomicDict)} and {atomicDict}')
+            df_substrate = df_multipoles[df_multipoles["Index"].isin(substrate_idx)]
+            df_env = df_multipoles[df_multipoles["Index"].isin(env_idx)]
+
+            df_ESP_substrate = self.ESP_multipleAtoms(file_path_xyz, multipole_name, df_substrate, df_env)
+
+            #Should be the dot product of the ESP array and the partial charge array!
+            full_ESP_first_order = np.dot(np.array(df_ESP_substrate["ESP"]), np.array(df_ESP_substrate['Atom_Charge']))
+            #compute ESP and Efields for all atoms based on this 
+            counter +=1
+            results_dict['Electro_FirstOrder'] = full_ESP_first_order
+            results_dict['FileName'] = f
+        os.chdir(owd)
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(name_dataStorage +'.csv')
+        return df
+
+
