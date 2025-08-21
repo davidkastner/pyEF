@@ -431,7 +431,7 @@ class Geometry:
 
 class Visualize:
 
-    def __init__(self, filexyz):
+    def __init__(self, filexyz='None'):
         self.xyzfile = filexyz
 
     def makePDBpercentEfield(self):
@@ -499,6 +499,46 @@ class Visualize:
         ppdb.read_pdb(pdbName)
         ppdb.df['HETATM']['b_factor'] = b_col
         ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
+
+
+
+
+    #Here we will issue a new pdb with bfactor associatd with the second - first where the
+    #final pdb file will contain the corodinates from the first one 
+    def diff_pdbs(self, initial_pdb, change_pdb, new_pdb_name, new_to_old_map='None'):
+        ppdb = PandasPdb().read_pdb(initial_pdb)
+        df_first_pdb = ppdb.df['HETATM']
+# Access ATOM/HETATM records as DataFrames
+
+        next_pdb = PandasPdb().read_pdb(change_pdb)
+        df_second_pdb = next_pdb.df['HETATM']
+
+        init_indices_tob_map = dict(zip(df_first_pdb['atom_number'], df_first_pdb['b_factor']))
+        second_indices_tob_map = dict(zip(df_second_pdb['atom_number'], df_second_pdb['b_factor']))
+
+        new_b_lst = []
+
+        for index, init_bval in init_indices_tob_map.items():
+            if new_to_old_map == 'None':
+                second_index = index
+            else:
+                if index in new_to_old_map:
+                    second_index = new_to_old_map[index]
+                else:
+                    new_b_lst.append(0)
+                    continue
+            if second_index in second_indices_tob_map:
+                second_b = second_indices_tob_map[second_index]
+                new_b = second_b - init_bval
+                new_b_lst.append(new_b)
+            else:
+                new_b_lst.append(0)
+
+        new_pdb = PandasPdb()
+        new_pdb.read_pdb(initial_pdb)
+        new_pdb.df['HETATM']['b_factor'] = new_b_lst
+
+        new_pdb.to_pdb(new_pdb_name,records=['HETATM'],gz=False,append_newline=True)
 
     def makePDBcharges(self, output_filename, b_col, pdbName):
         ''' Function to generate PDB files with partial charges
