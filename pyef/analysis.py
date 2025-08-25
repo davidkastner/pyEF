@@ -1438,14 +1438,12 @@ class Electrostatics:
         comp_cost = -1
         num_atoms = 0
         need_to_run_calculation = True
-        print(f'owd is : {owd}')
         os.chdir(owd)
         os.chdir(f + folder_to_molden)
         #subprocess.call(multiwfn_module, shell=True)
         file_path_multipole = f"{os.getcwd()}/{self.chgprefix}Multipole{charge_type}.txt"
         file_path_monopole = f"{os.getcwd()}/{self.chgprefix}Charges{charge_type}.txt"
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
-        print(f'The file path to xyz is: {file_path_xyz}')
         #file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
 
         #check if previous calculations fully converged for desired multipole/charge scheme 
@@ -1549,7 +1547,7 @@ class Electrostatics:
                 file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
                     
                 if multipole_bool:
-                    xyz_fp =  final_structure_file
+                    xyz_fp =  file_path_xyz
                     chg_fp = file_path_multipole
                     df_charge_atoms = self.charge_atoms(chg_fp, xyz_fp)
                 else:
