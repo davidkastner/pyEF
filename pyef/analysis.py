@@ -18,8 +18,10 @@ import openbabel
 from biopandas.pdb import PandasPdb
 from .geometry import Geometry
 from .geometry import Visualize
+from .utility import MoldenObject
 import math
 import time
+import traceback
 class Electrostatics:
     '''
     A class to compute Electrostatic properties for series of computations housed in folders that contain .molden output files
@@ -55,6 +57,7 @@ class Electrostatics:
         self.xyzfilename = 'final_optim.xyz'
         self.chgprefix = ''
         self.rerun = False
+        self.dict_settings = {'rerun': False, 'maxIHirshBasis': 12000, 'maxIHirshFuzzyBasis': 6000}
         #default setting does not generate PDB files
         self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
@@ -112,6 +115,8 @@ class Electrostatics:
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
         self.fix_ECPmolden()
+    def updateCalcSettings(self, key, value):
+        self.dict_settings[key] = value
 
     def setRunrunBool(self, rename, setbool=True):
         self.chgprefix = rename
@@ -502,8 +507,6 @@ class Electrostatics:
 
 
 
-
-
     def calc_firstTermE_atom_decomposable(self, espatom_idx, charge_range, charge_file):
         '''
         Input: espatom_idx: integer of atom index
@@ -777,7 +780,6 @@ class Electrostatics:
         atom_multipole_file: string of multipole filename
         Output: list of E-field vector and atomic symbol, Efields are reported in units of Volts/Angstrom
         '''
-
         df = Geometry(xyz_file).getGeomInfo()
         #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2 =  N*m^2/C^2)
@@ -808,7 +810,6 @@ class Electrostatics:
 
         position_vec = A_to_m*np.array([xo, yo, zo])
 
-
         inv_eps = 1/self.dielectric
 
         if self.ptChgs:
@@ -820,7 +821,6 @@ class Electrostatics:
         #make a list for each term in multipole expansion
         lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
 
-       
         QM_charges = [lst_multipole_dict[idx]["Atom_Charge"] for idx in range(0, len(xs))]
         QM_coords = np.column_stack((np.array(xs), np.array(ys), np.array(zs)))
         #This ensure that atoms we would like to exclude from Efield calculation are excluded from every term in the multipole expansion
@@ -869,7 +869,6 @@ class Electrostatics:
             mm_coords = np.column_stack((np.array(MM_xs), np.array(MM_ys), np.array(MM_zs)))
             mm_charges = np.array(init_MM_charges)
             qm_charges = np.array(QM_charges)
-            print(f'Size of mm_coords: {np.shape(mm_coords)} and qm coords: {np.shape(QM_coords)}; mm charges: {np.shape(mm_charges)} and qm_charges: {np.shape(qm_charges)}')
             MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
 
             MM_charges = mm_charges*(1/(math.sqrt(self.dielectric_scale)))
@@ -885,7 +884,7 @@ class Electrostatics:
                 E_vec[2] += E_to_add[2]
                 multipole_Efield_contribution.append(E_to_add)
             #Add contributions to Monopole E from point charges to total E
-        return [Vm_to_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], Vm_to_VA*np.array(Monopole_E), Vm_to_VA*multipole_Efield_contribution.append(E_to_add) ]
+        return [Vm_to_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], Vm_to_VA*np.array(Monopole_E), Vm_to_VA*np.array(multipole_Efield_contribution)]
     def ESP_multipleAtoms(self, xyzfilepath, atom_multipole_file, df_substrate, df_env):
         #will return a list of multipole moments where each is 
         df = Geometry(xyzfilepath).getGeomInfo()
@@ -1038,7 +1037,7 @@ class Electrostatics:
         if bool_multipole:
             for atomidxA, atomidxB in bond_indices:
                 [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded, A_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded, B_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxB, all_lines, xyz_filepath, atom_multipole_file)  
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded, B_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxB, all_lines, xyz_filepath, atom_multipole_file) 
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
                 bond_len = np.linalg.norm(bond_vec_unnorm)
                 bond_vec = bond_vec_unnorm/(bond_len)
@@ -1051,16 +1050,14 @@ class Electrostatics:
                 bonded_atoms.append((A_bonded_atom, B_bonded_atom))
                 bonded_positions.append((A_bonded_position, B_bonded_position))
                 bond_lens.append(bond_len)
-
                 E_proj_atomwise = (1/2)*(np.array(A_atom_wise_E) + np.array(A_atom_wise_E))@ bond_vec.T
 
         else:
-            print(bond_indices)
             for atomidxA, atomidxB in bond_indices:
                 [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file)   
                 [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file) 
 
-                print(f'Here I have A: {A_bonded_atom} with b: {B_bonded_atom}')
+                print(f'Automatically selected bond between: {A_bonded_atom} and {B_bonded_atom} for analysis!')
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
                 bond_len = np.linalg.norm(bond_vec_unnorm)
                 bond_vec = bond_vec_unnorm/(bond_len)
@@ -1249,7 +1246,7 @@ class Electrostatics:
         #For QMMM calculation, include point charges in ESP calculation 
         if self.ptChgs:
             ptchg_filename = self.ptChgfp
-            init_file_path = path_to_xyz[0:-len('scr/final_optim.xyz')]
+            init_file_path = path_to_xyz[0:-len(self.folder_to_file_path + self.xyzfilename)]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
             xs = xs + list(df_ptchg['x'])
@@ -1346,7 +1343,7 @@ class Electrostatics:
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
             subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} final_optim.molden"
+            command_A = f"{multiwfn_path} {self.molden_filename}"
             results_dir = os.getcwd() + '/'
             
             results_dict = {}
@@ -1355,8 +1352,8 @@ class Electrostatics:
             for key in charge_types:
                 print('Partial Charge Scheme:' + str(key))
                 try:
-                    full_file_path = f"{os.getcwd()}/final_optim_{key}.txt"
-                    path_to_xyz = f"{os.getcwd()}/final_optim.xyz"
+                    full_file_path = f"{os.getcwd()}/Charges{key}.txt"
+                    path_to_xyz = f"{os.getcwd()}/self.xyzfilename"
                     if key == "Hirshfeld_I":
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
@@ -1436,20 +1433,20 @@ class Electrostatics:
                molden_filename = self.molden_filename
         final_structure_file = self.xyzfilename
         '''
-
-        print(f'Getting charge info')
         molden_filename = self.molden_filename
         final_structure_file = self.xyzfilename
         comp_cost = -1
         num_atoms = 0
-        print(f'Current folder: {f}')
         need_to_run_calculation = True
+        print(f'owd is : {owd}')
         os.chdir(owd)
         os.chdir(f + folder_to_molden)
         #subprocess.call(multiwfn_module, shell=True)
         file_path_multipole = f"{os.getcwd()}/{self.chgprefix}Multipole{charge_type}.txt"
         file_path_monopole = f"{os.getcwd()}/{self.chgprefix}Charges{charge_type}.txt"
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
+        print(f'The file path to xyz is: {file_path_xyz}')
+        #file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
 
         #check if previous calculations fully converged for desired multipole/charge scheme 
         if multipole_bool:
@@ -1481,9 +1478,12 @@ class Electrostatics:
                     multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
                     num_atoms = Electrostatics.mapcount(final_structure_file) - 2
                     if charge_type == 'Hirshfeld_I':
+                        #get the number of basis functions 
+                        num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
-                        if  num_atoms > 320:
+                        if  num_basis > self.dict_settings['maxIHirshFuzzyBasis']:
+                            print(f'Number of basis functions: {num_basis}')
                             multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q'] 
                             print(f'I-Hirshfeld command should be low memory and slow to accomodate large system')
                     proc.communicate("\n".join(multiwfn_commands).encode())
@@ -1496,10 +1496,10 @@ class Electrostatics:
                     commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                     if charge_type == 'CHELPG':
                         commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
-                    elif charge_type == 'Hirshfeld_I':                            
-                        num_atoms = Electrostatics.mapcount(final_structure_file) - 2
-                        print(f'Number of atoms: {num_atoms}')
-                        if num_atoms > 720:
+                    elif charge_type == 'Hirshfeld_I':                          
+                        num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
+                        print(f'Number of basis functions: {num_basis}')
+                        if num_basis > self.dict_settings['maxIHirshBasis']:
                             commands = ['7', '15', '-2', '1', '\n', 'y', '0', 'q']
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
@@ -1510,6 +1510,7 @@ class Electrostatics:
                 comp_cost = end - start
             except Exception as e:
                 print(e)
+                print(traceback.print_exc())
                 #Issue could be from lost memorry
                 os.chdir(owd)
                 return comp_cost
@@ -1590,7 +1591,7 @@ class Electrostatics:
                 lst_dicts.append(dip_dict)
             except Exception as e:
                 print(e)
-                print(f'Calcualtion failed')
+                print(f'Error Traceback: {traceback.print_exc()}')
                 continue
 
         all_file_df = pd.DataFrame(lst_dicts)
@@ -1767,9 +1768,7 @@ class Electrostatics:
                 file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
                 atom_idx = metal_idxs[counter]
                 total_lines = Electrostatics.mapcount(file_path_xyz)
-                print(f'total_lines: {total_lines}')
                 init_all_lines = range(0, total_lines - 2)
-                print(f'Counter: {counter}')
                 if len(self.excludeAtomfromEcalc) > 1:
                     all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc[counter]]
                 else:
@@ -1790,24 +1789,14 @@ class Electrostatics:
                     df_ptchg = self.getPtChgs(full_ptchg_fp)
                     num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom'])
 
-
-                #if bool_manual_mode:
-                #file_bond_indices = input_bond_indices[counter]
-
-                if multipole_bool:
-                    path_to_pol = file_path_multipole
-                else:
-                    path_to_pol = file_path_charges
-
-                [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool)
-
-
                 if multipole_bool:
                     path_to_pol = file_path_multipole
                     temp_xyz = file_path_xyz
                 else:
                     path_to_pol = file_path_charges
                     temp_xyz = ''
+
+                [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool)
 
                 df  = Electrostatics.charge_atoms(self, path_to_pol, temp_xyz)
 
@@ -1988,8 +1977,8 @@ class Electrostatics:
             results_dict = {}
             results_dict['Name'] = f
             multiwfn_path = multiwfn_path
-            molden_filename = "final_optim.molden"
-            final_structure_file = "final_optim.xyz"
+            molden_filename = self.molden_filename
+            final_structure_file = self.xyzfilename
             polarization_file = "Multipole" + polarization_scheme + ".txt"
             
             # Dynamically get path to package settings.ini file
@@ -2124,17 +2113,18 @@ class Electrostatics:
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
             subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} final_optim.molden"
+            command_A = f"{multiwfn_path} {self.molden_filename}"
             results_dir = os.getcwd() + '/'
 
             results_dict = {}
             results_dict['Name'] = f
-            
+           
+
             for key in charge_types:
                 print('Partial Charge Scheme:' + str(key))
                 try:
                     full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
-                    path_to_xyz = os.getcwd() + '/final_optim.xyz'
+                    path_to_xyz = os.getcwd() + '/' + self.xyzfilename
                     if key == "Hirshfeld_I":
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
@@ -2260,9 +2250,9 @@ class Electrostatics:
         counter = 0  # Iterator to account for atomic indices of interest
 
         if multipole_mode:
-            final_structure_file = "final_optim.xyz"
+            final_structure_file = self.xyzfilename
             polarization_file = "Multipole" + polarization_scheme + ".txt"
-            molden_filename = "final_optim.molden"
+            molden_filename = self.molden_filename
 
             file_idx = 0
             for f in list_of_file:
