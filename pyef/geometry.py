@@ -116,20 +116,20 @@ class Geometry:
         data = []
         counter_idx = 0
         with open(filepathtoxyz, 'r') as file:
+
             # Skip the first two lines since they contain meta-deta
-            next(file)
-            next(file)
             for line in file:
                 tokens = line.split()
+                #print(tokens)
                 if len(tokens) == 4:  # Assuming atom name and x, y, z coordinates are present
                     atom_name = tokens[0].capitalize()
                 #for xyz in QMMM simulation, pnt charges at end of file, skip them!
-                if atom_name == 'pnt':
-                    break
-                x, y, z = map(float, tokens[1:])
-                rad = self.amassdict[atom_name][2]
-                data.append([counter_idx, atom_name, x, y, z, rad])
-                counter_idx += 1
+                    if atom_name == 'pnt':
+                        break
+                    x, y, z = map(float, tokens[1:])
+                    rad = self.amassdict[atom_name][2]
+                    data.append([counter_idx, atom_name, x, y, z, rad])
+                    counter_idx += 1
 
         columns = ['Index', 'Atom', 'X', 'Y', 'Z', 'Radius']
         df = pd.DataFrame(data, columns=columns)

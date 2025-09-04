@@ -42,7 +42,11 @@ class Electrostatics:
         indicates if point charges should be included in ESP calculation
 
     '''
-    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, hasECP=False, includePtChgs=False):
+    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, **kwargs):
+        #options for ECP: "stuttgart_rsc", "def2", "crenbl", "lanl2dz", "lanl2dz", "lanl2dz"
+        self.config = {'hasECP': False, 'includePtChgs': False,  'ptChgfp':'', 'molden_filename':'final_optim.molden', 'xyzfilename':'final_optim.xyz',  'rerun':False, 'maxIHirshBasis':12000, 'maxIHirshFuzzyBasis': 6000, 'ECP': "lacvps", 'dielectric': 1}
+        self.config.update(kwargs)
+
         self.lst_of_folders = lst_of_folders
         self.lst_of_tmcm_idx = lst_of_tmcm_idx
         self.folder_to_file_path = folder_to_file_path
@@ -50,11 +54,7 @@ class Electrostatics:
         self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],   'Becke': ['1', '2'] }
         self.dielectric_scale = 1
         self.dielectric = 1
-        self.ptChgs = includePtChgs
-        self.ptChgfp = ''
         self.ptchgdf = None
-        self.molden_filename = 'final_optim.molden'
-        self.xyzfilename = 'final_optim.xyz'
         self.chgprefix = ''
         self.rerun = False
         self.dict_settings = {'rerun': False, 'maxIHirshBasis': 12000, 'maxIHirshFuzzyBasis': 6000}
@@ -114,7 +114,9 @@ class Electrostatics:
              'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
              'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
         self.prepData()
-        self.fix_ECPmolden()
+        if self.config['hasECP']:
+            self.fix_allECPmolden()
+
     def updateCalcSettings(self, key, value):
         self.dict_settings[key] = value
 
@@ -128,7 +130,7 @@ class Electrostatics:
         Input: name_ptch_file: string of point charge filename
         '''
         self.ptChgfp = name_ptch_file
-        self.ptChgs = True
+        self.config['includePtChgs'] = True
         print(f'Point charges to be included via {name_ptch_file}')
     def set_dielec_scale(self, dielec):
         self.dielectric_scale = dielec
@@ -136,7 +138,6 @@ class Electrostatics:
         ''' Function to exclude atoms from Efield calculation
         Input: atom_to_exclude: list of integers of atom indices
         '''
-        
         self.excludeAtomfromEcalc = atom_to_exclude
 
     def minDielecBonds(self, bool_bonds):
@@ -158,62 +159,27 @@ class Electrostatics:
         self.dielectric = dlc
 
     def set_molden_filename(self, new_name):
-        self.molden_filename = new_name
-        self.prepData()
+       self.config['molden_filename']= new_name
+
     def set_xyzfilename(self, new_name):
-        self.xyzfilename = new_name
+        self.config['xyzfilename'] = new_name
+    
+    def rePrep(self):
         self.prepData()
 
-    def fix_ECPmolden(self):
-        """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
-
+    def fix_allECPmolden(self):
+        owd = os.getcwd()
+        basis_set_fam = self.config['ECP']
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
-        owd = os.getcwd()
-        print('   > Re-formatting .molden file to fix ECP artifacts')
+        print('   > Re-formatting .molden files to fix ECP artifacts')
         for f in list_of_folders:
-            os.chdir(owd)
-            print('   > Changing directory: ' + str(f + folder_to_molden))
-            os.chdir(f + folder_to_molden)
-            with open(self.molden_filename, 'r') as file:
-                content = file.read()
-            pattern_au = re.compile(r'(Au\s+\d+\s+)(\d+)')
-            content = pattern_au.sub(r'\g<1>19', content)
-
-            pattern_fe = re.compile(r'(Fe\s+\d+\s+)(\d+)')
-            content = pattern_fe.sub(r'\g<1>8', content)
-
-            pattern_i = re.compile(r'(I\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>7', content)
-
-            pattern_i = re.compile(r'(Pd\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>18', content)
-
-            pattern_i = re.compile(r'(Ni\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>10', content)
-
-            pattern_i = re.compile(r'(Cu\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>11', content)
-
-            pattern_i = re.compile(r'(Zn\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>12', content)
-
-            pattern_i = re.compile(r'(Ag\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>19', content)
-
-            pattern_i = re.compile(r'(Mn\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>7', content)
-
-            pattern_i = re.compile(r'(Rh\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>17', content)
-
-            pattern_i = re.compile(r'(Ti\s+\d+\s+)(\d+)')
-            content = pattern_i.sub(r'\g<1>4', content)
-
-            with open(self.molden_filename, 'w') as file:
-                file.write(content)
-            print("      > Molden file is fixed\n")
-        os.chdir(owd)
+            folder_path = os.path.join(owd, f + folder_to_molden)
+            final_optim_molden = os.path.join(folder_path, self.config['molden_filename'])
+            final_optim_xyz = os.path.join(folder_path, self.config['xyzfilename'])
+            molden = MoldenObject(final_optim_xyz, final_optim_molden)
+            molden.fix_ECPmolden(owd, basis_set_fam)
+    #Utility functions for parsing molden files and fixing ECP problems
 
     def prepData(self):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
@@ -223,7 +189,7 @@ class Electrostatics:
         list_of_folders = self.lst_of_folders
         owd = os.getcwd()
         print('   > Pre-processing data')
-        backup_xyz = 'xyz.xyz'
+        backup_xyz = ['xyz.xyz']
 
         for f in list_of_folders:
             try:
@@ -231,17 +197,17 @@ class Electrostatics:
                 print('      > .molden and .xyz file should be located here: ' + folder_path)
 
                 # Processing optim.xyz to create final_optim.xyz
-                final_optim_xyz = os.path.join(folder_path, self.xyzfilename)
+                final_optim_xyz = os.path.join(folder_path, self.config['xyzfilename'])
 
                 # Copying .molden files to final_optim.molden
-                final_optim_molden = os.path.join(folder_path, self.molden_filename)
+                final_optim_molden = os.path.join(folder_path, self.config['molden_filename'])
 
                 #this is for the full optimization cycle
                 optim_file_path = os.path.join(folder_path, 'optim.xyz')
 
 
                 if not os.path.exists(final_optim_molden):
-                    print(f'Expected .molden with filename: {self.molden_filename} in {folder_path}. We could not find a .molden filename with the default prefix, you can alter using: set_molden_filename()')
+                    print(f'Expected .molden with filename: {self.config["molden_filename"]} in {folder_path}. We could not find a .molden filename with the default prefix, you can alter using: set_molden_filename()')
                     print(f"For now searching for all .molden files in directory. If you only have one .molden file in this directory, the defauly prefix will be altered ")
                     files = glob.iglob(os.path.join(folder_path, "*.molden"))
                     for file in files:
@@ -251,12 +217,12 @@ class Electrostatics:
                             #set the backup_xyz filename to this prefix here. Generally a good guess!
                             file_prefix, _ = os.path.splitext(os.path.basename(file))
                             backup_xyz = file_prefix + '.xyz'
-                            print(f'Default .molden file name is now changed to {self.molden_filename}')
+                            print(f'Default .molden file name is now changed to {self.config["molden_filename"]}')
                             break
                     else:
                         raise Exception("Unable to locate any .molden file in directory: {f}")
                 else:
-                    print(f"      > {self.molden_filename} sucessflly located in {folder_path}.")
+                    print(f"      > {self.config['molden_filename']} sucessflly located in {folder_path}.")
 
 
 
@@ -274,20 +240,20 @@ class Electrostatics:
                             with open(final_optim_xyz, 'w') as finalxyz:
                                 finalxyz.writelines(deque(full_traj, num_lines))
                     except Exception as e:
-                        print(f'Expected .xyz with filename: {self.xyzfilename} in {folder_path}. If your xyz filename does NOT match the default, you can alter using: set_xyzfilename()')
+                        print(f'Expected .xyz with filename: {self.config["xyzfilename"]} in {folder_path}. If your xyz filename does NOT match the default, you can alter using: set_xyzfilename()')
                         print(f'We will try to use the anticipated prefix from the associated molden file: {backup_xyz}')
                         backup_file = os.path.join(folder_path, backup_xyz)
                         if os.path.exists(backup_file):
-                            self.xyzfilename = backup_xyz
+                            self.config['xyzfilename'] = backup_xyz
                             logging.info(f'Single point data found. Using {backup_xyz} as fallback.')
                         else:
                             raise Exception("Could not locate .molden or corresponding .xyz file in directory {f}")
 
                 else:
-                    print(f'      > {self.xyzfilename} succesfully located in {folder_path}.')            
+                    print(f'      > {self.config["xyzfilename"]} succesfully located in {folder_path}.')            
 
                 # Copying .molden files to final_optim.molden
-                final_optim_molden = os.path.join(folder_path, self.molden_filename)
+                final_optim_molden = os.path.join(folder_path, self.config['molden_filename'])
                 backup_xyz = 'final_optim'
             except Exception as e:
                 print(f'Could not locate molden and corresponding xyz file in {f} please rename these files if they exist')
@@ -413,7 +379,7 @@ class Electrostatics:
         zs = list(df['z'])
 
         #For QMMM calculation, include point charges in ESP calculation
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
             xs = xs + list(df_ptchg['x'])
             ys = ys + list(df_ptchg['y'])
@@ -566,7 +532,7 @@ class Electrostatics:
         E_vec = [Ex, Ey, Ez]
         QM_charges = charges
                 #For QMMM calculation, include point charges in E field calc
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             qm_charges = charges
             QM_coords = [xs, ys, zs]
             df_ptchg  = self.ptchgdf
@@ -701,7 +667,7 @@ class Electrostatics:
 
         inv_eps = 1/self.dielectric
 
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
 
         #load multipole moments from processed outputs 
@@ -742,7 +708,7 @@ class Electrostatics:
 
 
         #For QMMM calculation, include point charges in E field calc
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             MM_xs = list(df_ptchg['x'])
             MM_ys = list(df_ptchg['y'])
             MM_zs = list(df_ptchg['z'])
@@ -812,7 +778,7 @@ class Electrostatics:
 
         inv_eps = 1/self.dielectric
 
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
 
         #load multipole moments from processed outputs 
@@ -859,7 +825,7 @@ class Electrostatics:
 
 
         #For QMMM calculation, include point charges in E field calc
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             MM_xs = list(df_ptchg['x'])
             MM_ys = list(df_ptchg['y'])
             MM_zs = list(df_ptchg['z'])
@@ -920,11 +886,9 @@ class Electrostatics:
             zo = zs[sub_idx]
             for idx in env_idxs:
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                print(f'values of r: {r}')
                 sub_esp = sub_esp + (C_e*k*df_env.loc[df_env['Index'] == idx, 'Atom_Charge'].iloc[0])/r
-                print(f'Current value of sub_esp:{sub_esp}')
             total_ESPs.append(sub_esp)
-
+        df_substrate = df_substrate.copy()
         df_substrate['ESP'] = np.array(total_ESPs) #Units: N*m^2/(C^2)*(C/m) = N*m/C = J/C = Volt
 
         return df_substrate
@@ -1245,9 +1209,9 @@ class Electrostatics:
         chargeo = charges[idx_atom]
 
         #For QMMM calculation, include point charges in ESP calculation 
-        if self.ptChgs:
+        if self.config['includePtChgs']:
             ptchg_filename = self.ptChgfp
-            init_file_path = path_to_xyz[0:-len(self.folder_to_file_path + self.xyzfilename)]
+            init_file_path = path_to_xyz[0:-len(self.folder_to_file_path + self.config['xyzfilename'])]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
             xs = xs + list(df_ptchg['x'])
@@ -1344,7 +1308,7 @@ class Electrostatics:
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
             subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} {self.molden_filename}"
+            command_A = f"{multiwfn_path} {self.config['molden_filename']}"
             results_dir = os.getcwd() + '/'
             
             results_dict = {}
@@ -1354,7 +1318,7 @@ class Electrostatics:
                 print('Partial Charge Scheme:' + str(key))
                 try:
                     full_file_path = f"{os.getcwd()}/Charges{key}.txt"
-                    path_to_xyz = f"{os.getcwd()}/self.xyzfilename"
+                    path_to_xyz = f"{os.getcwd()}/{self.config['xyzfilename']}"
                     if key == "Hirshfeld_I":
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
@@ -1431,11 +1395,11 @@ class Electrostatics:
     def getchargeInfo(self, multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type,  owd):
         '''
         f is the name of the path to the folder
-               molden_filename = self.molden_filename
-        final_structure_file = self.xyzfilename
+               molden_filename = self.config['molden_filename']
+        final_structure_file = self.config['xyzfilename']
         '''
-        molden_filename = self.molden_filename
-        final_structure_file = self.xyzfilename
+        molden_filename = self.config['molden_filename']
+        final_structure_file = self.config['xyzfilename']
         comp_cost = -1
         num_atoms = 0
         need_to_run_calculation = True
@@ -1532,8 +1496,8 @@ class Electrostatics:
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd() # Old working directory
-        molden_filename = self.molden_filename
-        final_structure_file = self.xyzfilename
+        molden_filename = self.config['molden_filename']
+        final_structure_file = self.config['xyzfilename']
         frame_num_lst = []
 
 
@@ -1628,7 +1592,7 @@ class Electrostatics:
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
-        final_structure_file = self.xyzfilename
+        final_structure_file = self.config['xyzfilename']
 
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
@@ -1692,7 +1656,7 @@ class Electrostatics:
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
-        final_structure_file = self.xyzfilename
+        final_structure_file = self.config['xyzfilename']
         multipole_bool =True
 
         owd = os.getcwd() # Old working directory
@@ -1755,7 +1719,7 @@ class Electrostatics:
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
-        final_structure_file = self.xyzfilename
+        final_structure_file = self.config['xyzfilename']
 
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
@@ -1782,7 +1746,7 @@ class Electrostatics:
 
                 #Account for point charges!!
                 num_pt_chgs = 0
-                if self.ptChgs:
+                if self.config['includePtChgs']:
                     ptchg_filename = self.ptChgfp
                     full_ptchg_fp = os.getcwd() + '/' + f + '/' + ptchg_filename
                     df_ptchg = self.getPtChgs(full_ptchg_fp)
@@ -1845,7 +1809,7 @@ class Electrostatics:
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
-        final_structure_file = self.xyzfilename
+        final_structure_file = self.config['xyzfilename']
 
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
@@ -1869,7 +1833,7 @@ class Electrostatics:
 
             #Account for point charges!!
             num_pt_chgs = 0
-            if self.ptChgs:
+            if self.config['includePtChgs']:
                 ptchg_filename = self.ptChgfp
                 full_ptchg_fp = os.getcwd() + '/' + f + '/' + ptchg_filename
                 df_ptchg = self.getPtChgs(full_ptchg_fp)
@@ -1976,8 +1940,8 @@ class Electrostatics:
             results_dict = {}
             results_dict['Name'] = f
             multiwfn_path = multiwfn_path
-            molden_filename = self.molden_filename
-            final_structure_file = self.xyzfilename
+            molden_filename = self.config['molden_filename']
+            final_structure_file = self.config['xyzfilename']
             polarization_file = "Multipole" + polarization_scheme + ".txt"
             
             # Dynamically get path to package settings.ini file
@@ -1993,7 +1957,7 @@ class Electrostatics:
             print(f"Looking for atomic multipole calculations here: {path_to_pol}")
            
             num_pt_chgs = 0
-            if self.ptChgs:
+            if self.config['includePtChgs']:
                 ptchg_filename = self.ptChgfp
                 df_ptchg = self.getPtChgs(ptchg_filename)
                 print(f'Columns in the ptchg dataframe: {df_ptchg.columns}')
@@ -2112,7 +2076,7 @@ class Electrostatics:
             os.chdir(owd)
             os.chdir(f + folder_to_molden)
             subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} {self.molden_filename}"
+            command_A = f"{multiwfn_path} {self.config['molden_filename']}"
             results_dir = os.getcwd() + '/'
 
             results_dict = {}
@@ -2123,7 +2087,7 @@ class Electrostatics:
                 print('Partial Charge Scheme:' + str(key))
                 try:
                     full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
-                    path_to_xyz = os.getcwd() + '/' + self.xyzfilename
+                    path_to_xyz = os.getcwd() + '/' + self.config['xyzfilename']
                     if key == "Hirshfeld_I":
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
@@ -2249,9 +2213,9 @@ class Electrostatics:
         counter = 0  # Iterator to account for atomic indices of interest
 
         if multipole_mode:
-            final_structure_file = self.xyzfilename
+            final_structure_file = self.config['xyzfilename']
             polarization_file = "Multipole" + polarization_scheme + ".txt"
-            molden_filename = self.molden_filename
+            molden_filename = self.config['molden_filename']
 
             file_idx = 0
             for f in list_of_file:
@@ -2372,7 +2336,7 @@ class Electrostatics:
        # Access Class Variables
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
-        final_structure_file = self.xyzfilename
+        final_structure_file = self.config['xyzfilename']
 
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
@@ -2382,7 +2346,6 @@ class Electrostatics:
         one_mol = 6.02*(10**23)
         for f in list_of_file:  
             substrate_idx = substrate_idxs[counter]
-            print(f'Here are the substrate indices: {substrate_idx}')
             results_dict = {}
             file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
             total_lines = Electrostatics.mapcount(file_path_xyz)
@@ -2410,8 +2373,6 @@ class Electrostatics:
 
                 #Should be the dot product of the ESP array and the partial charge array!
                 full_ESP_first_order = np.dot(np.array(df_ESP_substrate["ESP"]), np.array(df_ESP_substrate['Atom_Charge']))
-                print(f'Here is the ESP substrate: {np.array(df_ESP_substrate["ESP"])}')
-                print(f'here is the charge: {np.array(df_ESP_substrate["Atom_Charge"])}')
                 #compute ESP and Efields for all atoms based on this 
                 counter +=1
 
@@ -2426,16 +2387,12 @@ class Electrostatics:
                 #Index, Element, Atom_Charge, Dipole_Moment, Quadrupole_Moment
                 df_monopoles = pd.read_csv(monopole_name, sep='\s+', names=["Element",'x', 'y', 'z', "Atom_Charge"])
                 df_monopoles["Index"] = range(1, len(df_monopoles)+1)
-                print(df_monopoles["Index"])
-                print(f"Here are the substrate indices: {substrate_idx}")
                 df_substrate = df_monopoles[df_monopoles["Index"].isin(substrate_idx)]
                 df_env = df_monopoles[df_monopoles["Index"].isin(env_idx)]
                 df_ESP_substrate = self.ESP_multipleAtoms(file_path_xyz, df_substrate, df_env)
                 
                 #Should be the dot product of the ESP array and the partial charge array!
                 full_ESP_first_order = np.dot(np.array(df_ESP_substrate["ESP"]), np.array(df_ESP_substrate['Atom_Charge']))
-                print(f'Here is the ESP substrate: {np.array(df_ESP_substrate["ESP"])}')
-                print(f'here is the charge: {np.array(df_ESP_substrate["Atom_Charge"])}')
                 #compute ESP and Efields for all atoms based on this 
                 counter +=1
                 
