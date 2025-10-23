@@ -175,8 +175,9 @@ class MoldenObject:
                 with open(json_path, "w") as f:
                     json.dump(hybrid_maps, f, indent=2)
             else:
+                base_maps = {}
                 print(f"Building core map for {ECP}...")
-                base_maps[ECP] = MoldenObject.build_core_map(ECP)
+                base_maps[ECP] = self.build_core_map(ECP)
                 with open(json_path, "w") as f:
                     json.dump(base_maps, f, indent=2)
                             
