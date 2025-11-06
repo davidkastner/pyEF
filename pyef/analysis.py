@@ -44,7 +44,7 @@ class Electrostatics:
     '''
     def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, **kwargs):
         #options for ECP: "stuttgart_rsc", "def2", "crenbl", "lanl2dz", "lanl2dz", "lanl2dz"
-        self.config = {'hasECP': False, 'includePtChgs': False,  'ptChgfp':'', 'molden_filename':'final_optim.molden', 'xyzfilename':'final_optim.xyz',  'rerun':False, 'maxIHirshBasis':12000, 'maxIHirshFuzzyBasis': 6000, 'ECP': "lacvps", 'dielectric': 1}
+        self.config = {'hasECP': False, 'includePtChgs': False,  'ptChgfp':'', 'molden_filename':'final_optim.molden', 'xyzfilename':'final_optim.xyz',  'rerun':False, 'maxIHirshBasis':12000, 'maxIHirshFuzzyBasis': 6000, 'ECP': "lacvps", 'dielectric': 1, 'ptchDielectricScale': 1}
         self.config.update(kwargs)
 
         self.lst_of_folders = lst_of_folders
@@ -52,12 +52,11 @@ class Electrostatics:
         self.folder_to_file_path = folder_to_file_path
         self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
         self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],   'Becke': ['1', '2'] }
-        self.dielectric_scale = 1
+        self.dielectric_scale = self.config['ptchDielectricScale']
+        self.ptChgfp = self.config['ptChgfp']
         self.dielectric = 1
         self.ptchgdf = None
         self.chgprefix = ''
-        self.rerun = False
-        self.dict_settings = {'rerun': False, 'maxIHirshBasis': 12000, 'maxIHirshFuzzyBasis': 6000}
         #default setting does not generate PDB files
         self.excludeAtomfromEcalc = []
         #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
@@ -481,7 +480,7 @@ class Electrostatics:
         Output: list of E-field vector and atomic symbol
         '''
 
-        inv_eps = 1/(self.dielectric)
+        inv_eps = 1/(self.config['dielectric'])
         A_to_m = 10**(-10)
         Vm_to_VA = 10**(-10)
         # E in units of V/(ansgrom) = N*m/(C*Angstrom)
@@ -520,9 +519,9 @@ class Electrostatics:
             else:
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Ex_contrib = -k*C_e*(charges[idx])*((xs[idx] - xo)*A_to_m)/(r**3)
-                Ey_contrib = -k*C_e*(charges[idx])*((ys[idx] - yo)*A_to_m)/(r**3)
-                Ez_contrib = -k*C_e*(charges[idx])*((zs[idx] - zo)*A_to_m)/(r**3)
+                Ex_contrib = -inv_eps*k*C_e*(charges[idx])*((xs[idx] - xo)*A_to_m)/(r**3)
+                Ey_contrib = -inv_eps*k*C_e*(charges[idx])*((ys[idx] - yo)*A_to_m)/(r**3)
+                Ez_contrib = -inv_eps*k*C_e*(charges[idx])*((zs[idx] - zo)*A_to_m)/(r**3)
                 Ex = Ex + Ex_contrib   
                 Ey = Ey + Ey_contrib 
                 Ez = Ez + Ez_contrib
@@ -665,7 +664,7 @@ class Electrostatics:
         position_vec = A_to_m*np.array([xo, yo, zo])
 
 
-        inv_eps = 1/self.dielectric
+        inv_eps = 1/self.config['dielectric']
 
         if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
@@ -776,7 +775,7 @@ class Electrostatics:
 
         position_vec = A_to_m*np.array([xo, yo, zo])
 
-        inv_eps = 1/self.dielectric
+        inv_eps = 1/self.config['dielectric']
 
         if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
@@ -1400,6 +1399,7 @@ class Electrostatics:
         '''
         molden_filename = self.config['molden_filename']
         final_structure_file = self.config['xyzfilename']
+        print(f"Do we need to run calcs?: {self.config['rerun']}")
         comp_cost = -1
         num_atoms = 0
         need_to_run_calculation = True
@@ -1427,7 +1427,7 @@ class Electrostatics:
             
 
         #If you need to run the calculations, urn either the multipole or the monopole calculation!
-        if need_to_run_calculation or self.rerun:
+        if need_to_run_calculation or self.config['rerun']:
             print(f'Running Calculation')
             try: 
                 start = time.time()
@@ -1445,7 +1445,9 @@ class Electrostatics:
                         num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
-                        if  num_basis > self.dict_settings['maxIHirshFuzzyBasis']:
+                        print(f'Current num of basis is: {num_basis}')
+                        print(f'The current max num is: {self.config["maxIHirshFuzzyBasis"]}')
+                        if  num_basis > self.config['maxIHirshFuzzyBasis']:
                             print(f'Number of basis functions: {num_basis}')
                             multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q'] 
                             print(f'I-Hirshfeld command should be low memory and slow to accomodate large system')
@@ -1462,7 +1464,7 @@ class Electrostatics:
                     elif charge_type == 'Hirshfeld_I':                          
                         num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
                         print(f'Number of basis functions: {num_basis}')
-                        if num_basis > self.dict_settings['maxIHirshBasis']:
+                        if num_basis > self.config['maxIHirshBasis']:
                             commands = ['7', '15', '-2', '1', '\n', 'y', '0', 'q']
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, os.getcwd() + '/atmrad/')

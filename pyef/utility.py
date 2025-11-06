@@ -114,6 +114,8 @@ class MoldenObject:
                 else:
                     mapping[element] = 0  # all-electron if no ECP
             except Exception as e:
+                print("An error occurred:", e)
+                traceback.print_exc()
                 mapping[element] = 0  # element not defined
         return mapping
 
@@ -175,8 +177,9 @@ class MoldenObject:
                 with open(json_path, "w") as f:
                     json.dump(hybrid_maps, f, indent=2)
             else:
+                base_maps = {}
                 print(f"Building core map for {ECP}...")
-                base_maps[ECP] = MoldenObject.build_core_map(ECP)
+                base_maps[ECP] = self.build_core_map(ECP)
                 with open(json_path, "w") as f:
                     json.dump(base_maps, f, indent=2)
                             
@@ -198,7 +201,7 @@ class MoldenObject:
                     change_dict[elem] = new_Z
             
         with open(self.moldenFile, 'r') as file:
-            content = file.read() 
+            content = file.read()
             for change_elem, new_Z in change_dict.items():
                 print(f'            Molden file at {self.moldenFile} changed: {change_elem} non-core electrons set to {new_Z}')
                 pattern = re.compile(rf'({change_elem}\s+\d+\s+)(\d+)')
