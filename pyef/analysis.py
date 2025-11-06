@@ -480,7 +480,7 @@ class Electrostatics:
         Output: list of E-field vector and atomic symbol
         '''
 
-        inv_eps = 1/(self.dielectric)
+        inv_eps = 1/(self.config['dielectric'])
         A_to_m = 10**(-10)
         Vm_to_VA = 10**(-10)
         # E in units of V/(ansgrom) = N*m/(C*Angstrom)
@@ -519,9 +519,9 @@ class Electrostatics:
             else:
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*A_to_m)**2 + ((ys[idx] - yo)*A_to_m)**2 + ((zs[idx] - zo)*A_to_m)**2)**(0.5)
-                Ex_contrib = -k*C_e*(charges[idx])*((xs[idx] - xo)*A_to_m)/(r**3)
-                Ey_contrib = -k*C_e*(charges[idx])*((ys[idx] - yo)*A_to_m)/(r**3)
-                Ez_contrib = -k*C_e*(charges[idx])*((zs[idx] - zo)*A_to_m)/(r**3)
+                Ex_contrib = -inv_eps*k*C_e*(charges[idx])*((xs[idx] - xo)*A_to_m)/(r**3)
+                Ey_contrib = -inv_eps*k*C_e*(charges[idx])*((ys[idx] - yo)*A_to_m)/(r**3)
+                Ez_contrib = -inv_eps*k*C_e*(charges[idx])*((zs[idx] - zo)*A_to_m)/(r**3)
                 Ex = Ex + Ex_contrib   
                 Ey = Ey + Ey_contrib 
                 Ez = Ez + Ez_contrib
@@ -664,7 +664,7 @@ class Electrostatics:
         position_vec = A_to_m*np.array([xo, yo, zo])
 
 
-        inv_eps = 1/self.dielectric
+        inv_eps = 1/self.config['dielectric']
 
         if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
@@ -775,7 +775,7 @@ class Electrostatics:
 
         position_vec = A_to_m*np.array([xo, yo, zo])
 
-        inv_eps = 1/self.dielectric
+        inv_eps = 1/self.config['dielectric']
 
         if self.config['includePtChgs']:
             df_ptchg  = self.ptchgdf
