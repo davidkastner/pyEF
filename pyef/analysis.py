@@ -1,3 +1,24 @@
+"""Electrostatics Analysis Module for Quantum Chemistry Calculations.
+
+This module provides the Electrostatics class for computing electrostatic
+properties (ESP, electric fields, partial charges) from quantum chemistry
+calculations. It interfaces with Multiwfn for charge analysis and supports
+various charge partitioning schemes (Hirshfeld, Hirshfeld-I, CHELPG, etc.).
+
+Key Features:
+    - Multiple charge partitioning schemes
+    - ESP and electric field calculations
+    - Multipole moment analysis
+    - QMMM point charge integration
+    - Dielectric environment effects
+    - ECP (Effective Core Potential) support
+
+Dependencies:
+    - Multiwfn (external program)
+    - NumPy, pandas, scipy
+    - OpenBabel, BioPandas
+"""
+
 import re
 import os
 import mmap
@@ -6,66 +27,138 @@ import shutil
 import logging
 import traceback
 import subprocess
+import math
+import time
+
 import numpy as np
 import pandas as pd
 import scipy.linalg as la
-from scipy.optimize import LinearConstraint
-from scipy.optimize import minimize
+from scipy.optimize import LinearConstraint, minimize
 from collections import deque
 from importlib import resources
 from distutils.dir_util import copy_tree
+
 import openbabel
 from biopandas.pdb import PandasPdb
-from .geometry import Geometry
-from .geometry import Visualize
-from .utility import MoldenObject
-import math
-import time
-import traceback
-class Electrostatics:
-    '''
-    A class to compute Electrostatic properties for series of computations housed in folders that contain .molden output files
 
-    ...
+from .geometry import Geometry, Visualize
+from .utility import MoldenObject
+class Electrostatics:
+    """Compute electrostatic properties from quantum chemistry calculations.
+
+    This class processes series of quantum chemistry calculations to extract
+    electrostatic properties including ESP, electric fields, and partial charges
+    using various charge partitioning schemes via Multiwfn.
 
     Attributes
     ----------
-    lst_of_folders: list of strings
-        list contains the name of all folders in which information for computation is contained
-    lst_of_tmcm_idx: list of integers
-        list contains integer indices of the metal atom at which ESP will be computed (typically center metal of TMC)
-    folder_to_file_path: string
-        string that indicates the filepath starting from the folder location (in lst_of_folders) to the .molden file
-    hasECP: boolean
-        indicates if an effective core potential was used... in this case, molden file will need to be re-formatted to be compatible multiwfn!
-    includePtChgs: boolean
-        indicates if point charges should be included in ESP calculation
+    lst_of_folders : list of str
+        Names of folders containing computation outputs.
+    lst_of_tmcm_idx : list of int
+        Atom indices where ESP will be computed (typically metal centers).
+    folder_to_file_path : str
+        Path from folder location to .molden file.
+    config : dict
+        Configuration dictionary containing:
+            - hasECP (bool): Whether ECP was used in calculation
+            - includePtChgs (bool): Include point charges in ESP calculation
+            - ptChgfp (str): Path to point charge file
+            - molden_filename (str): Name of molden file
+            - xyzfilename (str): Name of xyz coordinate file
+            - rerun (bool): Force recalculation of charges
+            - maxIHirshBasis (int): Max basis functions for Hirshfeld-I
+            - maxIHirshFuzzyBasis (int): Max basis for fuzzy Hirshfeld-I
+            - ECP (str): ECP basis set family
+            - dielectric (float): Dielectric constant
+            - dielectric_scale (float): Scaling factor for dielectric
+            - chgprefix (str): Prefix for charge filenames
+            - excludeAtomfromEcalc (list): Atoms to exclude from E-field calc
+            - changeDielectBoundBool (bool): Use dielectric=1 for bonded atoms
+    dict_of_calcs : dict
+        Mapping of charge scheme names to Multiwfn command codes.
+    dict_of_multipole : dict
+        Mapping of multipole schemes to Multiwfn command sequences.
+    ptchgdf : pd.DataFrame or None
+        DataFrame containing point charge data for QMMM calculations.
+    periodic_table : dict
+        Mapping of element symbols to atomic numbers.
+    amassdict : dict
+        Atomic properties (mass, atomic number, covalent radius, valence).
 
-    '''
-    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path, **kwargs):
-        #options for ECP: "stuttgart_rsc", "def2", "crenbl", "lanl2dz", "lanl2dz", "lanl2dz"
-        self.config = {'hasECP': False, 'includePtChgs': False,  'ptChgfp':'', 'molden_filename':'final_optim.molden', 'xyzfilename':'final_optim.xyz',  'rerun':False, 'maxIHirshBasis':12000, 'maxIHirshFuzzyBasis': 6000, 'ECP': "lacvps", 'dielectric': 1, 'ptchDielectricScale': 1}
+    Examples
+    --------
+    >>> folders = ['calc1/', 'calc2/']
+    >>> metal_indices = [0, 0]
+    >>> path = '/scr/'
+    >>> es = Electrostatics(folders, metal_indices, path, dielectric=2.0)
+    >>> es.changeDielectric(4.0)
+    >>> data = es.getESPData(['Hirshfeld', 'Hirshfeld_I'], 'esp_results', ...)
+    """
+
+    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path,
+                 **kwargs):
+        """Initialize Electrostatics analysis object.
+
+        Parameters
+        ----------
+        lst_of_folders : list of str
+            List of folder names containing calculation outputs.
+        lst_of_tmcm_idx : list of int
+            List of atom indices for ESP calculation (0-indexed).
+        folder_to_file_path : str
+            Relative path from folder to .molden/.xyz files.
+        **kwargs : dict, optional
+            Configuration options to override defaults. See class docstring
+            for available configuration keys.
+
+        Notes
+        -----
+        ECP options: "stuttgart_rsc", "def2", "crenbl", "lanl2dz", "lacvps"
+        """
+        # Initialize configuration with defaults
+        self.config = {
+            'hasECP': False,              # Use Effective Core Potentials
+            'includePtChgs': False,       # Include QMMM point charges
+            'ptChgfp': '',                # Point charge file path
+            'molden_filename': 'final_optim.molden',  # Molden file name
+            'xyzfilename': 'final_optim.xyz',         # XYZ file name
+            'rerun': False,               # Force recalculation
+            'maxIHirshBasis': 12000,      # Hirshfeld-I basis limit
+            'maxIHirshFuzzyBasis': 6000,  # Fuzzy Hirshfeld-I basis limit
+            'ECP': "lacvps",              # ECP basis set family
+            'dielectric': 1,              # Dielectric constant
+            'dielectric_scale': 1,        # Dielectric scaling factor
+            'chgprefix': '',              # Charge filename prefix
+            'excludeAtomfromEcalc': [],   # Atoms to exclude from E-field
+            'changeDielectBoundBool': False  # Special dielectric for bonds
+        }
+        # Override defaults with user-provided kwargs
         self.config.update(kwargs)
 
+        # Store required parameters
         self.lst_of_folders = lst_of_folders
         self.lst_of_tmcm_idx = lst_of_tmcm_idx
         self.folder_to_file_path = folder_to_file_path
-        self.dict_of_calcs =  {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': '15', 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
-        self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '1', '2'],   'Becke': ['1', '2'] }
-        self.dielectric_scale = self.config['ptchDielectricScale']
-        self.ptChgfp = self.config['ptChgfp']
-        self.dielectric = 1
-        self.ptchgdf = None
-        self.chgprefix = ''
-        #default setting does not generate PDB files
-        self.excludeAtomfromEcalc = []
-        #To avoid over-estimating screening from bound atoms, set dielectric to 1 for primary bound atoms in ESP calv
-        self.changeDielectBoundBool = False
-        # Dictionary is originally from molsimplify, # Data from http://www.webelements.com/ (last accessed May 13th 2015)
-        # Palladium covalent radius seemed to be under-estimated in original implementation, so changed to 1.39 per https://webelements.com/palladium/atom_sizes.html
-        # Dictionary from molsimplify, https://molsimplify.readthedocs.io/en/latest/_modules/molSimplify/Classes/globalvars.html
-        # Some covalent radii updated with 2008 updated values from webelements.com accessed 1/18/24 
-        #Note that full capitalization also included since some software write ou .xyz with all caps
+
+        # Multiwfn command codes for charge calculation methods
+        self.dict_of_calcs = {
+            'Hirshfeld': '1', 'Voronoi': '2', 'Mulliken': '5',
+            'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11',
+            'CHELPG': '12', 'MK': '13', 'AIM': '14', 'Hirshfeld_I': '15',
+            'CM5': '16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'
+        }
+
+        # Multiwfn command codes for multipole moment calculations
+        self.dict_of_multipole = {
+            'Hirshfeld': ['3', '2'],
+            'Hirshfeld_I': ['4', '1', '2'],
+            'Becke': ['1', '2']
+        }
+
+        # Periodic table: element symbol -> atomic number
+        # Source: molsimplify, http://www.webelements.com/
+        # Note: Full capitalization included for compatibility with various
+        # software that write .xyz files in all caps
         self.periodic_table = {"H": 1, "He": 2,
             "Li": 3, "Be": 4, "B": 5, "C": 6, "N": 7, "O": 8, "F": 9, "Ne": 10,
             "Na": 11, "Mg": 12, "Al": 13, "Si": 14, "P": 15, "S": 16, "Cl": 17, "Ar": 18,
@@ -78,6 +171,11 @@ class Electrostatics:
             "Tl": 81, "Pb": 82, "Bi": 83, "Po": 84, "At": 85, "Rn": 86,
             "Fr": 87, "Ra": 88, "Ac": 89, "Th": 90, "Pa": 91, "U": 92, "Np": 93, "Pu": 94, "Am": 95, "Cm": 96, "Bk": 97, "Cf": 98, "Es": 99, "Fm": 100, "Md": 101, "No": 102, "Lr": 103,
             "Rf": 104, "Db": 105, "Sg": 106, "Bh": 107, "Hs": 108, "Mt": 109, "Ds": 110, "Rg": 111, "Cn": 112, "Nh": 113, "Fl": 114, "Mc": 115, "Lv": 116, "Ts": 117, "Og": 118}
+
+        # Atomic properties: element -> (mass, atomic_num, cov_radius, valence)
+        # Source: molsimplify, http://www.webelements.com/
+        # Updated values: Pd covalent radius (1.39), 2008 values (1/18/24)
+        # Format: 'Symbol': (atomic_mass, atomic_number, covalent_radius_Å, valence_electrons)
         self.amassdict = {'X': (1.0, 0, 0.77, 0), 'H': (1.0079, 1, 0.37, 1),
              'D': (2.0141, 1, 0.37, 1), 'He': (4.002602, 2, 0.46, 2),
              'Li': (6.94, 3, 1.33, 1), 'Be': (9.0121831, 4, 1.02, 2), 'B': (10.83, 5, 0.85, 3),
@@ -111,77 +209,209 @@ class Electrostatics:
              'Fr': (223.02, 87, 3.48, 8), 'Ra': (226.03, 88, 2.01, 2), 'Ac': (277, 89, 1.86, 3),
              'Th': (232.0377, 90, 1.75, 4), 'Pa': (231.04, 91, 2.00, 5), 'U': (238.02891, 92, 1.70, 6),
              'Np': (237.05, 93, 1.90, 7), 'Pu': (244.06, 94, 1.75, 8), 'Am': (243.06, 95, 1.80, 9),
-             'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}        
+             'Cm': (247.07, 96, 1.69, 10), 'Bk': (247.07, 97, 1.68, 11), 'Cf': (251.08, 98, 1.68, 12)}
+
+        # Prepare data files (extract final frames, check file existence)
         self.prepData()
+
+        # Fix molden files if ECP was used in calculations
         if self.config['hasECP']:
             self.fix_allECPmolden()
 
+    # =========================================================================
+    # Configuration Methods
+    # =========================================================================
+
     def updateCalcSettings(self, key, value):
+        """Update calculation settings dictionary.
+
+        Parameters
+        ----------
+        key : str
+            Setting key to update.
+        value : any
+            New value for the setting.
+        """
         self.dict_settings[key] = value
 
     def setRunrunBool(self, rename, setbool=True):
-        self.chgprefix = rename
-        self.rerun = setbool
+        """Set rerun flag and charge filename prefix.
+
+        Parameters
+        ----------
+        rename : str
+            Prefix for charge output filenames.
+        setbool : bool, default=True
+            Whether to force recalculation of charges.
+        """
+        self.config['chgprefix'] = rename
+        self.config['rerun'] = setbool
+
     def setExcludeAtomFromCalc(self, lstExcludeAtoms):
-        self.excludeAtomfromEcalc = lstExcludeAtoms
+        """Set atoms to exclude from electric field calculations.
+
+        Parameters
+        ----------
+        lstExcludeAtoms : list of int
+            Atom indices (0-indexed) to exclude from E-field calculations.
+        """
+        self.config['excludeAtomfromEcalc'] = lstExcludeAtoms
+
     def includePtChgs(self, name_ptch_file):
-        ''' Function to include point charges in ESP calculation
-        Input: name_ptch_file: string of point charge filename
-        '''
-        self.ptChgfp = name_ptch_file
+        """Include point charges in ESP calculation (for QMMM).
+
+        Parameters
+        ----------
+        name_ptch_file : str
+            Path to point charge file.
+
+        Notes
+        -----
+        Sets includePtChgs config to True and stores file path.
+        Point charges are typically from MM region in QM/MM calculations.
+        """
+        self.config['ptChgfp'] = name_ptch_file
         self.config['includePtChgs'] = True
         print(f'Point charges to be included via {name_ptch_file}')
+
     def set_dielec_scale(self, dielec):
-        self.dielectric_scale = dielec
+        """Set dielectric scaling factor for point charges.
+
+        Parameters
+        ----------
+        dielec : float
+            Scaling factor for dielectric in QMMM calculations.
+        """
+        self.config['dielectric_scale'] = dielec
+
     def initialize_excludeAtomsFromEfieldCalc(self, atom_to_exclude):
-        ''' Function to exclude atoms from Efield calculation
-        Input: atom_to_exclude: list of integers of atom indices
-        '''
-        self.excludeAtomfromEcalc = atom_to_exclude
+        """Initialize atoms to exclude from electric field calculation.
+
+        Parameters
+        ----------
+        atom_to_exclude : list of int
+            List of atom indices (0-indexed) to exclude.
+        """
+        self.config['excludeAtomfromEcalc'] = atom_to_exclude
 
     def minDielecBonds(self, bool_bonds):
-        ''' Function to change dielectric of bound atoms to 1
-        Input: bool_bonds: boolean to change dielectric of bound atoms to 1
-        '''
-        self.changeDielectBoundBool = bool_bonds
+        """Set dielectric to 1 for bonded atoms in ESP calculation.
+
+        Parameters
+        ----------
+        bool_bonds : bool
+            If True, use dielectric=1 for atoms bonded to ESP center.
+            Helps avoid over-estimating screening from bound atoms.
+        """
+        self.config['changeDielectBoundBool'] = bool_bonds
 
     def runlowmemory(self):
-        ''' Run the lower memory, longer time simulations. Useful when using Hirshfeld-I for simulations with more than 300 atoms
-        '''
-        self.dict_of_multipole = {'Hirshfeld': ['3', '2'], 'Hirshfeld_I': ['4', '-2', '1', '2'],   'Becke': ['1', '2'] }
-        self.dict_of_calcs = {'Hirshfeld': '1', 'Voronoi':'2', 'Mulliken': '5', 'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12', 'MK':'13', 'AIM': '14', 'Hirshfeld_I': ['15','-2'], 'CM5':'16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'}
+        """Enable low-memory mode for large systems (>300 atoms).
+
+        Notes
+        -----
+        Switches Hirshfeld-I calculation to slower but lower-memory algorithm.
+        Useful for large systems that would otherwise exceed memory limits.
+        """
+        self.dict_of_multipole = {
+            'Hirshfeld': ['3', '2'],
+            'Hirshfeld_I': ['4', '-2', '1', '2'],
+            'Becke': ['1', '2']
+        }
+        self.dict_of_calcs = {
+            'Hirshfeld': '1', 'Voronoi': '2', 'Mulliken': '5', 'Lowdin': '6',
+            'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12',
+            'MK': '13', 'AIM': '14', 'Hirshfeld_I': ['15', '-2'],
+            'CM5': '16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'
+        }
 
     def changeDielectric(self, dlc):
-        ''' Function to change dielectric of solvent
-        Input: dlc: float   dielectric constant of solvent
-        '''
-        self.dielectric = dlc
+        """Change dielectric constant of the environment.
+
+        Parameters
+        ----------
+        dlc : float
+            Dielectric constant of solvent/environment.
+
+        Notes
+        -----
+        Used to model solvation effects in ESP calculations.
+        Default is 1 (vacuum). Common values: water=80, protein=4.
+        """
+        self.config['dielectric'] = dlc
 
     def set_molden_filename(self, new_name):
-       self.config['molden_filename']= new_name
+        """Set the expected molden filename.
+
+        Parameters
+        ----------
+        new_name : str
+            Name of the molden file to read.
+        """
+        self.config['molden_filename'] = new_name
 
     def set_xyzfilename(self, new_name):
+        """Set the expected XYZ coordinate filename.
+
+        Parameters
+        ----------
+        new_name : str
+            Name of the XYZ file to read.
+        """
         self.config['xyzfilename'] = new_name
-    
+
     def rePrep(self):
+        """Re-run data preparation (file extraction and validation).
+
+        Notes
+        -----
+        Useful if files have been updated or regenerated.
+        """
         self.prepData()
 
+    # =========================================================================
+    # File Preparation and Utility Methods
+    # =========================================================================
+
     def fix_allECPmolden(self):
+        """Fix molden files that used Effective Core Potentials.
+
+        Notes
+        -----
+        ECPs can cause artifacts in molden files that make them incompatible
+        with Multiwfn. This method reformats the molden files to fix these issues.
+        Processes all folders in lst_of_folders.
+        """
         owd = os.getcwd()
         basis_set_fam = self.config['ECP']
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         print('   > Re-formatting .molden files to fix ECP artifacts')
+
         for f in list_of_folders:
             folder_path = os.path.join(owd, f + folder_to_molden)
-            final_optim_molden = os.path.join(folder_path, self.config['molden_filename'])
-            final_optim_xyz = os.path.join(folder_path, self.config['xyzfilename'])
+            final_optim_molden = os.path.join(
+                folder_path, self.config['molden_filename']
+            )
+            final_optim_xyz = os.path.join(
+                folder_path, self.config['xyzfilename']
+            )
             molden = MoldenObject(final_optim_xyz, final_optim_molden)
             molden.fix_ECPmolden(owd, basis_set_fam)
-    #Utility functions for parsing molden files and fixing ECP problems
 
     def prepData(self):
-        """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
+        """Prepare calculation data for analysis.
+
+        Extracts final frames from optimization trajectories, validates file
+        existence, and sets up consistent naming conventions for .molden and
+        .xyz files across all calculation folders.
+
+        Notes
+        -----
+        - Extracts last frame from optim.xyz to create final_optim.xyz
+        - Locates .molden files and updates config if non-standard names found
+        - Removes folders from processing list if files cannot be located
+        """
 
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -262,14 +492,35 @@ class Electrostatics:
                 os.chdir(owd)
         self.lst_of_folders = list_of_folders
         os.chdir(owd)
-        #self.fix_ECPmolden()
 
+    # =========================================================================
+    # Multipole and Charge Parsing Methods
+    # =========================================================================
 
+    @staticmethod
     def getmultipoles(multipole_name):
-        '''
-        Input: multipole_name: string of multipole filename
-        Output: list of dictionaries of multipole moments
-        '''
+        """Parse multipole moments from Multiwfn output file.
+
+        Parameters
+        ----------
+        multipole_name : str
+            Path to multipole moment output file from Multiwfn.
+
+        Returns
+        -------
+        list of dict
+            List of dictionaries containing multipole data for each atom:
+            - 'Index': atom index (str)
+            - 'Element': element symbol (str)
+            - 'Atom_Charge': atomic charge (float)
+            - 'Dipole_Moment': dipole moment vector [x, y, z] (list of float)
+            - 'Quadrupole_Moment': 3x3 quadrupole tensor (np.ndarray)
+
+        Notes
+        -----
+        Parses Multiwfn output format with sections separated by asterisks.
+        Extracts monopole (charge), dipole, and quadrupole moments for each atom.
+        """
         # Read the text file
         with open(multipole_name, 'r') as file:
             text = file.read()
@@ -319,27 +570,52 @@ class Electrostatics:
                 atomDict = {"Index": index, "Element": element, "Atom_Charge": atomic_charge, 'Dipole_Moment': dipole_moment, 'Quadrupole_Moment': quadrupole_moment}
                 atomicDicts.append(atomDict)
         return atomicDicts
-    #Function will process a point charge file (as generated by amber) and return a dataframe with partial charges and coordinates for use in ESP calculation
+
     def getPtChgs(self, filename_pt):
-        '''
-        Input: filename_pt: string of point charge filename
-        Output: dataframe with partial charges and coordinates
-        '''
-        print(f'Looking for point charge file: {filename_pt} from {os.getcwd()}')
-        chg_df = pd.read_table(filename_pt, skiprows=2, delim_whitespace=True, names=['charge', 'x', 'y', 'z'])
+        """Load point charges from file (for QMMM calculations).
+
+        Parameters
+        ----------
+        filename_pt : str
+            Path to point charge file (typically from Amber/CHARMM).
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with columns: ['Atom', 'charge', 'x', 'y', 'z']
+            All atoms labeled as 'pnt' (point charge).
+
+        Notes
+        -----
+        File format: whitespace-delimited with 2 header lines to skip.
+        """
+        chg_df = pd.read_table(
+            filename_pt, skiprows=2, delim_whitespace=True,
+            names=['charge', 'x', 'y', 'z']
+        )
         atm_name = ['pnt']
-        atoms = atm_name*len(chg_df['charge'])
+        atoms = atm_name * len(chg_df['charge'])
         chg_df['Atom'] = atoms
-        self.ptchgdf  = chg_df
         return chg_df
 
-    # Define the functions to calculate the ESP:
+    @staticmethod
     def mapcount(filename):
-        """Function to rapidly count the number of lines in a file
-        Input: filename: string of filename
-        Output: integer of number of lines in file
-        """
+        """Rapidly count lines in a file using memory mapping.
 
+        Parameters
+        ----------
+        filename : str
+            Path to file to count.
+
+        Returns
+        -------
+        int
+            Number of lines in the file.
+
+        Notes
+        -----
+        Uses mmap for efficient line counting in large files.
+        """
         f = open(filename, "r+")
         buf = mmap.mmap(f.fileno(), 0)
         lines = 0
@@ -349,24 +625,38 @@ class Electrostatics:
             lines += 1
         return lines
 
+    # =========================================================================
+    # Electrostatic Potential (ESP) Calculation Methods
+    # =========================================================================
 
     def calcesp(self, path_to_xyz, espatom_idx, charge_range, charge_file):
-        """
-        Calculate the esp in units of Volts
-        Input: path_to_xyz: string of xyz filename
-        espatom_idx: integer of atom index
-        charge_range: list of integers of atom indices
-        charge_file: string of charge filename
-        Output: list of ESP and atomic symbol
+        """Calculate electrostatic potential at specified atom.
+
+        Parameters
+        ----------
+        path_to_xyz : str
+            Path to XYZ coordinate file.
+        espatom_idx : int
+            Atom index (0-indexed) where ESP will be calculated.
+        charge_range : list of int
+            Indices of atoms to include in ESP calculation.
+        charge_file : str
+            Path to partial charge file from Multiwfn.
+
+        Returns
+        -------
+        list
+            [ESP (float), atom_symbol (str)]
+            ESP in Volts at the specified atom.
 
         Notes
         -----
-        Espatom_idx should be the index of the atom at which the esp should be calculated
-        Charge_range should provide an array with the index of each atom to be considered in calculation of the ESP
-        Charge_file is the filepath for the .txt file containing the hirshfeld charges (generated by multiwfn)
-
+        - Uses Coulomb's law: V = k * q / r with dielectric screening
+        - Point charges from QMMM included if config['includePtChgs'] is True
+        - Bonded atoms treated with dielectric=1 if config['changeDielectBoundBool'] is True
+        - Units: Volts (N·m/C = J/C)
         """
-        dielectric = self.dielectric
+        dielectric = self.config['dielectric']
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2) aka N*m^2/C^2
 
@@ -379,7 +669,7 @@ class Electrostatics:
 
         #For QMMM calculation, include point charges in ESP calculation
         if self.config['includePtChgs']:
-            df_ptchg  = self.ptchgdf
+            df_ptchg  = getPtChgs(self.config['ptChgfp'])
             xs = xs + list(df_ptchg['x'])
             ys = ys + list(df_ptchg['y'])
             zs = zs + list(df_ptchg['z'])
@@ -404,7 +694,7 @@ class Electrostatics:
 
         bound_atoms = []
         #create list of bound atoms, these are treated with a different dielectric
-        if self.changeDielectBoundBool:
+        if self.config['changeDielectBoundBool']:
             bound_atoms = self.getBondedAtoms(path_to_xyz, idx_atom)
  
         for idx in charge_range:
@@ -472,11 +762,12 @@ class Electrostatics:
 
 
 
-    def calc_firstTermE_atom_decomposable(self, espatom_idx, charge_range, charge_file):
+    def calc_firstTermE_atom_decomposable(self, espatom_idx, charge_range, charge_file, df_ptchg=None):
         '''
         Input: espatom_idx: integer of atom index
         charge_range: list of integers of atom indices
         charge_file: string of charge filename
+        df_ptchg: optional pre-loaded point charge dataframe
         Output: list of E-field vector and atomic symbol
         '''
 
@@ -534,7 +825,11 @@ class Electrostatics:
         if self.config['includePtChgs']:
             qm_charges = charges
             QM_coords = [xs, ys, zs]
-            df_ptchg  = self.ptchgdf
+            #check if self.ptchf is population
+            if df_ptchg is None:
+                # If point charges are enabled but not passed, try to load them
+                # Note: This may fail if ptChgfp is not a full path
+                df_ptchg = self.getPtChgs(self.config['ptChgfp'])
             MM_xs = list(df_ptchg['x'])
             MM_ys = list(df_ptchg['y'])
             MM_zs = list(df_ptchg['z'])
@@ -546,7 +841,7 @@ class Electrostatics:
             qm_charges = np.array(QM_charges)
             #MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
 
-            MM_charges = mm_charges*(1/(math.sqrt(self.dielectric_scale)))
+            MM_charges = mm_charges*(1/(math.sqrt(self.config['dielectric_scale'])))
             #change charge range to include these new partial charges!
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
@@ -623,13 +918,14 @@ class Electrostatics:
 
 
 
-    def calc_fullE(self, idx_atom, charge_range, xyz_file, atom_multipole_file):
+    def calc_fullE(self, idx_atom, charge_range, xyz_file, atom_multipole_file, df_ptchg=None):
         '''
-        
+
         Input: idx_atom: integer of atom index
         charge_range: list of integers of atom indices
         xyz_file: string of xyz filename
         atom_multipole_file: string of multipole filename
+        df_ptchg: optional pre-loaded point charge dataframe
         Output: list of E-field vector and atomic symbol, Efields are reported in units of Volts/Angstrom
         '''
 
@@ -666,9 +962,10 @@ class Electrostatics:
 
         inv_eps = 1/self.config['dielectric']
 
-        if self.config['includePtChgs']:
-            df_ptchg  = self.ptchgdf
-
+        if self.config['includePtChgs'] and df_ptchg is None:
+            # If point charges are enabled but not passed, try to load them
+            # Note: This may fail if ptChgfp is not a full path
+            df_ptchg = self.getPtChgs(self.config['ptChgfp'])
         #load multipole moments from processed outputs 
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
 
@@ -720,7 +1017,7 @@ class Electrostatics:
             print(f'Size of mm_coords: {np.shape(mm_coords)} and qm coords: {np.shape(QM_coords)}; mm charges: {np.shape(mm_charges)} and qm_charges: {np.shape(qm_charges)}')
             MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
 
-            MM_charges = mm_charges*(1/(math.sqrt(self.dielectric_scale)))
+            MM_charges = mm_charges*(1/(math.sqrt(self.config['dielectric_scale'])))
             #change charge range to include these new partial charges!
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
@@ -736,13 +1033,14 @@ class Electrostatics:
 
 
 
-    def calc_atomwise_ElectricField(self, idx_atom, charge_range, xyz_file, atom_multipole_file):
+    def calc_atomwise_ElectricField(self, idx_atom, charge_range, xyz_file, atom_multipole_file, df_ptchg=None):
         '''
-        
+
         Input: idx_atom: integer of atom index
         charge_range: list of integers of atom indices
         xyz_file: string of xyz filename
         atom_multipole_file: string of multipole filename
+        df_ptchg: optional pre-loaded point charge dataframe
         Output: list of E-field vector and atomic symbol, Efields are reported in units of Volts/Angstrom
         '''
         df = Geometry(xyz_file).getGeomInfo()
@@ -777,8 +1075,10 @@ class Electrostatics:
 
         inv_eps = 1/self.config['dielectric']
 
-        if self.config['includePtChgs']:
-            df_ptchg  = self.ptchgdf
+        if self.config['includePtChgs'] and df_ptchg is None:
+            # If point charges are enabled but not passed, try to load them
+            # Note: This may fail if ptChgfp is not a full path
+            df_ptchg = self.getPtChgs(self.config['ptChgfp'])
 
         #load multipole moments from processed outputs 
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
@@ -836,7 +1136,7 @@ class Electrostatics:
             qm_charges = np.array(QM_charges)
             MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
 
-            MM_charges = mm_charges*(1/(math.sqrt(self.dielectric_scale)))
+            MM_charges = mm_charges*(1/(math.sqrt(self.config['dielectric_scale'])))
             #change charge range to include these new partial charges!
             charge_range = range(0, len(MM_xs))
             for chg_idx in charge_range:
@@ -868,7 +1168,7 @@ class Electrostatics:
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
 
-        dielectric = self.dielectric
+        dielectric = self.config['dielectric']
 
         substrate_idxs = df_substrate['Index']
         env_idxs = df_env['Index']
@@ -923,7 +1223,7 @@ class Electrostatics:
         C_e = 1.6023*(10**-19)
         one_mol = 6.02*(10**23)
         #cal_J = 4.184
-        dielectric = self.dielectric
+        dielectric = self.config['dielectric']
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
         #create list of bound atoms, these are treated with a different dielectric
         bound_atoms = Geometry(xyzfilepath).getBondedAtoms(idx_atom)
@@ -982,12 +1282,13 @@ class Electrostatics:
 
 
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
-    def E_proj_bondIndices_atomwise(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines, bool_multipole):
+    def E_proj_bondIndices_atomwise(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines, bool_multipole, df_ptchg=None):
         '''
         Input: bond_indices: list of tuples of atom indices
         xyz_filepath: string of xyz filename
         atom_multipole_file: string of multipole filename
         all_lines: list of strings of lines in xyz file
+        df_ptchg: optional pre-loaded point charge dataframe
         Output: list of E-field vector and atomic symbol in units of V/Angstrom
         '''
         A_to_m = 10**(-10)
@@ -1000,8 +1301,8 @@ class Electrostatics:
 
         if bool_multipole:
             for atomidxA, atomidxB in bond_indices:
-                [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded, A_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded, B_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxB, all_lines, xyz_filepath, atom_multipole_file) 
+                [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded, A_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxA, all_lines, xyz_filepath, atom_multipole_file, df_ptchg=df_ptchg)
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded, B_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxB, all_lines, xyz_filepath, atom_multipole_file, df_ptchg=df_ptchg) 
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
                 bond_len = np.linalg.norm(bond_vec_unnorm)
                 bond_vec = bond_vec_unnorm/(bond_len)
@@ -1018,10 +1319,9 @@ class Electrostatics:
 
         else:
             for atomidxA, atomidxB in bond_indices:
-                [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file)   
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file) 
+                [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file, df_ptchg=df_ptchg)
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file, df_ptchg=df_ptchg)
 
-                print(f'Automatically selected bond between: {A_bonded_atom} and {B_bonded_atom} for analysis!')
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
                 bond_len = np.linalg.norm(bond_vec_unnorm)
                 bond_vec = bond_vec_unnorm/(bond_len)
@@ -1179,7 +1479,7 @@ class Electrostatics:
         charge_file: string of charge filename
         Output: list of ESP and atomic symbol
         '''
-        dielectric = self.dielectric
+        dielectric = self.config['dielectric']
         df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
         k = 8.987551*(10**9)  # Coulombic constant in kg*m**3/(s**4*A**2) = N*m^2/(C^2)
 
@@ -1207,9 +1507,14 @@ class Electrostatics:
         zo = zs[idx_atom]
         chargeo = charges[idx_atom]
 
-        #For QMMM calculation, include point charges in ESP calculation 
+        #For QMMM calculation, include point charges in ESP calculation
         if self.config['includePtChgs']:
-            ptchg_filename = self.ptChgfp
+            ptchg_filename = self.config['ptChgfp']
+            if not ptchg_filename or ptchg_filename.strip() == '':
+                raise ValueError(
+                    "Point charge file path is not set. Please call set_ptChgfile() "
+                    "with the filename (e.g., 'ptchg.dat') before using includePtChgs=True"
+                )
             init_file_path = path_to_xyz[0:-len(self.folder_to_file_path + self.config['xyzfilename'])]
             full_ptchg_fp = init_file_path + ptchg_filename
             df_ptchg = self.getPtChgs(full_ptchg_fp)
@@ -1225,7 +1530,7 @@ class Electrostatics:
         distances = []
         esps = []
         bound_atoms = []
-        if self.changeDielectBoundBool:
+        if self.config['changeDielectBoundBool']:
             bound_atoms = self.getBondedAtoms(path_to_xyz, idx_atom)
         for idx in range(0, total_atoms):
             if idx == idx_atom:
@@ -1291,7 +1596,7 @@ class Electrostatics:
         ESPdata_filename: string
             Name of the output file name    '''
 
-        self.dielectric = dielectric
+        self.config['dielectric'] = dielectric
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1406,8 +1711,8 @@ class Electrostatics:
         os.chdir(owd)
         os.chdir(f + folder_to_molden)
         #subprocess.call(multiwfn_module, shell=True)
-        file_path_multipole = f"{os.getcwd()}/{self.chgprefix}Multipole{charge_type}.txt"
-        file_path_monopole = f"{os.getcwd()}/{self.chgprefix}Charges{charge_type}.txt"
+        file_path_multipole = f"{os.getcwd()}/{self.config['chgprefix']}Multipole{charge_type}.txt"
+        file_path_monopole = f"{os.getcwd()}/{self.config['chgprefix']}Charges{charge_type}.txt"
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
         #file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
 
@@ -1589,7 +1894,7 @@ class Electrostatics:
         #only running here with monopole implementation
 
         multipole_bool = False
-        self.dielectric = dielectric
+        self.config['dielectric'] = dielectric
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1606,7 +1911,7 @@ class Electrostatics:
             atom_idx = metal_idxs[counter]
             total_lines = Electrostatics.mapcount(file_path_xyz)
             init_all_lines = range(0, total_lines - 2)
-            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
+            all_lines = [x for x in init_all_lines if x not in self.config['excludeAtomfromEcalc']]
 
 
 
@@ -1653,7 +1958,7 @@ class Electrostatics:
         ESPdata_filename: string
             Name of the output file name    '''
 
-        self.dielectric = dielectric
+        self.config['dielectric'] = dielectric
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1670,7 +1975,7 @@ class Electrostatics:
             atom_idx = metal_idxs[counter]
             total_lines = Electrostatics.mapcount(file_path_xyz)
             init_all_lines = range(0, total_lines - 2)
-            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
+            all_lines = [x for x in init_all_lines if x not in self.config['excludeAtomfromEcalc']]
 
 
             comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd) 
@@ -1716,7 +2021,7 @@ class Electrostatics:
         ESPdata_filename: string
             Name of the output file name    '''
 
-        self.dielectric = dielectric
+        self.config['dielectric'] = dielectric
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1734,8 +2039,8 @@ class Electrostatics:
                 atom_idx = metal_idxs[counter]
                 total_lines = Electrostatics.mapcount(file_path_xyz)
                 init_all_lines = range(0, total_lines - 2)
-                if len(self.excludeAtomfromEcalc) > 1:
-                    all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc[counter]]
+                if len(self.config['excludeAtomfromEcalc']) > 1:
+                    all_lines = [x for x in init_all_lines if x not in self.config['excludeAtomfromEcalc'][counter]]
                 else:
                     all_lines = [x for x in init_all_lines]
                 comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
@@ -1748,9 +2053,15 @@ class Electrostatics:
 
                 #Account for point charges!!
                 num_pt_chgs = 0
+                df_ptchg = None
                 if self.config['includePtChgs']:
-                    ptchg_filename = self.ptChgfp
-                    full_ptchg_fp = os.getcwd() + '/' + f + '/' + ptchg_filename
+                    ptchg_filename = self.config['ptChgfp']
+                    if not ptchg_filename or ptchg_filename.strip() == '':
+                        raise ValueError(
+                            "Point charge file path is not set. Please call set_ptChgfile() "
+                            "with the filename (e.g., 'ptchg.dat') before using includePtChgs=True"
+                        )
+                    full_ptchg_fp = os.path.join(os.getcwd(), f, ptchg_filename)
                     df_ptchg = self.getPtChgs(full_ptchg_fp)
                     num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom'])
 
@@ -1761,7 +2072,7 @@ class Electrostatics:
                     path_to_pol = file_path_charges
                     temp_xyz = ''
 
-                [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool)
+                [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool, df_ptchg=df_ptchg)
 
                 df  = Electrostatics.charge_atoms(self, path_to_pol, temp_xyz)
 
@@ -1806,7 +2117,7 @@ class Electrostatics:
         ESPdata_filename: string
             Name of the output file name    '''
 
-        self.dielectric = dielectric
+        self.config['dielectric'] = dielectric
        # Access Class Variables
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -1824,7 +2135,7 @@ class Electrostatics:
             total_lines = Electrostatics.mapcount(file_path_xyz)
             print(f'total_lines: {total_lines}')
             init_all_lines = range(0, total_lines - 2)
-            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc[counter]]
+            all_lines = [x for x in init_all_lines if x not in self.config['excludeAtomfromEcalc'][counter]]
             comp_cost = self.getchargeInfo(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd) 
             #If the calculation is not succesfully, continue
             if comp_cost == 'Na':
@@ -1835,11 +2146,17 @@ class Electrostatics:
 
             #Account for point charges!!
             num_pt_chgs = 0
+            df_ptchg = None
             if self.config['includePtChgs']:
-                ptchg_filename = self.ptChgfp
-                full_ptchg_fp = os.getcwd() + '/' + f + '/' + ptchg_filename
+                ptchg_filename = self.config['ptChgfp']
+                if not ptchg_filename or ptchg_filename.strip() == '':
+                    raise ValueError(
+                        "Point charge file path is not set. Please call set_ptChgfile() "
+                        "with the filename (e.g., 'ptchg.dat') before using includePtChgs=True"
+                    )
+                full_ptchg_fp = os.path.join(os.getcwd(), f, ptchg_filename)
                 df_ptchg = self.getPtChgs(full_ptchg_fp)
-                num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom']) 
+                num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom'])
 
 
             #if bool_manual_mode:
@@ -1849,7 +2166,7 @@ class Electrostatics:
                 path_to_pol = file_path_multipole
             else:
                 path_to_pol = file_path_charges
-            [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool)
+            [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise] = self.E_proj_bondIndices_atomwise(input_bond_idx, file_path_xyz, path_to_pol, all_lines, multipole_bool, df_ptchg=df_ptchg)
 
 
             pdbName = 'Efield_cont'+ str(f)+ str(charge_type)+'_.pdb'
@@ -1960,7 +2277,12 @@ class Electrostatics:
            
             num_pt_chgs = 0
             if self.config['includePtChgs']:
-                ptchg_filename = self.ptChgfp
+                ptchg_filename = self.config['ptChgfp']
+                if not ptchg_filename or ptchg_filename.strip() == '':
+                    raise ValueError(
+                        "Point charge file path is not set. Please call set_ptChgfile() "
+                        "with the filename (e.g., 'ptchg.dat') before using includePtChgs=True"
+                    )
                 df_ptchg = self.getPtChgs(ptchg_filename)
                 print(f'Columns in the ptchg dataframe: {df_ptchg.columns}')
                 num_pt_chgs = num_pt_chgs + len(df_ptchg['Atom']) 
@@ -1974,8 +2296,8 @@ class Electrostatics:
                 to_exclude = excludeAtoms[counter]
                 self.excludeAtomsFromEfieldCalc(to_exclude)
                 print(f'Excluding atoms: {to_exclude}')
-            all_lines = [x for x in init_all_lines if x not in self.excludeAtomfromEcalc]
-            print(f'At this point in the calculation I have {len(all_lines)} and am exlcuding: {self.excludeAtomfromEcalc}')
+            all_lines = [x for x in init_all_lines if x not in self.config['excludeAtomfromEcalc']]
+            print(f'At this point in the calculation I have {len(all_lines)} and am exlcuding: {self.config["excludeAtomfromEcalc"]}')
             # Check the contents of the polarization file to see if it finished
             need_to_run_calculation = True
             if os.path.exists(path_to_pol):
@@ -2334,7 +2656,7 @@ class Electrostatics:
     def get_Electrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path, substrate_idxs, num_terms=1, charge_type='Hirshfeld_I', multipole_bool=False, name_dataStorage='estaticFile', env_idxs=None):
         #compute the electrostatic stabilization associated with some chemical env and a substrate
         #If env_idxs=None will defauly to just including all of the non-substrate indices in environment
-        dielectric = self.dielectric
+        dielectric = self.config['dielectric']
        # Access Class Variables
         folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
