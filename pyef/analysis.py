@@ -219,6 +219,135 @@ class Electrostatics:
             self.fix_allECPmolden()
 
     # =========================================================================
+    # Multiwfn Interface Methods
+    # =========================================================================
+
+    def _run_multiwfn(self, command, input_commands, output_file=None,
+                     description="Multiwfn calculation", capture_output=True):
+        """Centralized Multiwfn runner with proper error handling and output display.
+
+        Parameters
+        ----------
+        command : str
+            The shell command to run Multiwfn (e.g., "multiwfn file.molden")
+        input_commands : list of str
+            List of commands to send to Multiwfn's stdin
+        output_file : str, optional
+            Path to redirect stdout to a file
+        description : str, optional
+            Description of the calculation for error messages
+        capture_output : bool, optional
+            If True, capture and display output. If False, let it stream to terminal
+
+        Returns
+        -------
+        tuple
+            (stdout, stderr, returncode) from the Multiwfn process
+
+        Raises
+        ------
+        RuntimeError
+            If Multiwfn fails with non-zero exit code
+        """
+        import sys
+
+        # Prepare the full command with output redirection if specified
+        full_command = command
+        if output_file:
+            full_command = f"{command} > {output_file}"
+
+        print(f"\n{'='*60}")
+        print(f"Running: {description}")
+        print(f"Command: {full_command}")
+        print(f"{'='*60}\n")
+
+        try:
+            # Run Multiwfn process
+            if capture_output:
+                proc = subprocess.Popen(
+                    full_command,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    shell=True,
+                    text=True,
+                    bufsize=1
+                )
+
+                # Send commands to stdin
+                input_str = "\n".join(input_commands)
+                stdout, stderr = proc.communicate(input=input_str)
+
+                # Display output in real-time style
+                if stdout:
+                    print("MULTIWFN OUTPUT:")
+                    print("-" * 60)
+                    print(stdout)
+                    print("-" * 60)
+
+                if stderr:
+                    print("MULTIWFN STDERR:")
+                    print("-" * 60)
+                    print(stderr, file=sys.stderr)
+                    print("-" * 60)
+
+            else:
+                # Let output stream directly to terminal
+                proc = subprocess.Popen(
+                    full_command,
+                    stdin=subprocess.PIPE,
+                    shell=True,
+                    text=True
+                )
+                input_str = "\n".join(input_commands)
+                proc.communicate(input=input_str)
+                stdout, stderr = "", ""
+
+            returncode = proc.returncode
+
+            # Check for errors
+            if returncode != 0:
+                error_msg = f"""
+{'='*60}
+ERROR: {description} FAILED
+{'='*60}
+Command: {full_command}
+Return code: {returncode}
+
+STDOUT:
+{stdout if stdout else '(empty)'}
+
+STDERR:
+{stderr if stderr else '(empty)'}
+
+Input commands sent:
+{chr(10).join(input_commands)}
+{'='*60}
+"""
+                raise RuntimeError(error_msg)
+
+            print(f"\n✓ {description} completed successfully\n")
+            return stdout, stderr, returncode
+
+        except Exception as e:
+            error_msg = f"""
+{'='*60}
+EXCEPTION during {description}
+{'='*60}
+Command: {full_command}
+Error: {str(e)}
+
+Traceback:
+{traceback.format_exc()}
+
+Input commands that were to be sent:
+{chr(10).join(input_commands)}
+{'='*60}
+"""
+            print(error_msg, file=sys.stderr)
+            raise RuntimeError(error_msg) from e
+
+    # =========================================================================
     # Configuration Methods
     # =========================================================================
 
@@ -1609,45 +1738,42 @@ class Electrostatics:
             print('-----------------' + str(f) + '------------------')
             atom_idx = metal_idxs[counter]
             counter = counter + 1
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} {self.config['molden_filename']}"
-            results_dir = os.getcwd() + '/'
-            
             results_dict = {}
             results_dict['Name'] = f
 
             for key in charge_types:
                 print('Partial Charge Scheme:' + str(key))
                 try:
-                    full_file_path = f"{os.getcwd()}/Charges{key}.txt"
-                    path_to_xyz = f"{os.getcwd()}/{self.config['xyzfilename']}"
-                    if key == "Hirshfeld_I":
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, results_dir + 'atmrad/')
-                    try: 
+                    # Use centralized getchargeInfo() to get/compute charges
+                    comp_cost = self.getchargeInfo(
+                        multipole_bool=False,
+                        f=f,
+                        folder_to_molden=folder_to_molden,
+                        multiwfn_path=multiwfn_path,
+                        atmrad_path=atmrad_path,
+                        charge_type=key,
+                        owd=owd
+                    )
+
+                    if comp_cost == -1:
+                        print(f"WARNING: Charge calculation failed for {key} in {f}")
+                        continue
+
+                    full_file_path = f"{owd}/{f + folder_to_molden}Charges{key}.txt"
+                    path_to_xyz = f"{owd}/{f + folder_to_molden}{self.config['xyzfilename']}"
+
+                    try:
                         [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx)
 
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
                         [sorted_distances, sorted_esps, cum_esps, sorted_cum_idx, sorted_cum_chg, sorted_atomTypes] = self.esp_bydistance(path_to_xyz, atom_idx, full_file_path)
                         ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
                         ESP_scoord = self.esp_second_coord(atom_idx, full_file_path, path_to_xyz)
-                    
+
                     except Exception as e:
                         print('The Exception is: ' + str(e))
                         print(traceback.format_exc())
-                        print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
-
-                        # Re-run multiwfn computation of partial charge 
-                        proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                        calc_command = self.dict_of_calcs[key]
-                        commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
-                        if key == 'CHELPG':
-                            commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
-                        output = proc.communicate("\n".join(commands).encode())
-                        new_name = 'final_optim_' +key+'.txt'
-                        os.rename('final_optim.chg', new_name)
+                        print(f'Error when trying to access electrostatic information for {key}')
              
                         [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
                         
@@ -1741,12 +1867,12 @@ class Electrostatics:
                     #Dynamically get path to package settings.ini file
                     with resources.path('pyef.resources', 'settings.ini') as ini_path:
                         path_to_init_file = str(ini_path)
-                        Command_Multipole = f"{multiwfn_path} {molden_filename} -set {path_to_init_file} > {file_path_multipole}"
-                    proc = subprocess.Popen(Command_Multipole, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+                        command = f"{multiwfn_path} {molden_filename} -set {path_to_init_file}"
+
                     multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
                     num_atoms = Electrostatics.mapcount(final_structure_file) - 2
                     if charge_type == 'Hirshfeld_I':
-                        #get the number of basis functions 
+                        #get the number of basis functions
                         num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
@@ -1754,36 +1880,54 @@ class Electrostatics:
                         print(f'The current max num is: {self.config["maxIHirshFuzzyBasis"]}')
                         if  num_basis > self.config['maxIHirshFuzzyBasis']:
                             print(f'Number of basis functions: {num_basis}')
-                            multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q'] 
+                            multiwfn_commands = ['15', '-1'] + ['4', '-2', '1', '2'] + ['0', 'q']
                             print(f'I-Hirshfeld command should be low memory and slow to accomodate large system')
-                    proc.communicate("\n".join(multiwfn_commands).encode())
+
+                    # Use centralized Multiwfn runner
+                    self._run_multiwfn(
+                        command=command,
+                        input_commands=multiwfn_commands,
+                        output_file=file_path_multipole,
+                        description=f"Multipole {charge_type} calculation for {f}"
+                    )
 
                 else:
-                    command_A = f"{multiwfn_path} {molden_filename}"
+                    command = f"{multiwfn_path} {molden_filename}"
                     chg_prefix,  _ = os.path.splitext(molden_filename)
-                    proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
                     calc_command = self.dict_of_calcs[charge_type]
                     commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                     if charge_type == 'CHELPG':
                         commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
-                    elif charge_type == 'Hirshfeld_I':                          
+                    elif charge_type == 'Hirshfeld_I':
                         num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
                         print(f'Number of basis functions: {num_basis}')
                         if num_basis > self.config['maxIHirshBasis']:
                             commands = ['7', '15', '-2', '1', '\n', 'y', '0', 'q']
                         atmrad_src = atmrad_path
                         copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
-                        #if too many atoms will need to change calc to run with reasonable memory 
-                    output = proc.communicate("\n".join(commands).encode())
+                        #if too many atoms will need to change calc to run with reasonable memory
+
+                    # Use centralized Multiwfn runner
+                    self._run_multiwfn(
+                        command=command,
+                        input_commands=commands,
+                        description=f"Monopole {charge_type} calculation for {f}"
+                    )
                     os.rename(f'{chg_prefix}.chg', file_path_monopole)
                 end = time.time()
                 comp_cost = end - start
             except Exception as e:
-                print(e)
-                print(traceback.print_exc())
-                #Issue could be from lost memorry
+                print(f"\n{'='*60}")
+                print(f"ERROR in getchargeInfo for {f}")
+                print(f"Charge type: {charge_type}, Multipole: {multipole_bool}")
+                print(f"{'='*60}")
+                print(f"Error: {str(e)}")
+                print(f"\nFull traceback:")
+                print(traceback.format_exc())
+                print(f"{'='*60}\n")
+                # Issue could be from lost memory or Multiwfn failure
                 os.chdir(owd)
-                return comp_cost
+                return -1  # Return -1 to indicate failure instead of comp_cost
         os.chdir(owd)
         return comp_cost
 
