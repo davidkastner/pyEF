@@ -110,6 +110,7 @@ class MoldenObject:
                 # Parse JSON string into dict
                 data = json.loads(data_str)
                 if str(Z) in data["elements"]:
+                    print(f'This is Z: {Z}')
                     mapping[element] = data["elements"][str(Z)]['ecp_electrons']
                 else:
                     mapping[element] = 0  # all-electron if no ECP
