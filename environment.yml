@@ -3,16 +3,14 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.8
-  - biopandas
-  - click
-  - numpy
+  - python>=3.8
   - openbabel
+  - numpy
   - pandas
   - scipy
-  - yaml
+  - pytest>=6.1.2
+  - pytest-cov>=3.0.0
+  - basis_set_exchange
   - pip
   - pip:
-    - sphinx==6.2.1
-    - sphinx-autoapi==3.0.0
-    - https://github.com/revitron/revitron-sphinx-theme/archive/refs/tags/0.7.0.zip
+    - biopandas

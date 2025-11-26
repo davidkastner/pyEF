@@ -29,24 +29,40 @@ PyEF is a python package optimized to run using molden files from QM calculation
 In progress
 
 ## 3. Installation
-Install the package by running the follow commands inside the downloaded repository. 
-This will perform a developmental version install. 
-It is good practice to do this inside of a virtual environment.
 
-### Download the package from GitHub
+### Quick Install (Recommended)
+Automated one-command installation with testing:
+
+```bash
+git clone git@github.com:davidkastner/pyEF.git
+cd pyEF
+./install.sh
 ```
+
+This script will:
+- Create a conda environment with all dependencies (including openbabel)
+- Install the package in development mode
+- Run the test suite to verify installation
+- Display activation instructions
+
+### Manual Installation
+If you prefer to install manually:
+
+#### Download the package from GitHub
+```bash
 git clone git@github.com:davidkastner/pyEF.git
 ```
 
-### Creating python environment
+#### Creating python environment
 All the dependencies can be loaded together using the prebuilt environment.yml file.
 Compatibility is automatically tested for python versions 3.8 and higher.
 Installing all dependencies together has shown to produce more robust installations.
 
-```
+```bash
 cd pyEF
 conda env create -f environment.yml
 conda activate pyef
+pip install -e .
 ```
 
 ### Developer install of pyEF

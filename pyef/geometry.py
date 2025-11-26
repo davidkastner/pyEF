@@ -435,33 +435,39 @@ class Visualize:
         self.xyzfile = filexyz
 
     def makePDBpercentEfield(self):
-        #make PDB with b-factor cols colored by percent of final efield 
-        xyzfie = self.filexyz
+        #make PDB with b-factor cols colored by percent of final efield
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def makePDBcontributionEfield(self):
         #make PDB with b-factor column color by the total E-field contribution from each atom
-        xyzfie = self.filexyz
-
-
-        ppdb.df['HETATM']['b_factor'] = charges
-        ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def makePDBcontributionESP(self):
         #make PDB with b-factor columned colored by the total contribution form each atom to the ESP
-        xyzfie = self.filexyz
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def compareESP(self):
         #compare the ESP at each atom, show how it differs betwen two differ
-        xyzfie = self.filexyz
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
-    def PDBESP():
+    def PDBESP(self):
         #visualize the ESP of the full system
-        xyzfie = self.filexyz
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def makePDB(self, output_filename, b_col, pdbName):
         ''' Function to generate PDB files with partial charges
@@ -540,7 +546,7 @@ class Visualize:
 
         new_pdb.to_pdb(new_pdb_name,records=['HETATM'],gz=False,append_newline=True)
 
-    def makePDBcharges(self, output_filename, b_col, pdbName):
+    def makePDBcharges(self, output_filename, b_col, pdbName, type_charge='Monopole'):
         ''' Function to generate PDB files with partial charges
         Input: xyzfilename: string of xyz filename
         output_filename: string of output filename
@@ -548,7 +554,7 @@ class Visualize:
         pdbName: string of output pdb filename
         Output: .pdb file with partial charges
         '''
-        xyzfile = self.xyzfile
+        xyzfilename = self.xyzfile
         print(f'Final XYZ filename: {xyzfilename}')
         df = self.getGeomInfo()
         #get out the xyz coords, charges, and atoms!
@@ -622,6 +628,7 @@ class Visualize:
             ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
 
         elif type_charge == 'Multipole':
+            from .analysis import Electrostatics
             charge_lst = []
             lst_multipole_dict = Electrostatics.getmultipoles(output_filename)
             obConversion.SetInAndOutFormats("xyz", "pdb")

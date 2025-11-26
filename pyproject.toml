@@ -32,7 +32,8 @@ requires-python = ">=3.8"
 [project.optional-dependencies]
 test = [
   "pytest>=6.1.2",
-  "pytest-runner"
+  "pytest-runner",
+  "pytest-cov>=3.0.0"
 ]
 
 # CLI entry point
@@ -87,3 +88,36 @@ default-tag = "1.0.0"
 
 [tool.versioningit.write]
 file = "pyef/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["pyef/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["pyef"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
