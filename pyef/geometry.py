@@ -540,7 +540,7 @@ class Visualize:
 
         new_pdb.to_pdb(new_pdb_name,records=['HETATM'],gz=False,append_newline=True)
 
-    def makePDBcharges(self, output_filename, b_col, pdbName):
+    def makePDBcharges(self, output_filename, b_col, pdbName, type_charge='Monopole'):
         ''' Function to generate PDB files with partial charges
         Input: xyzfilename: string of xyz filename
         output_filename: string of output filename
@@ -548,7 +548,7 @@ class Visualize:
         pdbName: string of output pdb filename
         Output: .pdb file with partial charges
         '''
-        xyzfile = self.xyzfile
+        xyzfilename = self.xyzfile
         print(f'Final XYZ filename: {xyzfilename}')
         df = self.getGeomInfo()
         #get out the xyz coords, charges, and atoms!
@@ -622,6 +622,7 @@ class Visualize:
             ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
 
         elif type_charge == 'Multipole':
+            from .analysis import Electrostatics
             charge_lst = []
             lst_multipole_dict = Electrostatics.getmultipoles(output_filename)
             obConversion.SetInAndOutFormats("xyz", "pdb")

@@ -669,7 +669,7 @@ class Electrostatics:
 
         #For QMMM calculation, include point charges in ESP calculation
         if self.config['includePtChgs']:
-            df_ptchg  = getPtChgs(self.config['ptChgfp'])
+            df_ptchg  = self.getPtChgs(self.config['ptChgfp'])
             xs = xs + list(df_ptchg['x'])
             ys = ys + list(df_ptchg['y'])
             zs = zs + list(df_ptchg['z'])
