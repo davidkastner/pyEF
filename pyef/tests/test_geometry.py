@@ -38,9 +38,9 @@ class TestGeometry:
 
         assert isinstance(df, pd.DataFrame)
         assert 'Atom' in df.columns
-        assert 'x' in df.columns
-        assert 'y' in df.columns
-        assert 'z' in df.columns
+        assert 'X' in df.columns
+        assert 'Y' in df.columns
+        assert 'Z' in df.columns
         assert len(df) > 0
 
     def test_getGeomInfo_structure(self, geometry_obj):
@@ -52,9 +52,9 @@ class TestGeometry:
         assert 'O' in atoms or 'C' in atoms or 'H' in atoms
 
         # Check that coordinates are numeric
-        assert df['x'].dtype in [float, 'float64']
-        assert df['y'].dtype in [float, 'float64']
-        assert df['z'].dtype in [float, 'float64']
+        assert df['X'].dtype in [float, 'float64']
+        assert df['Y'].dtype in [float, 'float64']
+        assert df['Z'].dtype in [float, 'float64']
 
     def test_getBondedAtoms(self, geometry_obj):
         """Test getBondedAtoms method"""
@@ -134,5 +134,5 @@ H 1.0 0.0 0.0
 
         assert len(df) == 2
         assert all(df['Atom'] == 'H')
-        assert df.iloc[0]['x'] == 0.0
-        assert df.iloc[1]['x'] == 1.0
+        assert df.iloc[0]['X'] == 0.0
+        assert df.iloc[1]['X'] == 1.0

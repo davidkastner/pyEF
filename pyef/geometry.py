@@ -435,33 +435,39 @@ class Visualize:
         self.xyzfile = filexyz
 
     def makePDBpercentEfield(self):
-        #make PDB with b-factor cols colored by percent of final efield 
-        xyzfie = self.filexyz
+        #make PDB with b-factor cols colored by percent of final efield
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def makePDBcontributionEfield(self):
         #make PDB with b-factor column color by the total E-field contribution from each atom
-        xyzfie = self.filexyz
-
-
-        ppdb.df['HETATM']['b_factor'] = charges
-        ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def makePDBcontributionESP(self):
         #make PDB with b-factor columned colored by the total contribution form each atom to the ESP
-        xyzfie = self.filexyz
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def compareESP(self):
         #compare the ESP at each atom, show how it differs betwen two differ
-        xyzfie = self.filexyz
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
-    def PDBESP():
+    def PDBESP(self):
         #visualize the ESP of the full system
-        xyzfie = self.filexyz
+        xyzfie = self.xyzfile
         from .analysis import Electrostatics
+        # TODO: Implement this method
+        pass
 
     def makePDB(self, output_filename, b_col, pdbName):
         ''' Function to generate PDB files with partial charges
