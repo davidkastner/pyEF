@@ -1738,45 +1738,42 @@ Input commands that were to be sent:
             print('-----------------' + str(f) + '------------------')
             atom_idx = metal_idxs[counter]
             counter = counter + 1
-            os.chdir(owd)
-            os.chdir(f + folder_to_molden)
-            subprocess.call(multiwfn_module, shell=True)
-            command_A = f"{multiwfn_path} {self.config['molden_filename']}"
-            results_dir = os.getcwd() + '/'
-            
             results_dict = {}
             results_dict['Name'] = f
 
             for key in charge_types:
                 print('Partial Charge Scheme:' + str(key))
                 try:
-                    full_file_path = f"{os.getcwd()}/Charges{key}.txt"
-                    path_to_xyz = f"{os.getcwd()}/{self.config['xyzfilename']}"
-                    if key == "Hirshfeld_I":
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, results_dir + 'atmrad/')
-                    try: 
+                    # Use centralized getchargeInfo() to get/compute charges
+                    comp_cost = self.getchargeInfo(
+                        multipole_bool=False,
+                        f=f,
+                        folder_to_molden=folder_to_molden,
+                        multiwfn_path=multiwfn_path,
+                        atmrad_path=atmrad_path,
+                        charge_type=key,
+                        owd=owd
+                    )
+
+                    if comp_cost == -1:
+                        print(f"WARNING: Charge calculation failed for {key} in {f}")
+                        continue
+
+                    full_file_path = f"{owd}/{f + folder_to_molden}Charges{key}.txt"
+                    path_to_xyz = f"{owd}/{f + folder_to_molden}{self.config['xyzfilename']}"
+
+                    try:
                         [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx)
 
                         [total_charge,partial_charge_atom] = Electrostatics.charge_atom(full_file_path, atom_idx)
                         [sorted_distances, sorted_esps, cum_esps, sorted_cum_idx, sorted_cum_chg, sorted_atomTypes] = self.esp_bydistance(path_to_xyz, atom_idx, full_file_path)
                         ESP_fcoord = self.esp_first_coord(atom_idx, full_file_path, path_to_xyz)
                         ESP_scoord = self.esp_second_coord(atom_idx, full_file_path, path_to_xyz)
-                    
+
                     except Exception as e:
                         print('The Exception is: ' + str(e))
                         print(traceback.format_exc())
-                        print('Error when trying to access electrostatic information: Attemtping to re-compute partial charges of type: ' + str(key))
-
-                        # Re-run multiwfn computation of partial charge 
-                        proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                        calc_command = self.dict_of_calcs[key]
-                        commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
-                        if key == 'CHELPG':
-                            commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
-                        output = proc.communicate("\n".join(commands).encode())
-                        new_name = 'final_optim_' +key+'.txt'
-                        os.rename('final_optim.chg', new_name)
+                        print(f'Error when trying to access electrostatic information for {key}')
              
                         [ESP_all, atom_type] = self.ESP_all_calcs(path_to_xyz, full_file_path, atom_idx, self.inGaCageBool)
                         
