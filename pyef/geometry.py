@@ -429,6 +429,33 @@ class Visualize:
         obConversion.WriteFile(mol, pdbName)
         ppdb = PandasPdb()
         ppdb.read_pdb(pdbName)
+
+        # IMPORTANT: Handle indexing properly
+        # - b_col is 0-indexed (Python convention): b_col[0] is for XYZ atom 0
+        # - PDB atoms are 1-indexed (PDB standard): PDB atom 1 corresponds to XYZ atom 0
+        # - The DataFrame has rows 0, 1, 2, ... which map to PDB atoms 1, 2, 3, ...
+        # - So b_col[i] should go to DataFrame row i, which is PDB atom (i+1), which is XYZ atom i ✓
+
+        # Verify lengths match to catch indexing errors
+        if len(b_col) != len(ppdb.df['HETATM']):
+            print(f"WARNING: Length mismatch in makePDB!")
+            print(f"  b_col length: {len(b_col)}")
+            print(f"  PDB DataFrame length: {len(ppdb.df['HETATM'])}")
+            print(f"  This may cause incorrect B-factor assignment!")
+            # Resize b_col if needed
+            if len(b_col) < len(ppdb.df['HETATM']):
+                import numpy as np
+                b_col_padded = np.zeros(len(ppdb.df['HETATM']))
+                b_col_padded[:len(b_col)] = b_col
+                b_col = b_col_padded
+            else:
+                b_col = b_col[:len(ppdb.df['HETATM'])]
+
+        # Explicitly map b_col indices to PDB atom numbers to ensure correct assignment
+        # Sort DataFrame by atom_number to ensure proper ordering (just in case)
+        ppdb.df['HETATM'] = ppdb.df['HETATM'].sort_values('atom_number').reset_index(drop=True)
+
+        # Now assign: b_col[i] goes to row i, which should be PDB atom (i+1)
         ppdb.df['HETATM']['b_factor'] = b_col
         ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
 
