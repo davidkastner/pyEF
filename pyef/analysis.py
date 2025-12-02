@@ -1038,7 +1038,7 @@ Input commands that were to be sent:
             mm_charges = np.array(init_MM_charges)
             qm_charges = np.array(QM_charges)
             print(f'Size of mm_coords: {np.shape(mm_coords)} and qm coords: {np.shape(QM_coords)}; mm charges: {np.shape(mm_charges)} and qm_charges: {np.shape(qm_charges)}')
-            MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
+            #MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
 
             MM_charges = mm_charges*(1/(math.sqrt(self.config['dielectric_scale'])))
             #change charge range to include these new partial charges!
@@ -1098,30 +1098,38 @@ Input commands that were to be sent:
             # Note: This may fail if ptChgfp is not a full path
             df_ptchg = self.getPtChgs(self.config['ptChgfp'])
 
-        #load multipole moments from processed outputs 
+        #load multipole moments from processed outputs
         lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
 
         #make a list for each term in multipole expansion
-        lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
+        # Create mapping: atom_index (0-indexed) -> multipole_dict
+        # Note: Multiwfn uses 1-indexed atoms, so we subtract 1 for 0-indexed Python arrays
+        # However, if the file is already 0-indexed, the Index field will be "0", "1", etc.
+        # We'll use enumerate to ensure proper mapping regardless
+        multipole_dict_by_idx = {idx: atom for idx, atom in enumerate(lst_multipole_dict)}
 
-        QM_charges = [lst_multipole_dict[idx]["Atom_Charge"] for idx in range(0, len(xs))]
+        # Create charge list in proper order
+        QM_charges = [atom['Atom_Charge'] for atom in lst_multipole_dict]
         QM_coords = np.column_stack((np.array(xs), np.array(ys), np.array(zs)))
         #This ensure that atoms we would like to exclude from Efield calculation are excluded from every term in the multipole expansion
-        multipole_chg_range = [i for i in lst_multipole_idxs if i in charge_range]
+        # Use actual atom indices that exist in both geometry and multipole data
+        multipole_chg_range = [i for i in range(len(lst_multipole_dict)) if i in charge_range]
         multipole_Efield_contribution = []
         for idx in multipole_chg_range:
             #If the atom idx is outside of the charge range then skip
-            atom_dict = lst_multipole_dict[idx] 
+            atom_dict = multipole_dict_by_idx[idx]
             if idx == idx_atom:
+                # Append zero contribution for self (maintains consistent array size)
+                multipole_Efield_contribution.append([0.0, 0.0, 0.0])
                 continue
             else:
-                # Units of dipole_vec: 
+                # Units of dipole_vec:
                 dipole_vec = constants.BOHR_TO_M*np.array(atom_dict["Dipole_Moment"])
                 #convention of vector pointing towards atom of interest, so positive charges exert positive Efield
                 dist_vec = constants.ANGSTROM_TO_M*np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
                 dist_arr = np.outer(dist_vec, dist_vec)
                 quadrupole_arr = constants.BOHR_TO_M*constants.BOHR_TO_M*atom_dict['Quadrupole_Moment']
-                
+
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*constants.ANGSTROM_TO_M)**2 + ((ys[idx] - yo)*constants.ANGSTROM_TO_M)**2 + ((zs[idx] - zo)*constants.ANGSTROM_TO_M)**2)**(0.5)
                 Monopole_E = Monopole_E - inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"]*(1/(r**3))*dist_vec  #neg for sign convention so Efield points toward neg charge
@@ -1133,10 +1141,11 @@ Input commands that were to be sent:
                 E_y_atomic_contrib = inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[1]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
                 E_z_atomic_contrib = inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[2]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
 
-                Ex = Ex + E_x_atomic_contrib 
+                Ex = Ex + E_x_atomic_contrib
                 Ey = Ey + E_y_atomic_contrib
                 Ez = Ez + E_z_atomic_contrib
-                multipole_Efield_contribution.append([Ex, Ey, Ez])
+                # Append individual atomic contribution (not cumulative)
+                multipole_Efield_contribution.append([E_x_atomic_contrib, E_y_atomic_contrib, E_z_atomic_contrib])
 
         E_vec = [Ex, Ey, Ez]
 
@@ -1152,7 +1161,7 @@ Input commands that were to be sent:
             mm_coords = np.column_stack((np.array(MM_xs), np.array(MM_ys), np.array(MM_zs)))
             mm_charges = np.array(init_MM_charges)
             qm_charges = np.array(QM_charges)
-            MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
+            #MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
 
             MM_charges = mm_charges*(1/(math.sqrt(self.config['dielectric_scale'])))
             #change charge range to include these new partial charges!
@@ -1382,6 +1391,84 @@ Input commands that were to be sent:
         return [E_projected, bonded_atoms, bond_indices, bond_lens, E_monopole_proj]
 
 
+    def calc_bond_dipoles(self, bond_indices, xyz_filepath, atom_multipole_file, bool_multipole):
+        """Calculate bond dipole moments for given bond indices.
+
+        For each bond between atoms A and B, calculates the bond dipole moment vector
+        relative to the geometric center (midpoint) of the bond. This is origin-independent
+        for both neutral and charged bonds:
+        μ_bond = q_A * (r_A - r_center) + q_B * (r_B - r_center)
+        which simplifies to: μ_bond = (q_A - q_B) * (r_A - r_B) / 2
+
+        Parameters
+        ----------
+        bond_indices : list of tuples
+            List of (atomA_idx, atomB_idx) tuples specifying bonds
+        xyz_filepath : str
+            Path to XYZ structure file
+        atom_multipole_file : str
+            Path to multipole/charge file
+        bool_multipole : bool
+            If True, use multipole file; if False, use monopole charges
+
+        Returns
+        -------
+        list
+            List of bond dipole information dictionaries containing:
+            - 'bond_dipole_vec': [x, y, z] dipole vector in Debye
+            - 'bond_dipole_mag': magnitude of dipole in Debye
+            - 'bond_indices': (atomA_idx, atomB_idx)
+            - 'charges': (charge_A, charge_B)
+        """
+        bond_dipoles = []
+
+        # Get geometry information
+        df_geom = Geometry(xyz_filepath).getGeomInfo()
+
+        # Get charge information
+        if bool_multipole:
+            multipole_data = Electrostatics.getmultipoles(atom_multipole_file)
+            # Use enumerate for proper 0-indexed mapping, regardless of Index field value
+            charge_dict = {idx: atom['Atom_Charge'] for idx, atom in enumerate(multipole_data)}
+        else:
+            df_charges = pd.read_csv(atom_multipole_file, sep='\s+', names=["Atom", 'x', 'y', 'z', "charge"])
+            charge_dict = {idx: charge for idx, charge in enumerate(df_charges['charge'])}
+
+        for atomA_idx, atomB_idx in bond_indices:
+            # Get positions (in Angstrom from XYZ file)
+            posA = np.array([df_geom.loc[atomA_idx, 'X'],
+                           df_geom.loc[atomA_idx, 'Y'],
+                           df_geom.loc[atomA_idx, 'Z']])
+            posB = np.array([df_geom.loc[atomB_idx, 'X'],
+                           df_geom.loc[atomB_idx, 'Y'],
+                           df_geom.loc[atomB_idx, 'Z']])
+
+            # Get charges (in elementary charge units)
+            chargeA = charge_dict[atomA_idx]
+            chargeB = charge_dict[atomB_idx]
+
+            # Calculate bond dipole relative to geometric center (midpoint)
+            # This makes the dipole origin-independent for both neutral and charged bonds
+            # and consistent with line integral formalism
+            r_center = (posA + posB) / 2
+            dipole_vec_eA = chargeA * (posA - r_center) + chargeB * (posB - r_center)  # in e*Angstrom
+            # Simplified: dipole_vec = (chargeA - chargeB) * (posA - posB) / 2
+
+            # Convert to Debye (1 e*Angstrom = 4.80320427 Debye)
+            convert_to_Debye = 4.80320427
+            dipole_vec = convert_to_Debye * dipole_vec_eA  # in Debye
+            dipole_mag = np.linalg.norm(dipole_vec)  # in Debye
+
+            bond_dipole_info = {
+                'bond_dipole_vec': dipole_vec.tolist(),
+                'bond_dipole_mag': dipole_mag,
+                'bond_indices': (atomA_idx, atomB_idx),
+                'charges': (chargeA, chargeB)
+            }
+            bond_dipoles.append(bond_dipole_info)
+
+        return bond_dipoles
+
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
     def E_proj_bondIndices_atomwise(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines, bool_multipole, df_ptchg=None):
         '''
@@ -1417,6 +1504,14 @@ Input commands that were to be sent:
                 bonded_positions.append((A_bonded_position, B_bonded_position))
                 bond_lens.append(bond_len)
                 E_proj_atomwise = (1/2)*(np.array(A_atom_wise_E) + np.array(B_atom_wise_E))@ bond_vec.T
+
+                # DEBUG: ALWAYS print to verify calculation
+                atomwise_sum = np.sum(E_proj_atomwise)
+                bond_pair = bond_indices[len(E_proj_atomwise_list)]
+                print(f"DEBUG Bond {bond_pair}: E_proj={E_proj:.10f}, Atomwise_sum={atomwise_sum:.10f}, Diff={abs(atomwise_sum - E_proj):.2e}")
+                if abs(atomwise_sum - E_proj) > 1e-6:
+                    print(f"  ^^^ WARNING: MISMATCH DETECTED!")
+
                 E_proj_atomwise_list.append(E_proj_atomwise)
 
         else:
@@ -1436,6 +1531,14 @@ Input commands that were to be sent:
                 bond_lens.append(bond_len)
 
                 E_proj_atomwise = (1/2)*((np.array(A_atom_wise_E) + np.array(B_atom_wise_E))@ bond_vec.T)
+
+                # DEBUG: ALWAYS print to verify calculation
+                atomwise_sum = np.sum(E_proj_atomwise)
+                bond_pair = bond_indices[len(E_proj_atomwise_list)]
+                print(f"DEBUG Bond {bond_pair}: E_proj={E_proj:.10f}, Atomwise_sum={atomwise_sum:.10f}, Diff={abs(atomwise_sum - E_proj):.2e}")
+                if abs(atomwise_sum - E_proj) > 1e-6:
+                    print(f"  ^^^ WARNING: MISMATCH DETECTED!")
+
                 E_proj_atomwise_list.append(E_proj_atomwise)
 
         # For backwards compatibility, return the last bond's atomwise data as the 5th element
@@ -2013,23 +2116,53 @@ Input commands that were to be sent:
                     multipole_bool, df_ptchg=df_ptchg
                 )
 
+                # Calculate bond dipoles for each bond
+                bond_dipoles = self.calc_bond_dipoles(
+                    bond_indices_to_use, file_path_xyz, path_to_pol, multipole_bool
+                )
+
                 # Get charge data for visualization
                 df = Electrostatics.charge_atoms(self, path_to_pol, temp_xyz)
 
                 # Visualization: E-field atom-wise contributions
                 if viz_efield and E_proj_atomwise is not None:
-                    if viz_per_bond and len(E_proj_atomwise_list) > 0:
+                    # Create full-length array including zeros for excluded atoms
+                    total_atoms = total_lines - 2
+                    # E_atomwise contains QM contributions followed by MM contributions
+                    # Only use QM contributions (length = len(all_lines)) for visualization
+                    n_qm_atoms = len(all_lines)
+
+                    # Always create separate PDB files for each bond when multiple bonds exist
+                    if len(E_proj_atomwise_list) > 1:
+                        # Multiple bonds: create one PDB per bond
                         for bond_idx, (E_atomwise, bond_pair) in enumerate(zip(E_proj_atomwise_list, bonded_idx)):
-                            pdbName = f'Efield_bond{bond_idx}_{bond_pair[0]}-{bond_pair[1]}_{f}{charge_type}_.pdb'
-                            Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise, pdbName)
+                            # Extract only QM contributions (first n_qm_atoms elements)
+                            E_atomwise_qm = E_atomwise[:n_qm_atoms]
+                            # Expand E_atomwise to include all atoms (zeros for excluded)
+                            E_atomwise_full = np.zeros(total_atoms)
+                            E_atomwise_full[all_lines] = E_atomwise_qm
+                            pdbName = f'Efield_bond{bond_idx}_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/")}{charge_type}_.pdb'
+                            Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise_full, pdbName)
+                    elif len(E_proj_atomwise_list) == 1:
+                        # Single bond: create one PDB with bond info in name
+                        E_atomwise_qm = E_proj_atomwise_list[0][:n_qm_atoms]
+                        E_atomwise_full = np.zeros(total_atoms)
+                        E_atomwise_full[all_lines] = E_atomwise_qm
+                        bond_pair = bonded_idx[0]
+                        pdbName = f'Efield_bond0_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/")}{charge_type}_.pdb'
+                        Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise_full, pdbName)
                     else:
-                        pdbName = f'Efield_cont{f}{charge_type}_.pdb'
-                        Visualize(file_path_xyz).makePDB(path_to_pol, E_proj_atomwise, pdbName)
+                        # Fallback: use the combined E_proj_atomwise
+                        E_proj_atomwise_qm = E_proj_atomwise[:n_qm_atoms]
+                        E_proj_atomwise_full = np.zeros(total_atoms)
+                        E_proj_atomwise_full[all_lines] = E_proj_atomwise_qm
+                        pdbName = f'Efield_cont{f.rstrip("/")}{charge_type}_.pdb'
+                        Visualize(file_path_xyz).makePDB(path_to_pol, E_proj_atomwise_full, pdbName)
 
                 # Visualization: partial charges
                 if viz_charges:
                     charge_b_col = df['charge']
-                    pdbName = f'Charges_{f}{charge_type}_.pdb'
+                    pdbName = f'Charges_{f.rstrip("/")}{charge_type}_.pdb'
                     Visualize(file_path_xyz).makePDB(path_to_pol, charge_b_col, pdbName)
 
                 # Store results
@@ -2038,6 +2171,9 @@ Input commands that were to be sent:
                 results_dict['Bonded Atoms'] = bondedAs
                 results_dict['Bonded Indices'] = bonded_idx
                 results_dict['Bond Lengths'] = bond_lens
+                results_dict['Bond Dipole Vectors (Debye)'] = [bd['bond_dipole_vec'] for bd in bond_dipoles]
+                results_dict['Bond Dipole Magnitudes (Debye)'] = [bd['bond_dipole_mag'] for bd in bond_dipoles]
+                results_dict['Bond Charges'] = [bd['charges'] for bd in bond_dipoles]
                 results_dict['Comp Cost'] = comp_cost
                 results_dict['Folder'] = f
 
@@ -2387,12 +2523,11 @@ Input commands that were to be sent:
            res_coords in units of angstroms, res_chgs are in a.u. units
            returns dipole in units of Debye
         '''
-        convert_Debye = 4.80320427 
+        convert_Debye = 4.80320427
 
-        #center coordinates
-        #center = np.average(res_coords, axis=0)
-        center = res_coords[0, :]
-        #center = np.average(res_coords, axis=0, weights=nuc_chgs)
+        # Center coordinates at geometric center (simple average)
+        # This makes the dipole moment origin-independent and consistent with line integral formalism
+        center = np.average(res_coords, axis=0)
         coords_centered = res_coords - center
         dipole_vector = convert_Debye*np.sum(coords_centered*res_chgs[:, np.newaxis], axis=0)  #shape of (3,)
         dipole_magnitude = np.linalg.norm(dipole_vector)
@@ -2848,9 +2983,16 @@ Input commands that were to be sent:
 
         return df_atomwise
 
-    def get_Electrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path, substrate_idxs, num_terms=1, charge_type='Hirshfeld_I', multipole_bool=False, name_dataStorage='estaticFile', env_idxs=None, decompose_atomwise=False, visualize=None):
+    def get_Electrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path, substrate_idxs, charge_type='Hirshfeld_I', name_dataStorage='estaticFile', env_idxs=None, decompose_atomwise=False, visualize=None, multipole_order=1, use_polarizability=False, polarizabilities=None):
         """
-        Compute the electrostatic stabilization associated with some chemical env and a substrate.
+        Compute the electrostatic stabilization using multipole expansion.
+
+        This function computes electrostatic energy up to the specified multipole order:
+        - Order 1 (monopole): E = Σᵢ qᵢ V(rᵢ)
+        - Order 2 (+ dipole): E = Σᵢ qᵢ V(rᵢ) - Σᵢ μᵢ · E(rᵢ)
+        - Order 3 (+ quadrupole): E = Σᵢ qᵢ V(rᵢ) - Σᵢ μᵢ · E(rᵢ) - (1/2)Σᵢⱼₖ Qᵢⱼₖ ∂Eⱼ/∂rₖ
+
+        Optionally includes polarizability: E_pol = -(1/2) Σᵢ αᵢ |E(rᵢ)|²
 
         Parameters:
         -----------
@@ -2862,12 +3004,8 @@ Input commands that were to be sent:
             Path to atmrad executable
         substrate_idxs : list
             List of substrate atom indices
-        num_terms : int, optional
-            Number of multipole terms (default: 1)
         charge_type : str, optional
             Charge partitioning scheme (default: 'Hirshfeld_I')
-        multipole_bool : bool, optional
-            If True, use multipole expansion (default: False)
         name_dataStorage : str, optional
             Output filename prefix (default: 'estaticFile')
         env_idxs : list or None, optional
@@ -2877,12 +3015,26 @@ Input commands that were to be sent:
         visualize : bool or None, optional
             If True, create PDB files with atom-wise contributions in B-factor column.
             None uses config defaults (default: None)
+        multipole_order : int, optional
+            Order of multipole expansion (1=monopole, 2=+dipole, 3=+quadrupole) (default: 1)
+        use_polarizability : bool, optional
+            If True, include field-induced polarization term -(1/2)αE² (default: False)
+        polarizabilities : dict or None, optional
+            Dictionary mapping atom indices to polarizabilities (Å³). If None and use_polarizability=True,
+            uses default values based on element type (default: None)
 
         Returns:
         --------
         pd.DataFrame or tuple of pd.DataFrame
             If decompose_atomwise=False: returns DataFrame with total stabilization energies
             If decompose_atomwise=True: returns (total_df, atomwise_df) tuple
+
+        Notes:
+        ------
+        - Monopole (order 1): Always computed, represents Σ qᵢ × ESP_i (exact for point charges)
+        - Dipole (order 2): Requires Multiwfn multipole analysis, captures -μᵢ · E interactions
+        - Quadrupole (order 3): Requires Multiwfn multipole analysis, captures field gradient effects
+        - Polarizability: Optional response term, represents field-induced stabilization
         """
         dielectric = self.config['dielectric']
        # Access Class Variables
@@ -2899,9 +3051,18 @@ Input commands that were to be sent:
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
         all_atomwise_data = []  # Store atom-wise decomposition data
-        first_order_electrostatic_stabilization = []
         counter = 0  # Iterator to account for atomic indices of interest
         one_mol = 6.02*(10**23)
+
+        # Default atomic polarizabilities (Å³)
+        default_polarizabilities = {
+            'H': 0.667, 'C': 1.76, 'N': 1.10, 'O': 0.802,
+            'F': 0.557, 'S': 2.90, 'Cl': 2.18, 'Br': 3.05
+        }
+
+        # Determine if we need multipole analysis
+        need_multipoles = (multipole_order >= 2)
+
         for f in list_of_file:
             substrate_idx = substrate_idxs[counter]
             results_dict = {}
@@ -2913,12 +3074,18 @@ Input commands that were to be sent:
             else:
                 env_idx = env_idxs[counter]
 
-            comp_cost = self.partitionCharge(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
+            comp_cost = self.partitionCharge(need_multipoles, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
             #If the calculation is not successful, continue
             if comp_cost == -1:
                 print(f"Warning: Charge calculation failed for {f}, skipping")
                 continue
-            if multipole_bool:
+
+            # Get geometry information
+            geom = Geometry(file_path_xyz)
+            df_geom = geom.getGeomInfo()
+
+            # Load charge/multipole data based on multipole_order
+            if need_multipoles:
                 multipole_name = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
 
                 #Use the path to the multipole file to get information about the atomic charges, dipole and multipole
@@ -3007,19 +3174,21 @@ Input commands that were to be sent:
 
         return df
 
-    def get_Electrostatic_stabilization_dipole(self, multiwfn_path, multiwfn_module, atmrad_path, substrate_idxs, charge_type='Hirshfeld_I', name_dataStorage='estaticFile_dipole', env_idxs=None, decompose_bondwise=False):
+    def get_Electrostatic_stabilization_dipole(self, multiwfn_path, multiwfn_module, atmrad_path, substrate_idxs, charge_type='Hirshfeld_I', name_dataStorage='estaticFile_multipole', env_idxs=None, decompose_atomwise=False, use_polarizability=False, polarizabilities=None):
         """
-        Compute electrostatic stabilization using bond-based decomposition.
+        Compute electrostatic stabilization using atomic multipole expansion.
 
-        This function decomposes the electrostatic stabilization energy into bond contributions,
-        separating monopole (charge-potential) and dipole (charge separation) effects. For each
-        bond in the substrate, it computes:
-        1. Monopole contribution: (q_i * V_i / N_i + q_j * V_j / N_j)
-        2. Dipole contribution: -μ_bond * E_proj
+        This function computes the proper multipole expansion of electrostatic energy:
 
-        where N_i is the number of bonds atom i participates in (correction factor),
-        V_i is the ESP at atom i, E_proj is the E-field projected along the bond,
-        and μ_bond = |q_i - q_j| * bond_length / 2.
+        E = -Σᵢ μᵢ · E(rᵢ) - (1/2) Σᵢ αᵢ |E(rᵢ)|²
+
+        where:
+        - μᵢ is the atomic dipole moment at atom i (from Multiwfn)
+        - E(rᵢ) is the E-field at atom i from environment charges
+        - αᵢ is the atomic polarizability (optional)
+
+        This is the second and third terms in the multipole expansion. The first term
+        (monopole: Σ qᵢ V(rᵢ)) is computed by get_Electrostatic_stabilization().
 
         Parameters:
         -----------
@@ -3034,26 +3203,31 @@ Input commands that were to be sent:
         charge_type : str, optional
             Charge partitioning scheme (default: 'Hirshfeld_I')
         name_dataStorage : str, optional
-            Output filename prefix (default: 'estaticFile_dipole')
+            Output filename prefix (default: 'estaticFile_multipole')
         env_idxs : list or None, optional
             List of environment atom indices. If None, will use all non-substrate atoms (default: None)
-        decompose_bondwise : bool, optional
-            If True, compute bond-wise decomposition of contributions (default: False)
+        decompose_atomwise : bool, optional
+            If True, compute atom-wise decomposition of contributions (default: False)
+        use_polarizability : bool, optional
+            If True, include polarizability term -(1/2)αE² (default: False)
+        polarizabilities : dict or None, optional
+            Dictionary mapping atom indices to polarizabilities (Å³). If None and use_polarizability=True,
+            will attempt to use default values based on element type (default: None)
 
         Returns:
         --------
         pd.DataFrame or tuple of pd.DataFrame
-            If decompose_bondwise=False: returns DataFrame with total stabilization energies
-            If decompose_bondwise=True: returns (total_df, bondwise_df) tuple
+            If decompose_atomwise=False: returns DataFrame with total stabilization energies
+            If decompose_atomwise=True: returns (total_df, atomwise_df) tuple
 
         Notes:
         ------
-        - Total energy matches the traditional calculation: Σ q_i * ESP_i
-        - E-fields are calculated at atom positions from environmental charges only
-        - Bond dipoles represent charge separation across bonds (substrate only)
-        - Correction factors (dividing by number of bonds) prevent double-counting
+        - Atomic dipole moments are obtained from Multiwfn multipole analysis
+        - E-fields are calculated at substrate atom positions from environmental charges
+        - Dipole moments are in Bohr (converted internally to SI units)
         - Results are in kcal/mol
-        - The bondwise_df (when decompose_bondwise=True) shows monopole and dipole contributions separately
+        - This computes higher-order multipole terms beyond the monopole (charge-potential) term
+        - Compare with get_Electrostatic_stabilization() which computes the monopole term
         """
         dielectric = self.config['dielectric']
         folder_to_molden = self.folder_to_file_path
@@ -3062,9 +3236,15 @@ Input commands that were to be sent:
 
         owd = os.getcwd()
         allspeciesdict = []
-        all_bondwise_data = []
+        all_atomwise_data = []
         counter = 0
         one_mol = 6.02*(10**23)
+
+        # Default atomic polarizabilities (Å³) if not provided
+        default_polarizabilities = {
+            'H': 0.667, 'C': 1.76, 'N': 1.10, 'O': 0.802,
+            'F': 0.557, 'S': 2.90, 'Cl': 2.18, 'Br': 3.05
+        }
 
         for f in list_of_file:
             substrate_idx = substrate_idxs[counter]
@@ -3078,42 +3258,32 @@ Input commands that were to be sent:
             else:
                 env_idx = env_idxs[counter]
 
-            # Partition charges to get atomic charges
-            comp_cost = self.partitionCharge(False, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
+            # Partition charges with MULTIPOLE analysis to get dipole moments
+            comp_cost = self.partitionCharge(True, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
 
             if comp_cost == -1:
-                print(f"Warning: Charge calculation failed for {f}, skipping")
+                print(f"Warning: Multipole calculation failed for {f}, skipping")
                 counter += 1
                 continue
 
-            charge_name = f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
+            multipole_name = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
 
-            # Get charge information
-            df_charges = pd.read_csv(charge_name, sep='\s+', names=["Element", 'x', 'y', 'z', "Atom_Charge"])
-            df_charges["Index"] = range(0, len(df_charges))
-            df_substrate = df_charges[df_charges["Index"].isin(substrate_idx)]
-            df_env = df_charges[df_charges["Index"].isin(env_idx)]
+            # Get multipole information (charges, dipole moments, quadrupoles)
+            atomicDict = Electrostatics.getmultipoles(multipole_name)
+            df_multipoles = pd.DataFrame(atomicDict)
+            df_substrate = df_multipoles[df_multipoles["Index"].isin(substrate_idx)]
+            df_env = df_multipoles[df_multipoles["Index"].isin(env_idx)]
 
             # Get geometry information
             geom = Geometry(file_path_xyz)
             df_geom = geom.getGeomInfo()
 
-            # First, count the number of bonds for each substrate atom (for correction factors)
-            bond_count = {}
-            for i in substrate_idx:
-                bonded_atoms = geom.getBondedAtoms(i)
-                # Count only bonds to other substrate atoms
-                substrate_bonds = [j for j in bonded_atoms if j in substrate_idx]
-                bond_count[i] = len(substrate_bonds)
-
-            # Calculate ESP (electrostatic potential) at each substrate atom from environment
-            V_at_atoms = {}  # ESP at each atom position
-            E_at_atoms = {}  # E-field at each atom position
+            # Calculate E-field at each substrate atom from environment charges only
+            E_at_atoms = {}  # E-field at each atom position (V/m)
             inv_eps = 1 / dielectric
 
             for atom_idx in substrate_idx:
                 r_atom = np.array([df_geom['X'][atom_idx], df_geom['Y'][atom_idx], df_geom['Z'][atom_idx]])
-                V_total = 0.0  # in Volts
                 E_vec = np.array([0.0, 0.0, 0.0])  # in V/m
 
                 for env_atom_idx in env_idx:
@@ -3125,132 +3295,89 @@ Input commands that were to be sent:
 
                     env_charge = df_env.loc[df_env['Index'] == env_atom_idx, 'Atom_Charge'].iloc[0]
 
-                    # ESP: V = k * q / r
-                    V_contribution = inv_eps * constants.COULOMB_CONSTANT * constants.ELEMENTARY_CHARGE * env_charge / r
-                    V_total += V_contribution
-
                     # E-field: E = k * q / r^2 * r_hat
                     E_contribution = inv_eps * constants.COULOMB_CONSTANT * constants.ELEMENTARY_CHARGE * env_charge * (1/(r**3)) * dist_vec
                     E_vec += E_contribution
 
-                V_at_atoms[atom_idx] = V_total
                 E_at_atoms[atom_idx] = E_vec
 
-            # Identify all substrate bonds and compute bond-based energy decomposition
-            bond_energies = []
-            bondwise_data = []
+            # Compute atomic dipole-field and polarizability contributions
+            dipole_energies = []
+            polarization_energies = []
+            atomwise_data = []
 
-            # Keep track of processed bonds to avoid double counting
-            processed_bonds = set()
+            for atom_idx in substrate_idx:
+                # Get atomic dipole moment (in Bohr) from Multiwfn
+                dipole_moment_bohr = np.array(df_substrate.loc[df_substrate['Index'] == atom_idx, 'Dipole_Moment'].iloc[0])
+                # Convert to C·m (SI units)
+                dipole_moment_Cm = dipole_moment_bohr * constants.BOHR_TO_M * constants.ELEMENTARY_CHARGE
 
-            for i in substrate_idx:
-                # Get all atoms bonded to atom i
-                bonded_atoms = geom.getBondedAtoms(i)
+                # Get E-field at this atom (in V/m)
+                E_field = E_at_atoms[atom_idx]
 
-                for j in bonded_atoms:
-                    # Only consider bonds within the substrate
-                    if j not in substrate_idx:
-                        continue
+                # Dipole-field interaction energy: E = -μ · E
+                dipole_energy_J = -np.dot(dipole_moment_Cm, E_field)
+                dipole_energy_kcal_mol = dipole_energy_J * one_mol / 4184
+                dipole_energies.append(dipole_energy_kcal_mol)
 
-                    # Avoid double counting bonds (i-j and j-i)
-                    bond_key = tuple(sorted([i, j]))
-                    if bond_key in processed_bonds:
-                        continue
-                    processed_bonds.add(bond_key)
+                # Polarizability term: E = -(1/2) α |E|²
+                polarization_energy_kcal_mol = 0.0
+                if use_polarizability:
+                    # Get polarizability for this atom
+                    if polarizabilities and atom_idx in polarizabilities:
+                        alpha = polarizabilities[atom_idx]  # in Å³
+                    else:
+                        # Use default based on element type
+                        element = df_geom.loc[df_geom.index == atom_idx, 'Atom'].iloc[0]
+                        alpha = default_polarizabilities.get(element, 1.0)  # Default to 1.0 Å³ if unknown
 
-                    # Get positions (in Angstroms)
-                    r_i = np.array([df_geom['X'][i], df_geom['Y'][i], df_geom['Z'][i]])
-                    r_j = np.array([df_geom['X'][j], df_geom['Y'][j], df_geom['Z'][j]])
+                    # Convert polarizability to SI units (C·m²/V)
+                    alpha_SI = alpha * (constants.ANGSTROM_TO_M**3) * (4 * np.pi * constants.EPSILON_0)
 
-                    # Bond vector (Angstroms)
-                    r_ij = r_j - r_i
-                    bond_length = np.linalg.norm(r_ij)
-                    bond_direction = r_ij / bond_length  # unit vector
+                    # E-field magnitude squared
+                    E_magnitude_squared = np.dot(E_field, E_field)
 
-                    # Get atomic charges (in elementary charge units)
-                    q_i = df_substrate.loc[df_substrate['Index'] == i, 'Atom_Charge'].iloc[0]
-                    q_j = df_substrate.loc[df_substrate['Index'] == j, 'Atom_Charge'].iloc[0]
+                    # Polarization energy
+                    polarization_energy_J = -0.5 * alpha_SI * E_magnitude_squared
+                    polarization_energy_kcal_mol = polarization_energy_J * one_mol / 4184
+                    polarization_energies.append(polarization_energy_kcal_mol)
 
-                    # Get E-fields and potentials at each atom
-                    E_i = E_at_atoms[i]  # in V/m
-                    E_j = E_at_atoms[j]  # in V/m
-                    V_i = V_at_atoms[i]  # in V
-                    V_j = V_at_atoms[j]  # in V
+                if decompose_atomwise:
+                    # Store atom-wise data
+                    atom_data = {
+                        'FileName': f,
+                        'Atom_Index': atom_idx,
+                        'Atom_Symbol': df_geom.loc[df_geom.index == atom_idx, 'Atom'].iloc[0],
+                        'Dipole_x_Bohr': dipole_moment_bohr[0],
+                        'Dipole_y_Bohr': dipole_moment_bohr[1],
+                        'Dipole_z_Bohr': dipole_moment_bohr[2],
+                        'Dipole_magnitude_Bohr': np.linalg.norm(dipole_moment_bohr),
+                        'Efield_x_VA': E_field[0] * constants.VM_TO_VA,
+                        'Efield_y_VA': E_field[1] * constants.VM_TO_VA,
+                        'Efield_z_VA': E_field[2] * constants.VM_TO_VA,
+                        'Efield_magnitude_VA': np.linalg.norm(E_field) * constants.VM_TO_VA,
+                        'Dipole_Energy_kcal_mol': dipole_energy_kcal_mol,
+                        'Polarization_Energy_kcal_mol': polarization_energy_kcal_mol,
+                        'Total_Energy_kcal_mol': dipole_energy_kcal_mol + polarization_energy_kcal_mol
+                    }
+                    atomwise_data.append(atom_data)
 
-                    # Monopole contribution (with correction factor to avoid double counting)
-                    # Each atom's contribution is divided by its number of bonds
-                    monopole_energy_i = q_i * V_i / bond_count[i]
-                    monopole_energy_j = q_j * V_j / bond_count[j]
-                    monopole_energy_V_e = monopole_energy_i + monopole_energy_j  # in V * elementary_charge
+            # Total energies
+            total_dipole_energy = np.sum(dipole_energies)
+            total_polarization_energy = np.sum(polarization_energies) if use_polarizability else 0.0
+            total_multipole_energy = total_dipole_energy + total_polarization_energy
 
-                    # Convert monopole energy to kcal/mol
-                    monopole_energy_J = monopole_energy_V_e * constants.ELEMENTARY_CHARGE
-                    monopole_energy_kcal_mol = monopole_energy_J * one_mol / 4184
+            if decompose_atomwise:
+                all_atomwise_data.extend(atomwise_data)
 
-                    # Bond dipole contribution
-                    # Average E-field along the bond
-                    E_avg = (E_i + E_j) / 2  # in V/m
-                    # Project E-field along bond direction
-                    E_proj_along_bond = np.dot(E_avg, bond_direction)  # scalar, in V/m
-
-                    # Bond dipole moment magnitude: μ = |q_j - q_i| * bond_length / 2
-                    # (This represents the charge separation across the bond)
-                    bond_dipole_magnitude_eA = abs(q_j - q_i) * bond_length / 2  # in e*Angstrom
-                    bond_dipole_magnitude_Cm = bond_dipole_magnitude_eA * constants.ELEMENTARY_CHARGE * constants.ANGSTROM_TO_M  # in C*m
-
-                    # Dipole energy: E = -μ * E_proj (taking into account the sign of charge difference)
-                    sign_factor = np.sign(q_j - q_i) * np.sign(E_proj_along_bond)
-                    dipole_energy_J = -bond_dipole_magnitude_Cm * abs(E_proj_along_bond) * sign_factor
-                    dipole_energy_kcal_mol = dipole_energy_J * one_mol / 4184
-
-                    # Total bond energy
-                    total_bond_energy = monopole_energy_kcal_mol + dipole_energy_kcal_mol
-                    bond_energies.append(total_bond_energy)
-
-                    if decompose_bondwise:
-                        # Store bond-wise data
-                        bond_data = {
-                            'FileName': f,
-                            'Atom_i': i,
-                            'Atom_j': j,
-                            'Atom_i_Symbol': df_geom['Atom'][i],
-                            'Atom_j_Symbol': df_geom['Atom'][j],
-                            'Bond_Length': bond_length,
-                            'Charge_i': q_i,
-                            'Charge_j': q_j,
-                            'Num_Bonds_i': bond_count[i],
-                            'Num_Bonds_j': bond_count[j],
-                            'ESP_i': V_i,
-                            'ESP_j': V_j,
-                            'Efield_i_x': E_i[0] * constants.VM_TO_VA,
-                            'Efield_i_y': E_i[1] * constants.VM_TO_VA,
-                            'Efield_i_z': E_i[2] * constants.VM_TO_VA,
-                            'Efield_j_x': E_j[0] * constants.VM_TO_VA,
-                            'Efield_j_y': E_j[1] * constants.VM_TO_VA,
-                            'Efield_j_z': E_j[2] * constants.VM_TO_VA,
-                            'Efield_avg_x': E_avg[0] * constants.VM_TO_VA,
-                            'Efield_avg_y': E_avg[1] * constants.VM_TO_VA,
-                            'Efield_avg_z': E_avg[2] * constants.VM_TO_VA,
-                            'Efield_proj_along_bond': E_proj_along_bond * constants.VM_TO_VA,
-                            'Bond_Dipole_Magnitude_eA': bond_dipole_magnitude_eA,
-                            'Monopole_Energy_kcal_mol': monopole_energy_kcal_mol,
-                            'Dipole_Energy_kcal_mol': dipole_energy_kcal_mol,
-                            'Total_Energy_kcal_mol': total_bond_energy
-                        }
-                        bondwise_data.append(bond_data)
-
-            # Total bond dipole-field interaction energy
-            total_bond_dipole_energy = np.sum(bond_energies)
-
-            if decompose_bondwise:
-                all_bondwise_data.extend(bondwise_data)
-
-            results_dict['Bond_Dipole_Field_Energy'] = total_bond_dipole_energy
-            results_dict['Num_Bonds'] = len(bond_energies)
+            results_dict['Dipole_Field_Energy'] = total_dipole_energy
+            results_dict['Polarization_Energy'] = total_polarization_energy
+            results_dict['Total_Multipole_Energy'] = total_multipole_energy
+            results_dict['Num_Atoms'] = len(substrate_idx)
             results_dict['FileName'] = f
             allspeciesdict.append(results_dict)
 
-            print(f"File {f}: Found {len(bond_energies)} substrate bonds, Total energy: {total_bond_dipole_energy:.4f} kcal/mol")
+            print(f"File {f}: Dipole energy: {total_dipole_energy:.4f}, Polarization: {total_polarization_energy:.4f}, Total: {total_multipole_energy:.4f} kcal/mol")
 
             os.chdir(owd)
             counter += 1
@@ -3258,11 +3385,11 @@ Input commands that were to be sent:
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(name_dataStorage + '.csv')
 
-        if decompose_bondwise:
-            # Combine all bond-wise data and save
-            df_bondwise = pd.DataFrame(all_bondwise_data)
-            df_bondwise.to_csv(name_dataStorage + '_bondwise.csv', index=False)
-            return df, df_bondwise
+        if decompose_atomwise:
+            # Combine all atom-wise data and save
+            df_atomwise = pd.DataFrame(all_atomwise_data)
+            df_atomwise.to_csv(name_dataStorage + '_atomwise.csv', index=False)
+            return df, df_atomwise
 
         return df
 
