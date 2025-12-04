@@ -1,0 +1,114 @@
+# ==========================================
+# PyEF Configuration File - QM/MM Example
+# ==========================================
+# This configuration demonstrates how to include point charges
+# from the MM region in QM/MM calculations for electric field
+# and electrostatic potential analysis.
+
+# Input CSV file containing job information (required)
+input: qmmm_jobs.csv
+
+# Dielectric constant for the medium
+# Common values: 1 (vacuum), 4 (protein), 78.5 (water)
+dielectric: 4.0
+
+# ==========================================
+# Analysis Types (set to true to enable)
+# ==========================================
+
+# Electric field analysis
+ef: true
+
+# Electrostatic potential (ESP) analysis
+esp: true
+
+# Electrostatic stabilization analysis
+estab: false
+
+# Geometry checking
+geometry_check: false
+
+# ==========================================
+# Multiwfn Configuration (required)
+# ==========================================
+
+multiwfn_module: multiwfn
+multiwfn_path: /path/to/multiwfn
+atmrad_path: /path/to/atmrad
+
+# ==========================================
+# Advanced Options
+# ==========================================
+
+# Charge partitioning schemes
+# Hirshfeld_I is recommended for accuracy
+charge_types:
+  - Hirshfeld_I
+
+# Use multipole expansion (monopole + dipole + quadrupole)
+multipole: true           # For E-field calculations
+use_multipole: true       # For ESP calculations
+
+# Atom-wise decomposition (shows contribution from each atom)
+decompose_atomwise: false
+
+# Multipole expansion order (1=monopole, 2=+dipole, 3=+quadrupole)
+multipole_order: 2
+
+# ==========================================
+# QM/MM Point Charges Configuration
+# ==========================================
+
+# IMPORTANT: Set this to true to include MM point charges
+include_ptchgs: true
+
+# Path to point charge file from MM region
+# File format:
+#   Line 1: Number of point charges (integer)
+#   Line 2: Header (e.g., "charge(e) x(Ang) y(Ang) z(Ang)")
+#   Line 3+: charge x y z (whitespace-delimited)
+#
+# Example file content:
+#   1500
+#   charge(e) x(Ang) y(Ang) z(Ang)
+#   -0.8340  10.234  5.678  -2.345
+#    0.4170  11.123  6.789   1.234
+#   ...
+#
+# Sources of point charge files:
+#   - Amber: Extract from prmtop/inpcrd or mdcrd files
+#   - CHARMM: Extract from PSF/CRD files
+#   - GROMACS: Extract from topology/gro files
+#   - ONIOM: Extract from Gaussian output
+ptchg_file: mm_region_pointcharges.txt
+
+# Dielectric scaling factor for MM charges
+# MM charges are scaled by 1/sqrt(dielectric_scale)
+# Use 1.0 for standard QM/MM without additional screening
+# Use higher values if MM charges need to be dampened
+dielectric_scale: 1.0
+
+# ==========================================
+# Usage Instructions
+# ==========================================
+#
+# 1. Prepare your QM region structure file (PDB or molden format)
+#    containing only the QM atoms
+#
+# 2. Create a point charge file with MM region charges:
+#    - First line: number of MM atoms
+#    - Second line: column headers
+#    - Following lines: charge x y z for each MM atom
+#    - Coordinates in Angstroms, charges in elementary charge units
+#
+# 3. Create jobs CSV file (qmmm_jobs.csv):
+#    For ESP: qm_structure.pdb, metal_index
+#    For EF:  qm_structure.pdb, metal_index, bonded_atom_index
+#    Example:
+#      active_site_qm.pdb, 25, 26
+#
+# 4. Run PyEF:
+#    pyef -c config_qmmm_example.yaml
+#
+# 5. Output files will include contributions from both QM atoms
+#    and MM point charges in the electric field and ESP calculations
