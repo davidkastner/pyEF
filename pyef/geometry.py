@@ -403,6 +403,17 @@ class Visualize:
         '''
         import openbabel
         from biopandas.pdb import PandasPdb
+        import warnings
+        import sys
+        import os
+
+        # Suppress Open Babel warnings
+        warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+        # Redirect stderr to suppress Open Babel warnings
+        stderr_backup = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
+
         xyzfilename = self.xyzfile
         df = Geometry(self.xyzfile).getGeomInfo()
         #get out the xyz coords, charges, and atoms!
@@ -458,6 +469,10 @@ class Visualize:
         # Now assign: b_col[i] goes to row i, which should be PDB atom (i+1)
         ppdb.df['HETATM']['b_factor'] = b_col
         ppdb.to_pdb(path=pdbName,records=['HETATM'],gz=False,append_newline=True)
+
+        # Restore stderr
+        sys.stderr.close()
+        sys.stderr = stderr_backup
 
 
 
