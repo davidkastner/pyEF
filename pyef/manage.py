@@ -65,10 +65,10 @@ def parse_job_batch_file(file_path):
                 metal_indices.append(None)
                 bond_indices.append([])
 
-    # Return None for metal/bond indices if all are empty/None
-    if all(m is None for m in metal_indices):
+    # Return None for metal/bond indices if all are empty/None (but not if the list is empty)
+    if metal_indices and all(m is None for m in metal_indices):
         metal_indices = None
-    if all(not b for b in bond_indices):
+    if bond_indices and all(not b for b in bond_indices):
         bond_indices = None
 
     return jobs, metal_indices, bond_indices
