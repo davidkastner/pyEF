@@ -1290,7 +1290,6 @@ Input commands that were to be sent:
             xo = xs[sub_idx]
             yo = ys[sub_idx]
             zo = zs[sub_idx]
-            print(df_env['Atom_Charge'])
             for idx in env_idxs:
                 r = (((xs[idx] - xo)*constants.ANGSTROM_TO_M)**2 + ((ys[idx] - yo)*constants.ANGSTROM_TO_M)**2 + ((zs[idx] - zo)*constants.ANGSTROM_TO_M)**2)**(0.5)
                 env_contribution = (constants.ELEMENTARY_CHARGE*constants.COULOMB_CONSTANT*df_env.loc[df_env['Index'] == idx, 'Atom_Charge'].iloc[0])/r
@@ -1505,13 +1504,6 @@ Input commands that were to be sent:
                 bond_lens.append(bond_len)
                 E_proj_atomwise = (1/2)*(np.array(A_atom_wise_E) + np.array(B_atom_wise_E))@ bond_vec.T
 
-                # DEBUG: ALWAYS print to verify calculation
-                atomwise_sum = np.sum(E_proj_atomwise)
-                bond_pair = bond_indices[len(E_proj_atomwise_list)]
-                print(f"DEBUG Bond {bond_pair}: E_proj={E_proj:.10f}, Atomwise_sum={atomwise_sum:.10f}, Diff={abs(atomwise_sum - E_proj):.2e}")
-                if abs(atomwise_sum - E_proj) > 1e-6:
-                    print(f"  ^^^ WARNING: MISMATCH DETECTED!")
-
                 E_proj_atomwise_list.append(E_proj_atomwise)
 
         else:
@@ -1531,13 +1523,6 @@ Input commands that were to be sent:
                 bond_lens.append(bond_len)
 
                 E_proj_atomwise = (1/2)*((np.array(A_atom_wise_E) + np.array(B_atom_wise_E))@ bond_vec.T)
-
-                # DEBUG: ALWAYS print to verify calculation
-                atomwise_sum = np.sum(E_proj_atomwise)
-                bond_pair = bond_indices[len(E_proj_atomwise_list)]
-                print(f"DEBUG Bond {bond_pair}: E_proj={E_proj:.10f}, Atomwise_sum={atomwise_sum:.10f}, Diff={abs(atomwise_sum - E_proj):.2e}")
-                if abs(atomwise_sum - E_proj) > 1e-6:
-                    print(f"  ^^^ WARNING: MISMATCH DETECTED!")
 
                 E_proj_atomwise_list.append(E_proj_atomwise)
 
@@ -1897,10 +1882,6 @@ Input commands that were to be sent:
                     if comp_cost == -1:
                         print(f"WARNING: Charge calculation failed for {charge_type} in {f}")
                         continue
-                    elif comp_cost == 0:
-                        print(f"Using previously computed charges for {charge_type} in {f}")
-                    else:
-                        print(f"Charge calculation completed in {comp_cost:.2f}s for {charge_type} in {f}")
 
                     file_path_multipole = f"{owd}/{f + folder_to_molden}Multipole{charge_type}.txt"
                     file_path_monopole = f"{owd}/{f + folder_to_molden}Charges{charge_type}.txt"
@@ -2085,10 +2066,6 @@ Input commands that were to be sent:
                     print(f"Warning: Charge calculation failed for {f}")
                     counter += 1
                     continue
-                elif comp_cost == 0:
-                    print(f"Using previously computed charges for {f}")
-                else:
-                    print(f"Charge calculation completed in {comp_cost:.2f}s for {f}")
 
                 file_path_multipole = f"{owd}/{f + folder_to_molden}Multipole{charge_type}.txt"
                 file_path_charges = f"{owd}/{f + folder_to_molden}Charges{charge_type}.txt"
@@ -2259,7 +2236,6 @@ Input commands that were to be sent:
                 with open(file_path_multipole, 'r') as file:
                     contents = file.read()
                     if "Calculation took up" in contents:
-                        print(f" > Previously completed multipole {charge_type} calculation for {f}")
                         need_to_run_calculation = False
         else:
             if os.path.exists(file_path_monopole):
@@ -3140,7 +3116,6 @@ Input commands that were to be sent:
 
                 #Should be the dot product of the ESP array and the partial charge array!
                 sub_chgs = df_ESP_substrate['Atom_Charge']
-                print(f'Here are the sub charges: {sub_chgs}')
                 full_ESP_first_order = np.dot(np.array(df_ESP_substrate["ESP"]), sub_chgs)
 
                 if decompose_atomwise:
@@ -3387,6 +3362,536 @@ Input commands that were to be sent:
 
         if decompose_atomwise:
             # Combine all atom-wise data and save
+            df_atomwise = pd.DataFrame(all_atomwise_data)
+            df_atomwise.to_csv(name_dataStorage + '_atomwise.csv', index=False)
+            return df, df_atomwise
+
+        return df
+
+    def _build_interaction_tensor(self, r_i, r_j, multipole_order, dielectric):
+        """
+        Build the multipole interaction tensor T_ij using AMOEBA formalism.
+
+        This tensor contains derivatives of 1/r and enables computation of all
+        multipole-multipole interactions via: E = M_i^T · T_ij · M_j
+
+        Parameters:
+        -----------
+        r_i, r_j : array-like
+            Position vectors of atoms i and j in Angstroms
+        multipole_order : int
+            Maximum multipole order (1=monopole, 2=+dipole, 3=+quadrupole)
+        dielectric : float
+            Dielectric constant
+
+        Returns:
+        --------
+        T : ndarray
+            Interaction tensor with dimensions based on multipole_order
+            - Order 1: 1×1 (monopole-monopole only)
+            - Order 2: 4×4 (monopole + dipole)
+            - Order 3: 9×9 (monopole + dipole + quadrupole, traceless)
+
+        Notes:
+        ------
+        Tensor elements represent spatial derivatives of Coulomb potential:
+        - T[0,0]: 1/r (monopole-monopole)
+        - T[0,1:4]: ∂(1/r)/∂r_j (monopole-dipole)
+        - T[1:4,1:4]: ∂²(1/r)/∂r_i∂r_j (dipole-dipole)
+        - Higher orders follow similar pattern
+        """
+        # Convert to meters and compute distance
+        r_vec = (r_j - r_i) * constants.ANGSTROM_TO_M
+        r = np.linalg.norm(r_vec)
+        r_hat = r_vec / r  # Unit vector from i to j
+
+        # Coulomb prefactor with dielectric
+        # Note: charges are dimensionless (in units of e), so we need e² for energy
+        k = constants.COULOMB_CONSTANT * (constants.ELEMENTARY_CHARGE ** 2) / dielectric
+
+        if multipole_order == 1:
+            # Monopole-monopole only: T = k/r
+            T = np.array([[k / r]])
+
+        elif multipole_order == 2:
+            # Monopole + dipole interactions (4×4 tensor)
+            T = np.zeros((4, 4))
+
+            # T[0,0]: monopole-monopole interaction (q_i × q_j / r)
+            T[0, 0] = k / r
+
+            # T[0, 1:4]: monopole-dipole interaction (∂/∂r_j of 1/r)
+            # Derivative: ∂(1/r)/∂r_j = -r_hat/r²
+            T[0, 1:4] = -k * r_hat / (r**2)
+
+            # T[1:4, 0]: dipole-monopole interaction (∂/∂r_i of 1/r)
+            # By symmetry with opposite sign: ∂(1/r)/∂r_i = +r_hat/r²
+            T[1:4, 0] = k * r_hat / (r**2)
+
+            # T[1:4, 1:4]: dipole-dipole interaction (∂²/∂r_i∂r_j of 1/r)
+            # Formula: (3·r_hat⊗r_hat - I)/r³
+            I = np.eye(3)
+            T[1:4, 1:4] = k * (3 * np.outer(r_hat, r_hat) - I) / (r**3)
+
+        elif multipole_order == 3:
+            # Monopole + dipole + quadrupole interactions (9×9 tensor)
+            T = np.zeros((9, 9))
+
+            # Monopole-monopole (same as order 2)
+            T[0, 0] = k / r
+
+            # Monopole-dipole (same as order 2)
+            T[0, 1:4] = -k * r_hat / (r**2)
+            T[1:4, 0] = k * r_hat / (r**2)
+
+            # Dipole-dipole (same as order 2)
+            I = np.eye(3)
+            T[1:4, 1:4] = k * (3 * np.outer(r_hat, r_hat) - I) / (r**3)
+
+            # Monopole-quadrupole: T[0, 4:9] and T[4:9, 0]
+            # Uses traceless quadrupole representation (5 independent components)
+            # ∂²(1/r)/∂r_α∂r_β derivatives
+            for idx, (alpha, beta) in enumerate([(0,0), (0,1), (0,2), (1,1), (1,2)]):
+                # Monopole-quadrupole term
+                delta_ab = 1.0 if alpha == beta else 0.0
+                T_mq = k * (3*r_hat[alpha]*r_hat[beta] - delta_ab) / (r**3)
+                T[0, 4+idx] = T_mq
+                T[4+idx, 0] = T_mq
+
+            # Dipole-quadrupole: T[1:4, 4:9] and T[4:9, 1:4]
+            # Third derivatives: ∂³(1/r)/∂r_i∂r_α∂r_β
+            for i in range(3):
+                for idx, (alpha, beta) in enumerate([(0,0), (0,1), (0,2), (1,1), (1,2)]):
+                    delta_ia = 1.0 if i == alpha else 0.0
+                    delta_ib = 1.0 if i == beta else 0.0
+                    delta_ab = 1.0 if alpha == beta else 0.0
+
+                    T_dq = k * (-15*r_hat[i]*r_hat[alpha]*r_hat[beta]
+                               + 3*(delta_ia*r_hat[beta] + delta_ib*r_hat[alpha] + delta_ab*r_hat[i])) / (r**4)
+                    T[1+i, 4+idx] = T_dq
+                    T[4+idx, 1+i] = T_dq
+
+            # Quadrupole-quadrupole: T[4:9, 4:9]
+            # Fourth derivatives: ∂⁴(1/r)/∂r_α∂r_β∂r_γ∂r_δ
+            for idx1, (alpha, beta) in enumerate([(0,0), (0,1), (0,2), (1,1), (1,2)]):
+                for idx2, (gamma, delta) in enumerate([(0,0), (0,1), (0,2), (1,1), (1,2)]):
+                    delta_ab = 1.0 if alpha == beta else 0.0
+                    delta_ag = 1.0 if alpha == gamma else 0.0
+                    delta_ad = 1.0 if alpha == delta else 0.0
+                    delta_bg = 1.0 if beta == gamma else 0.0
+                    delta_bd = 1.0 if beta == delta else 0.0
+                    delta_gd = 1.0 if gamma == delta else 0.0
+
+                    T_qq = k * (105*r_hat[alpha]*r_hat[beta]*r_hat[gamma]*r_hat[delta]
+                               - 15*(r_hat[alpha]*r_hat[beta]*delta_gd + r_hat[gamma]*r_hat[delta]*delta_ab
+                                    + r_hat[alpha]*r_hat[gamma]*delta_bd + r_hat[alpha]*r_hat[delta]*delta_bg
+                                    + r_hat[beta]*r_hat[gamma]*delta_ad + r_hat[beta]*r_hat[delta]*delta_ag)
+                               + 3*(delta_ab*delta_gd + delta_ag*delta_bd + delta_ad*delta_bg)) / (r**5)
+                    T[4+idx1, 4+idx2] = T_qq
+        else:
+            raise ValueError(f"multipole_order must be 1, 2, or 3. Got {multipole_order}")
+
+        return T
+
+    def _build_multipole_vector(self, atom_data, multipole_order):
+        """
+        Build multipole moment vector M for an atom using AMOEBA formalism.
+
+        Parameters:
+        -----------
+        atom_data : dict or pd.Series
+            Atom data containing 'Atom_Charge', 'Dipole_Moment', 'Quadrupole_Moment'
+        multipole_order : int
+            Maximum multipole order (1=monopole, 2=+dipole, 3=+quadrupole)
+
+        Returns:
+        --------
+        M : ndarray
+            Multipole vector [q, μ_x, μ_y, μ_z, Q_xx, Q_xy, ...] in SI-based units
+            - Order 1: [q] (1 element)
+            - Order 2: [q, μ_x, μ_y, μ_z] (4 elements)
+            - Order 3: [q, μ_x, μ_y, μ_z, Q_xx, Q_xy, Q_xz, Q_yy, Q_yz] (9 elements, traceless)
+
+        Notes:
+        ------
+        - Charges are dimensionless (in units of elementary charge)
+        - Dipoles are converted from Bohr to meters
+        - Quadrupoles are converted from Bohr² to meters²
+        - Uses traceless quadrupole representation (Q_zz = -Q_xx - Q_yy)
+        """
+        M = [atom_data['Atom_Charge']]  # Monopole (dimensionless, in units of e)
+
+        if multipole_order >= 2:
+            # Add dipole components (convert from atomic units to SI)
+            # Multiwfn outputs dipole in Bohr (atomic units)
+            # In a.u., dipole has units of e·a₀, so we only convert length
+            dipole_bohr = np.array(atom_data['Dipole_Moment'])
+            dipole_m = dipole_bohr * constants.BOHR_TO_M  # Now in units of e·meters
+            M.extend(dipole_m)
+
+        if multipole_order >= 3:
+            # Add quadrupole components (convert from Bohr² to m²)
+            # Use traceless representation: 5 independent components
+            Q = atom_data['Quadrupole_Moment']
+            Q_m2 = Q * (constants.BOHR_TO_M**2)
+
+            # Extract 5 independent components (Q is symmetric and traceless)
+            # Components: Q_xx, Q_xy, Q_xz, Q_yy, Q_yz
+            # (Q_zz is determined by traceless condition: Q_zz = -Q_xx - Q_yy)
+            M.extend([Q_m2[0, 0], Q_m2[0, 1], Q_m2[0, 2], Q_m2[1, 1], Q_m2[1, 2]])
+
+        return np.array(M)
+
+    def get_Electrostatic_stabilization_tensor(self, multiwfn_path, multiwfn_module, atmrad_path,
+                                              substrate_idxs, charge_type='Hirshfeld_I',
+                                              name_dataStorage='estaticFile_tensor', env_idxs=None,
+                                              decompose_atomwise=False, visualize=None,
+                                              multipole_order=2, substrate_multipole_order=None,
+                                              env_multipole_order=None):
+        """
+        Compute electrostatic stabilization using AMOEBA-style multipole tensor formalism.
+
+        This function implements the complete multipole expansion for intermolecular
+        electrostatic interactions using the tensor formalism:
+
+            E_total = Σᵢ∈substrate Σⱼ∈environment M_i^T · T_ij · M_j
+
+        where M is the multipole vector and T_ij is the interaction tensor containing
+        all derivatives of the Coulomb potential. This naturally includes ALL
+        multipole-multipole interaction terms:
+
+        - Order 1 (monopole): charge-charge (q×q)
+        - Order 2 (+ dipole): + charge-dipole (q×μ) + dipole-dipole (μ×μ)
+        - Order 3 (+ quadrupole): + charge-quadrupole (q×Q) + dipole-quadrupole (μ×Q) + quadrupole-quadrupole (Q×Q)
+
+        This is the formalism used in the AMOEBA polarizable force field and provides
+        a complete treatment of distributed multipole interactions.
+
+        Parameters:
+        -----------
+        multiwfn_path : str
+            Path to Multiwfn executable
+        multiwfn_module : str
+            Module name containing Multiwfn executable
+        atmrad_path : str
+            Path to atmrad executable
+        substrate_idxs : list
+            List of substrate atom indices (the molecule being stabilized)
+        charge_type : str, optional
+            Charge partitioning scheme (default: 'Hirshfeld_I')
+        name_dataStorage : str, optional
+            Output filename prefix (default: 'estaticFile_tensor')
+        env_idxs : list or None, optional
+            List of environment atom indices. If None, uses all non-substrate atoms (default: None)
+        decompose_atomwise : bool, optional
+            If True, compute atom-wise decomposition showing each substrate atom's contribution (default: False)
+        visualize : bool or None, optional
+            If True, create PDB files with energy contributions in B-factor column.
+            None uses config defaults (default: None)
+        multipole_order : int, optional
+            Order of multipole expansion:
+            - 1: monopole only (charge-charge)
+            - 2: monopole + dipole (includes charge-charge, charge-dipole, dipole-dipole)
+            - 3: monopole + dipole + quadrupole (includes all terms up to Q×Q)
+            (default: 2)
+        substrate_multipole_order : int or None, optional
+            Multipole order for substrate atoms. If None, uses multipole_order.
+            Set to 1 for QM/MM where substrate is MM (charges only). (default: None)
+        env_multipole_order : int or None, optional
+            Multipole order for environment atoms. If None, uses multipole_order.
+            Set to 1 for QM/MM where environment is MM (charges only). (default: None)
+
+        Returns:
+        --------
+        pd.DataFrame or tuple of pd.DataFrame
+            If decompose_atomwise=False: returns DataFrame with total stabilization energies
+            If decompose_atomwise=True: returns (total_df, atomwise_df) tuple
+
+        Notes:
+        ------
+        **Comparison with other methods:**
+        - `get_Electrostatic_stabilization()`: Computes q·V (substrate charge in environment potential)
+        - `get_Electrostatic_stabilization_dipole()`: Computes -μ·E (substrate dipole in environment field)
+        - This function: Computes DIRECT pairwise multipole-multipole interactions
+
+        **Advantages of tensor formalism:**
+        - Complete: automatically includes all multipole-multipole terms
+        - Symmetric: properly treats both substrate and environment multipoles
+        - Efficient: single matrix multiplication per atom pair
+        - Extensible: easy to add higher-order terms
+
+        **Important:**
+        - Requires Multiwfn multipole analysis for orders ≥ 2
+        - **Automatic fallback**: If multipole files don't exist, automatically uses charges-only files
+        - **QM/MM support**: Substrate and environment can have different multipole orders (e.g., QM substrate with multipoles, MM environment with charges only)
+        - Results are the electrostatic STABILIZATION energy (environment → substrate)
+        - Energy is in kcal/mol
+        - Follows AMOEBA force field formalism (Ren & Ponder, J. Phys. Chem. B 2003)
+
+        Examples:
+        ---------
+        >>> # Compute monopole + dipole + dipole-dipole interactions
+        >>> df = estat.get_Electrostatic_stabilization_tensor(
+        ...     multiwfn_path, multiwfn_module, atmrad_path,
+        ...     substrate_idxs=[[0, 1, 2]],  # 3-atom substrate
+        ...     multipole_order=2  # Include dipole-dipole terms
+        ... )
+
+        >>> # Include quadrupole terms with atom-wise decomposition
+        >>> df, df_atomwise = estat.get_Electrostatic_stabilization_tensor(
+        ...     multiwfn_path, multiwfn_module, atmrad_path,
+        ...     substrate_idxs=[[0, 1, 2]],
+        ...     multipole_order=3,
+        ...     decompose_atomwise=True
+        ... )
+
+        >>> # QM/MM: QM substrate (with dipoles) interacting with MM environment (charges only)
+        >>> df = estat.get_Electrostatic_stabilization_tensor(
+        ...     multiwfn_path, multiwfn_module, atmrad_path,
+        ...     substrate_idxs=[[0, 1, 2]],  # QM region
+        ...     substrate_multipole_order=2,  # QM: charges + dipoles
+        ...     env_multipole_order=1         # MM: charges only
+        ... )
+        """
+        dielectric = self.config['dielectric']
+        folder_to_molden = self.folder_to_file_path
+        list_of_file = self.lst_of_folders
+        final_structure_file = self.config['xyzfilename']
+
+        # Handle visualization settings
+        if visualize is None:
+            viz_contributions = self.config.get('visualize_estabilization', False)
+        else:
+            viz_contributions = visualize
+
+        owd = os.getcwd()
+        allspeciesdict = []
+        all_atomwise_data = []
+        counter = 0
+        one_mol = 6.02e23
+
+        # Set default multipole orders for substrate and environment
+        if substrate_multipole_order is None:
+            substrate_multipole_order = multipole_order
+        if env_multipole_order is None:
+            env_multipole_order = multipole_order
+
+        # Determine if we need multipole analysis (orders 2 and 3 need dipoles/quadrupoles)
+        # We need multipoles if EITHER substrate or environment needs them
+        need_multipoles = (substrate_multipole_order >= 2 or env_multipole_order >= 2)
+
+        for f in list_of_file:
+            substrate_idx = substrate_idxs[counter]
+            results_dict = {}
+            file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
+            total_lines = Electrostatics.mapcount(file_path_xyz)
+            init_all_lines = np.arange(0, total_lines - 2)
+
+            if not env_idxs:
+                env_idx = [x for x in init_all_lines if x not in substrate_idx]
+            else:
+                env_idx = env_idxs[counter]
+
+            # Partition charges (with multipole analysis if needed)
+            comp_cost = self.partitionCharge(need_multipoles, f, folder_to_molden,
+                                            multiwfn_path, atmrad_path, charge_type, owd)
+
+            if comp_cost == -1:
+                print(f"Warning: Charge calculation failed for {f}, skipping")
+                counter += 1
+                continue
+
+            # Get geometry information
+            geom = Geometry(file_path_xyz)
+            df_geom = geom.getGeomInfo()
+
+            # Load charge/multipole data with automatic fallback
+            multipole_name = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
+            monopole_name = f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
+
+            # Try to load multipole file first, fall back to charges if not available
+            multipole_available = os.path.exists(multipole_name)
+
+            if need_multipoles and not multipole_available:
+                print(f"Warning: Multipole file not found for {f}, falling back to charges-only")
+                print(f"  Requested multipole_order={multipole_order}, but only charges available")
+                print(f"  Setting both substrate and environment to monopole-only")
+                substrate_multipole_order = 1
+                env_multipole_order = 1
+                need_multipoles = False
+
+            if multipole_available and need_multipoles:
+                # Load multipole data
+                atomicDict = Electrostatics.getmultipoles(multipole_name)
+                df_all = pd.DataFrame(atomicDict)
+                df_all['Index'] = df_all['Index'].astype(int) - 1
+                multipole_dict = {int(row['Index']): row for _, row in df_all.iterrows()}
+            else:
+                # Load charges-only data
+                df_all = pd.read_csv(monopole_name, sep='\s+',
+                                    names=["Element", 'x', 'y', 'z', "Atom_Charge"])
+                df_all["Index"] = range(0, len(df_all))
+                df_all['Dipole_Moment'] = [[0.0, 0.0, 0.0]] * len(df_all)
+                df_all['Quadrupole_Moment'] = [np.zeros((3, 3))] * len(df_all)
+                multipole_dict = {row['Index']: row for _, row in df_all.iterrows()}
+
+            # Now handle substrate and environment separately for QM/MM support
+            df_substrate = df_all[df_all["Index"].isin(substrate_idx)].copy()
+            df_env = df_all[df_all["Index"].isin(env_idx)].copy()
+
+            # If substrate is monopole-only but we loaded multipoles, zero out higher terms
+            if substrate_multipole_order == 1 and multipole_available:
+                df_substrate['Dipole_Moment'] = [[0.0, 0.0, 0.0]] * len(df_substrate)
+                df_substrate['Quadrupole_Moment'] = [np.zeros((3, 3))] * len(df_substrate)
+
+            # If environment is monopole-only but we loaded multipoles, zero out higher terms
+            if env_multipole_order == 1 and multipole_available:
+                df_env['Dipole_Moment'] = [[0.0, 0.0, 0.0]] * len(df_env)
+                df_env['Quadrupole_Moment'] = [np.zeros((3, 3))] * len(df_env)
+
+            # Compute multipole tensor interactions
+            total_energy = 0.0
+            atomwise_contributions = []
+
+            # Loop over all substrate-environment atom pairs
+            for sub_idx in substrate_idx:
+                sub_atom_energy = 0.0
+
+                # Get substrate atom data using dictionary lookup for multipoles or direct dataframe for monopoles
+                if need_multipoles:
+                    if sub_idx not in multipole_dict:
+                        print(f"Warning: Substrate atom {sub_idx} not found in multipole data, skipping")
+                        continue
+                    sub_row = multipole_dict[sub_idx]
+                else:
+                    sub_row = df_substrate[df_substrate['Index'] == sub_idx].iloc[0]
+
+                # Get substrate atom position
+                r_i = np.array([df_geom['X'][sub_idx],
+                               df_geom['Y'][sub_idx],
+                               df_geom['Z'][sub_idx]])
+
+                # Build substrate multipole vector with substrate-specific order
+                M_i = self._build_multipole_vector(sub_row, substrate_multipole_order)
+
+                for env_idx_atom in env_idx:
+                    # Get environment atom data using dictionary lookup for multipoles or direct dataframe for monopoles
+                    if need_multipoles:
+                        if env_idx_atom not in multipole_dict:
+                            print(f"Warning: Environment atom {env_idx_atom} not found in multipole data, skipping")
+                            continue
+                        env_row = multipole_dict[env_idx_atom]
+                    else:
+                        env_row = df_env[df_env['Index'] == env_idx_atom].iloc[0]
+
+                    # Get environment atom position
+                    r_j = np.array([df_geom['X'][env_idx_atom],
+                                   df_geom['Y'][env_idx_atom],
+                                   df_geom['Z'][env_idx_atom]])
+
+                    # Build environment multipole vector with environment-specific order
+                    M_j = self._build_multipole_vector(env_row, env_multipole_order)
+
+                    # Build interaction tensor with max order (tensor must accommodate both)
+                    tensor_order = max(substrate_multipole_order, env_multipole_order)
+                    T_ij = self._build_interaction_tensor(r_i, r_j, tensor_order, dielectric)
+
+                    # Pad multipole vectors to match tensor dimensions if needed
+                    # This handles QM/MM cases where substrate and environment have different orders
+                    if len(M_i) < len(M_j):
+                        M_i_padded = np.pad(M_i, (0, len(M_j) - len(M_i)))
+                        M_j_padded = M_j
+                    elif len(M_j) < len(M_i):
+                        M_i_padded = M_i
+                        M_j_padded = np.pad(M_j, (0, len(M_i) - len(M_j)))
+                    else:
+                        M_i_padded = M_i
+                        M_j_padded = M_j
+
+                    # Compute pairwise interaction: E = M_i^T · T_ij · M_j
+                    E_pair_J = M_i_padded.T @ T_ij @ M_j_padded  # Energy in Joules
+                    E_pair_kcal_mol = E_pair_J * one_mol / 4184.0  # Convert to kcal/mol
+
+                    sub_atom_energy += E_pair_kcal_mol
+                    total_energy += E_pair_kcal_mol
+
+                # Store atom-wise decomposition if requested
+                if decompose_atomwise:
+                    atom_data = {
+                        'FileName': f,
+                        'Atom_Index': sub_idx,
+                        'Atom_Symbol': df_geom.loc[df_geom.index == sub_idx, 'Atom'].iloc[0],
+                        'Charge': sub_row['Atom_Charge'],
+                        'Energy_Contribution_kcal_mol': sub_atom_energy
+                    }
+
+                    # Add multipole information if substrate has multipoles
+                    if substrate_multipole_order >= 2:
+                        dipole = np.array(sub_row['Dipole_Moment'])
+                        atom_data.update({
+                            'Dipole_x_Bohr': dipole[0],
+                            'Dipole_y_Bohr': dipole[1],
+                            'Dipole_z_Bohr': dipole[2],
+                            'Dipole_magnitude_Bohr': np.linalg.norm(dipole)
+                        })
+
+                    if substrate_multipole_order >= 3:
+                        Q = sub_row['Quadrupole_Moment']
+                        atom_data.update({
+                            'Quadrupole_xx_Bohr2': Q[0, 0],
+                            'Quadrupole_yy_Bohr2': Q[1, 1],
+                            'Quadrupole_zz_Bohr2': Q[2, 2],
+                            'Quadrupole_xy_Bohr2': Q[0, 1]
+                        })
+
+                    atomwise_contributions.append(atom_data)
+
+            # Store results for this file
+            results_dict['Total_Energy_kcal_mol'] = total_energy
+            results_dict['Substrate_Multipole_Order'] = substrate_multipole_order
+            results_dict['Environment_Multipole_Order'] = env_multipole_order
+            results_dict['Num_Substrate_Atoms'] = len(substrate_idx)
+            results_dict['Num_Environment_Atoms'] = len(env_idx)
+            results_dict['FileName'] = f
+            allspeciesdict.append(results_dict)
+
+            if decompose_atomwise:
+                all_atomwise_data.extend(atomwise_contributions)
+
+                # Visualize atom-wise contributions if requested
+                if viz_contributions:
+                    df_atomwise_temp = pd.DataFrame(atomwise_contributions)
+                    # Create PDB visualization with substrate atom contributions in B-factor
+                    try:
+                        total_atoms = len(df_geom)
+                        b_factors = np.zeros(total_atoms)
+
+                        # Fill in substrate atom contributions
+                        for _, row in df_atomwise_temp.iterrows():
+                            atom_idx = int(row['Atom_Index'])
+                            if 0 <= atom_idx < total_atoms:
+                                b_factors[atom_idx] = row['Energy_Contribution_kcal_mol']
+
+                        # Create PDB file
+                        pdb_name = f'Estabilization_tensor_{f}_sub{substrate_multipole_order}_env{env_multipole_order}.pdb'
+                        if multipole_available and (substrate_multipole_order >= 2 or env_multipole_order >= 2):
+                            Visualize(file_path_xyz).makePDB(multipole_name, b_factors, pdb_name)
+                        else:
+                            Visualize(file_path_xyz).makePDB(monopole_name, b_factors, pdb_name)
+                        print(f"    Created visualization PDB: {pdb_name}")
+                    except Exception as e:
+                        print(f"    Warning: Could not create visualization PDB: {e}")
+
+            print(f"File {f}: Total energy (substrate order {substrate_multipole_order}, env order {env_multipole_order}): {total_energy:.4f} kcal/mol")
+
+            os.chdir(owd)
+            counter += 1
+
+        # Create output DataFrames
+        df = pd.DataFrame(allspeciesdict)
+        df.to_csv(name_dataStorage + '.csv', index=False)
+
+        if decompose_atomwise:
             df_atomwise = pd.DataFrame(all_atomwise_data)
             df_atomwise.to_csv(name_dataStorage + '_atomwise.csv', index=False)
             return df, df_atomwise
