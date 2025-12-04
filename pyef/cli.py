@@ -81,6 +81,12 @@ def run(config):
     jobs, metal_indices, bond_indices = parse_job_batch_file(input)
     job_name = os.path.splitext(input)[0]
 
+    # Validate that ESP analysis has metal indices
+    if run_esp and metal_indices is None:
+        click.echo("Error: ESP analysis requires metal indices (column 2) in the job batch file.")
+        click.echo("Format for ESP: job_path, metal_index")
+        return
+
     # Run requested analyses
     if run_ef or run_esp or run_estab:
         pyef.run.main(
