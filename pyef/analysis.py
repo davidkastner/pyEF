@@ -92,14 +92,15 @@ class Electrostatics:
     Examples
     --------
     >>> folders = ['calc1/', 'calc2/']
-    >>> metal_indices = [0, 0]
     >>> path = '/scr/'
-    >>> es = Electrostatics(folders, metal_indices, path, dielectric=2.0)
-    >>> es.changeDielectric(4.0)
-    >>> data = es.getESPData(['Hirshfeld', 'Hirshfeld_I'], 'esp_results', ...)
+    >>> # For E-field or stabilization analysis (no metal indices needed)
+    >>> es = Electrostatics(folders, path, dielectric=2.0)
+    >>> # For ESP analysis (metal indices required)
+    >>> es_with_metals = Electrostatics(folders, path, lst_of_tmcm_idx=[0, 0], dielectric=2.0)
+    >>> data = es_with_metals.getESP(['Hirshfeld', 'Hirshfeld_I'], 'esp_results', ...)
     """
 
-    def __init__(self, lst_of_folders, lst_of_tmcm_idx, folder_to_file_path,
+    def __init__(self, lst_of_folders, folder_to_file_path, lst_of_tmcm_idx=None,
                  **kwargs):
         """Initialize Electrostatics analysis object.
 
@@ -107,10 +108,12 @@ class Electrostatics:
         ----------
         lst_of_folders : list of str
             List of folder names containing calculation outputs.
-        lst_of_tmcm_idx : list of int
-            List of atom indices for ESP calculation (0-indexed).
         folder_to_file_path : str
             Relative path from folder to .molden/.xyz files.
+        lst_of_tmcm_idx : list of int, optional
+            List of atom indices for ESP calculation (0-indexed).
+            Only required when running ESP analysis. Not needed for E-field
+            or electrostatic stabilization if bond indices are provided.
         **kwargs : dict, optional
             Configuration options to override defaults. See class docstring
             for available configuration keys.
@@ -144,7 +147,7 @@ class Electrostatics:
 
         # Store required parameters
         self.lst_of_folders = lst_of_folders
-        self.lst_of_tmcm_idx = lst_of_tmcm_idx
+        self.lst_of_tmcm_idx = lst_of_tmcm_idx if lst_of_tmcm_idx is not None else []
         self.folder_to_file_path = folder_to_file_path
 
         # Multiwfn command codes for charge calculation methods
@@ -501,7 +504,6 @@ Input commands that were to be sent:
         - Removes folders from processing list if files cannot be located
         """
 
-        metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd()
@@ -1841,6 +1843,13 @@ Input commands that were to be sent:
         if isinstance(charge_types, str):
             charge_types = [charge_types]
 
+        # Validate that metal indices are provided for ESP calculation
+        if not self.lst_of_tmcm_idx:
+            raise ValueError(
+                "ESP calculation requires metal atom indices. "
+                "Please provide lst_of_tmcm_idx when initializing the Electrostatics object."
+            )
+
         self.config['dielectric'] = dielectric
         metal_idxs = self.lst_of_tmcm_idx
         folder_to_molden = self.folder_to_file_path
@@ -2043,7 +2052,13 @@ Input commands that were to be sent:
 
                 # Determine bond indices
                 if auto_find_bonds or (not input_bond_indices):
-                    # Auto-find bonded atoms
+                    # Auto-find bonded atoms (requires metal indices)
+                    if not self.lst_of_tmcm_idx:
+                        raise ValueError(
+                            "Auto-finding bonds requires metal atom indices. "
+                            "Please provide lst_of_tmcm_idx when initializing the Electrostatics object, "
+                            "or specify bond indices explicitly via input_bond_indices parameter."
+                        )
                     bonded_atoms_list = self.getBondedAtoms(file_path_xyz, atom_idx)
                     bond_indices_to_use = [(atom_idx, bonded_idx) for bonded_idx in bonded_atoms_list]
                     print(f"Auto-found {len(bond_indices_to_use)} bonds for atom {atom_idx}: {bond_indices_to_use}")

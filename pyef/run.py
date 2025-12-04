@@ -8,7 +8,8 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
          geom_flag, esp_flag, ef_flag, estab_flag,
          multiwfn_module, multiwfn_path, atmrad_path,
          charge_types=['Hirshfeld_I'], multipole_bool=True, use_multipole=False,
-         decompose_atomwise=False, substrate_idxs=None, env_idxs=None, multipole_order=2):
+         decompose_atomwise=False, substrate_idxs=None, env_idxs=None, multipole_order=2,
+         include_ptchgs=False, ptchg_file='', dielectric_scale=1.0):
     """
     Main function for running the pyEF workflow.
 
@@ -18,10 +19,10 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
         Name for output files
     jobs : list of str
         List of job paths
-    metal_indices : list of int
-        List of metal atom indices
+    metal_indices : list of int or None
+        List of metal atom indices (only required for ESP analysis or auto-finding bonds)
     bond_indices : list of tuples
-        List of bond pairs
+        List of bond pairs (required for E-field if metal_indices not provided)
     dielectric : float
         Dielectric constant
     geom_flag : bool
@@ -52,6 +53,12 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
         Environment atom indices for estab calculation (default: None)
     multipole_order : int, optional
         Multipole expansion order (default: 2)
+    include_ptchgs : bool, optional
+        Include MM point charges from QM/MM calculations (default: False)
+    ptchg_file : str, optional
+        Path to point charge file (default: '')
+    dielectric_scale : float, optional
+        Dielectric scaling factor for MM charges (default: 1.0)
 
     Notes
     -----
@@ -65,8 +72,18 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
 
     # Initialize Electrostatics Object
     incage_bool = False
-    dataObject = Electrostatics(jobs, metal_indices, folder_to_file_path,
-                                incage_bool=incage_bool, dielectric=dielectric)
+    # Only pass metal indices if they are provided (needed for ESP or auto-find bonds)
+    if metal_indices:
+        dataObject = Electrostatics(jobs, folder_to_file_path, lst_of_tmcm_idx=metal_indices,
+                                    incage_bool=incage_bool, dielectric=dielectric)
+    else:
+        dataObject = Electrostatics(jobs, folder_to_file_path,
+                                    incage_bool=incage_bool, dielectric=dielectric)
+
+    # Configure QM/MM if requested
+    if include_ptchgs and ptchg_file:
+        dataObject.includePtChgs(ptchg_file)
+        dataObject.set_dielectric_scale(dielectric_scale)
 
     # Fix/reformat the name and charges on atoms in .molden file to set up for future calculations
     dataObject.prepData()

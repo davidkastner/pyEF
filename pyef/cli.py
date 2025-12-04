@@ -72,6 +72,11 @@ def run(config):
     env_idxs = config_data.get('env_idxs', None)
     multipole_order = config_data.get('multipole_order', 2)
 
+    # QM/MM options
+    include_ptchgs = config_data.get('include_ptchgs', False)
+    ptchg_file = config_data.get('ptchg_file', '')
+    dielectric_scale = config_data.get('dielectric_scale', 1.0)
+
     # Parse job batch file
     jobs, metal_indices, bond_indices = parse_job_batch_file(input)
     job_name = os.path.splitext(input)[0]
@@ -83,7 +88,8 @@ def run(config):
             run_geometry_check, run_esp, run_ef, run_estab,
             multiwfn_module, multiwfn_path, atmrad_path,
             charge_types, multipole_bool, use_multipole,
-            decompose_atomwise, substrate_idxs, env_idxs, multipole_order
+            decompose_atomwise, substrate_idxs, env_idxs, multipole_order,
+            include_ptchgs, ptchg_file, dielectric_scale
         )
     else:
         click.echo("No analysis type specified. Please set ef, esp, or estab to true in config file.")
