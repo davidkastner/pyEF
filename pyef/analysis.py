@@ -42,9 +42,8 @@ from distutils.dir_util import copy_tree
 #from biopandas.pdb import PandasPdb
 
 from .geometry import Geometry, Visualize
-from .utility import MoldenObject
-from .multiwfn_interface import MultiwfnInterface
-from . import constants
+from .utility import MoldenObject, MultiwfnInterface
+from . import utility as constants  # Backward compatibility alias
 class Electrostatics:
     """Compute electrostatic properties from quantum chemistry calculations.
 
@@ -839,7 +838,7 @@ Input commands that were to be sent:
 
 
 
-    def calc_firstTermE_atom_decomposable(self, espatom_idx, charge_range, charge_file, df_ptchg=None):
+    def monopole_atomicEfield(self, espatom_idx, charge_range, charge_file, df_ptchg=None):
         '''
         Input: espatom_idx: integer of atom index
         charge_range: list of integers of atom indices
@@ -946,118 +945,7 @@ Input commands that were to be sent:
         return Electrostatics.compute_esp(qm_coords, qm_charges, mm_coords)
 
 
-
-    def calc_fullE(self, idx_atom, charge_range, xyz_file, atom_multipole_file, df_ptchg=None):
-        '''
-
-        Input: idx_atom: integer of atom index
-        charge_range: list of integers of atom indices
-        xyz_file: string of xyz filename
-        atom_multipole_file: string of multipole filename
-        df_ptchg: optional pre-loaded point charge dataframe
-        Output: list of E-field vector and atomic symbol, Efields are reported in units of Volts/Angstrom
-        '''
-
-        df = Geometry(xyz_file).getGeomInfo()
-        #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-
-        # Convert each column to list for quicker indexing
-        xs = df['X']
-        ys = df['Y']
-        zs = df['Z']
-
-        
-        # Following derivation of E-field strength 
-        Monopole_E = np.array([0, 0, 0])
-
-        # Unit conversion
-        # Bohr to meters (atomic units)
-        b_to_A = 0.529177
-        Ex = 0
-        Ey = 0
-        Ez = 0
-
-        xo = xs[idx_atom]
-        yo = ys[idx_atom]
-        zo = zs[idx_atom]
-
-        position_vec = constants.ANGSTROM_TO_M*np.array([xo, yo, zo])
-
-
-        inv_eps = 1/self.config['dielectric']
-
-        if self.config['includePtChgs'] and df_ptchg is None:
-            # If point charges are enabled but not passed, try to load them
-            # Note: This may fail if ptChgfp is not a full path
-            df_ptchg = self.getPtChgs(self.config['ptChgfp'])
-        #load multipole moments from processed outputs 
-        lst_multipole_dict = MultiwfnInterface.getmultipoles(atom_multipole_file)
-
-        #make a list for each term in multipole expansion
-        lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
-
-       
-        QM_charges = [lst_multipole_dict[idx]["Atom_Charge"] for idx in range(0, len(xs))]
-        QM_coords = np.column_stack((np.array(xs), np.array(ys), np.array(zs)))
-        #This ensure that atoms we would like to exclude from Efield calculation are excluded from every term in the multipole expansion
-        multipole_chg_range = [i for i in lst_multipole_idxs if i in charge_range]
-        for idx in multipole_chg_range:
-            #If the atom idx is outside of the charge range then skip
-            atom_dict = lst_multipole_dict[idx] 
-            if idx == idx_atom:
-                continue
-            else:
-                # Units of dipole_vec: 
-                dipole_vec = constants.BOHR_TO_M*np.array(atom_dict["Dipole_Moment"])
-                #convention of vector pointing towards atom of interest, so positive charges exert positive Efield
-                dist_vec = constants.ANGSTROM_TO_M*np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
-                dist_arr = np.outer(dist_vec, dist_vec)
-                quadrupole_arr = constants.BOHR_TO_M*constants.BOHR_TO_M*atom_dict['Quadrupole_Moment']
-                
-                # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
-                r = (((xs[idx] - xo)*constants.ANGSTROM_TO_M)**2 + ((ys[idx] - yo)*constants.ANGSTROM_TO_M)**2 + ((zs[idx] - zo)*constants.ANGSTROM_TO_M)**2)**(0.5)
-                Monopole_E = Monopole_E - inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"]*(1/(r**3))*dist_vec  #neg for sign convention so Efield points toward neg charge
-                Ex_quad = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**3))*(constants.ANGSTROM_TO_M*(xs[idx] - xo))*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
-                Ey_quad = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**3))*(constants.ANGSTROM_TO_M*(ys[idx] - yo))*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
-                Ez_quad = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**3))*(constants.ANGSTROM_TO_M*(zs[idx] - zo))*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
-
-                Ex = Ex + inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[0]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[1:], dist_vec[1:]))-(1/3)*Ex_quad.sum()
-                Ey = Ey + inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[1]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
-                Ez = Ez + inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[2]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
-        E_vec = [Ex, Ey, Ez]
-
-
-        #For QMMM calculation, include point charges in E field calc
-        if self.config['includePtChgs']:
-            MM_xs = list(df_ptchg['x'])
-            MM_ys = list(df_ptchg['y'])
-            MM_zs = list(df_ptchg['z'])
-            init_MM_charges = list(df_ptchg['charge'])
- 
-            #make new MM_charges by scaling!
-            mm_coords = np.column_stack((np.array(MM_xs), np.array(MM_ys), np.array(MM_zs)))
-            mm_charges = np.array(init_MM_charges)
-            qm_charges = np.array(QM_charges)
-            print(f'Size of mm_coords: {np.shape(mm_coords)} and qm coords: {np.shape(QM_coords)}; mm charges: {np.shape(mm_charges)} and qm_charges: {np.shape(qm_charges)}')
-            #MM_charges = Electrostatics.correct_mm_charges(QM_coords, qm_charges, mm_coords, mm_charges)
-
-            MM_charges = mm_charges*(1/(math.sqrt(self.config['dielectric_scale'])))
-            #change charge range to include these new partial charges!
-            charge_range = range(0, len(MM_xs))
-            for chg_idx in charge_range:
-                r = (((MM_xs[chg_idx] - xo)*constants.ANGSTROM_TO_M)**2 + ((MM_ys[chg_idx] - yo)*constants.ANGSTROM_TO_M)**2 + ((MM_zs[chg_idx] - zo)*constants.ANGSTROM_TO_M)**2)**(0.5)
-                dist_vec = constants.ANGSTROM_TO_M*np.array([(MM_xs[chg_idx] - xo), (MM_ys[chg_idx] - yo), (MM_zs[chg_idx] - zo)])
-                E_to_add = -inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*MM_charges[chg_idx]*(1/(r**3))*dist_vec
-                Monopole_E = Monopole_E +  E_to_add
-                E_vec[0] += E_to_add[0]
-                E_vec[1] += E_to_add[1]
-                E_vec[2] += E_to_add[2]
-            #Add contributions to Monopole E from point charges to total E
-        return [constants.VM_TO_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], constants.VM_TO_VA*np.array(Monopole_E) ]
-
-
-
-    def calc_atomwise_ElectricField(self, idx_atom, charge_range, xyz_file, atom_multipole_file, df_ptchg=None):
+    def multipole_atomicEfield(self, idx_atom, charge_range, xyz_file, atom_multipole_file, df_ptchg=None):
         '''
 
         Input: idx_atom: integer of atom index
@@ -1178,133 +1066,6 @@ Input commands that were to be sent:
                 multipole_Efield_contribution.append(E_to_add)
             #Add contributions to Monopole E from point charges to total E
         return [constants.VM_TO_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], constants.VM_TO_VA*np.array(Monopole_E), constants.VM_TO_VA*np.array(multipole_Efield_contribution)]
-    def Efield_multipleAtoms(self, xyzfilepath, df_substrate, df_env, return_decomposition=False):
-        """
-        Calculate E-field vectors at substrate atoms due to environment atoms.
-
-        Parameters:
-        -----------
-        xyzfilepath : str
-            Path to XYZ file
-        df_substrate : DataFrame
-            DataFrame with substrate atom information (must have 'Index', 'Atom_Charge' columns)
-        df_env : DataFrame
-            DataFrame with environment atom information (must have 'Index', 'Atom_Charge' columns)
-        return_decomposition : bool, optional
-            If True, return atom-wise E-field contributions (default: False)
-
-        Returns:
-        --------
-        DataFrame or tuple
-            If return_decomposition=False: df_substrate with added 'Efield_x', 'Efield_y', 'Efield_z' columns
-            If return_decomposition=True: (df_substrate, atomwise_Efield_dict)
-                where atomwise_Efield_dict has (sub_idx, env_idx) keys and [Ex, Ey, Ez] vector values
-        """
-        df = Geometry(xyzfilepath).getGeomInfo()
-
-        # Convert each column to list for quicker indexing
-        atoms = df['Atom']
-        xs = df['X']
-        ys = df['Y']
-        zs = df['Z']
-
-        dielectric = self.config['dielectric']
-        inv_eps = 1/dielectric
-
-        substrate_idxs = df_substrate['Index']
-        env_idxs = df_env['Index']
-
-        # Store total E-fields at each substrate atom
-        total_Efields = []  # List of [Ex, Ey, Ez] vectors
-        # Store atom-wise E-field contributions: dict with (sub_idx, env_idx) as key and [Ex, Ey, Ez] as value
-        atomwise_Efield_contributions = {}
-
-        for sub_idx in substrate_idxs:
-            E_vec = np.array([0.0, 0.0, 0.0])
-            xo = xs[sub_idx]
-            yo = ys[sub_idx]
-            zo = zs[sub_idx]
-
-            for idx in env_idxs:
-                # Distance vector from environment atom to substrate atom
-                dist_vec = constants.ANGSTROM_TO_M * np.array([xs[idx] - xo, ys[idx] - yo, zs[idx] - zo])
-                r = np.linalg.norm(dist_vec)
-
-                # E-field from a point charge: E = k * q / r^2 * r_hat
-                # Direction: points away from positive charge, toward negative charge
-                env_charge = df_env.loc[df_env['Index'] == idx, 'Atom_Charge'].iloc[0]
-                E_contribution = -inv_eps * constants.COULOMB_CONSTANT * constants.ELEMENTARY_CHARGE * env_charge * (1/(r**3)) * dist_vec
-
-                E_vec += E_contribution
-
-                # Store individual contribution
-                atomwise_Efield_contributions[(sub_idx, idx)] = E_contribution
-
-            total_Efields.append(E_vec)
-
-        df_substrate = df_substrate.copy()
-        # Convert to V/Angstrom for consistency with other E-field calculations
-        Efields_array = constants.VM_TO_VA * np.array(total_Efields)
-        df_substrate['Efield_x'] = Efields_array[:, 0]
-        df_substrate['Efield_y'] = Efields_array[:, 1]
-        df_substrate['Efield_z'] = Efields_array[:, 2]
-        df_substrate['Efield_magnitude'] = np.linalg.norm(Efields_array, axis=1)
-
-        print(f'Substrate E-fields (V/Å): {Efields_array}')
-
-        if return_decomposition:
-            # Convert atomwise contributions to V/Angstrom as well
-            atomwise_Efield_VA = {key: constants.VM_TO_VA * vec for key, vec in atomwise_Efield_contributions.items()}
-            return df_substrate, atomwise_Efield_VA
-        return df_substrate
-
-    def ESP_multipleAtoms(self, xyzfilepath, df_substrate, df_env, return_decomposition=False):
-        #will return a list of multipole moments where each is
-        df = Geometry(xyzfilepath).getGeomInfo()
-        #df = pd.read_csv(charge_file, sep='\s+', names=["Atom",'x', 'y', 'z', "charge"])
-
-        # Convert each column to list for quicker indexing
-        atoms = df['Atom']
-        xs = df['X']
-        ys = df['Y']
-        zs = df['Z']
-
-        #KJ_J = 10**-3
-        #faraday = 23.06   #kcal/(mol*V)
-        one_mol = 6.02*(10**23)
-
-        dielectric = self.config['dielectric']
-
-        substrate_idxs = df_substrate['Index']
-        env_idxs = df_env['Index']
-
-        env_charges = df_env['Atom_Charge']
-        #env_dipoles = df_env['Dipole_Moment']
-        #env_quadrupole = df_env['Quadrupole_Moment']
-
-        total_ESPs = []
-        # Store atom-wise ESP contributions: dict with (sub_idx, env_idx) as key and ESP contribution as value
-        atomwise_ESP_contributions = {}
-
-        for sub_idx in substrate_idxs:
-            sub_esp = 0
-            xo = xs[sub_idx]
-            yo = ys[sub_idx]
-            zo = zs[sub_idx]
-            for idx in env_idxs:
-                r = (((xs[idx] - xo)*constants.ANGSTROM_TO_M)**2 + ((ys[idx] - yo)*constants.ANGSTROM_TO_M)**2 + ((zs[idx] - zo)*constants.ANGSTROM_TO_M)**2)**(0.5)
-                env_contribution = (constants.ELEMENTARY_CHARGE*constants.COULOMB_CONSTANT*df_env.loc[df_env['Index'] == idx, 'Atom_Charge'].iloc[0])/r
-                sub_esp = sub_esp + env_contribution
-                # Store individual contribution
-                atomwise_ESP_contributions[(sub_idx, idx)] = env_contribution
-            total_ESPs.append(sub_esp)
-        df_substrate = df_substrate.copy()
-        df_substrate['ESP'] = np.array(total_ESPs) #Units: N*m^2/(C^2)*(C/m) = N*m/C = J/C = Volt
-        print(f'Here is the substrate ESP:{total_ESPs} in volts')
-
-        if return_decomposition:
-            return df_substrate, atomwise_ESP_contributions
-        return df_substrate
 
     def ESPfromMultipole(self, xyzfilepath, atom_multipole_file, charge_range, idx_atom):
         '''
@@ -1357,40 +1118,6 @@ Input commands that were to be sent:
  
 
  # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
-    def E_proj_bondIndices(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines):
-        '''
-        Input: bond_indices: list of tuples of atom indices
-        xyz_filepath: string of xyz filename
-        atom_multipole_file: string of multipole filename
-        all_lines: list of strings of lines in xyz file
-        Output: list of E-field vector and atomic symbol in units of V/Angstrom
-        '''
-        bonded_atoms = []
-        E_projected = []
-        E_monopole_proj = []
-        bonded_positions = []
-        # Determine the Efield vector at point of central metal stom
-        bond_lens = []
-
-        
-        for atomidxA, atomidxB in bond_indices:
-            [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded]  =  self.calc_fullE(atomidxA, all_lines, xyz_filepath, atom_multipole_file)   
-            [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded]  =  self.calc_fullE(atomidxB, all_lines, xyz_filepath, atom_multipole_file)  
-            bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position)) 
-            bond_len = np.linalg.norm(bond_vec_unnorm)
-            bond_vec = bond_vec_unnorm/(bond_len)
-            # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
-            # Compute E-field projected along this bond!
-            E_proj = (1/2)*np.dot((np.array(A_bonded_E) + np.array(B_bonded_E)), bond_vec)
-            E_proj_monopole = (1/2)*np.dot((np.array(A_monopole_E_bonded) + np.array(B_monopole_E_bonded)), bond_vec)
-            E_projected.append(E_proj)
-            E_monopole_proj.append(E_proj_monopole)
-            bonded_atoms.append((A_bonded_atom, B_bonded_atom))
-            bonded_positions.append((A_bonded_position, B_bonded_position))
-            bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, bond_indices, bond_lens, E_monopole_proj]
-
-
     def calc_bond_dipoles(self, bond_indices, xyz_filepath, atom_multipole_file, bool_multipole):
         """Calculate bond dipole moments for given bond indices.
 
@@ -1489,8 +1216,8 @@ Input commands that were to be sent:
 
         if bool_multipole:
             for atomidxA, atomidxB in bond_indices:
-                [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded, A_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxA, all_lines, xyz_filepath, atom_multipole_file, df_ptchg=df_ptchg)
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded, B_atom_wise_E]  =  self.calc_atomwise_ElectricField(atomidxB, all_lines, xyz_filepath, atom_multipole_file, df_ptchg=df_ptchg)
+                [A_bonded_E, A_bonded_position, A_bonded_atom, A_monopole_E_bonded, A_atom_wise_E]  =  self.multipole_atomicEfield(atomidxA, all_lines, xyz_filepath, atom_multipole_file, df_ptchg=df_ptchg)
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_monopole_E_bonded, B_atom_wise_E]  =  self.multipole_atomicEfield(atomidxB, all_lines, xyz_filepath, atom_multipole_file, df_ptchg=df_ptchg)
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position))
                 bond_len = np.linalg.norm(bond_vec_unnorm)
                 bond_vec = bond_vec_unnorm/(bond_len)
@@ -1509,8 +1236,8 @@ Input commands that were to be sent:
 
         else:
             for atomidxA, atomidxB in bond_indices:
-                [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxA, all_lines, atom_multipole_file, df_ptchg=df_ptchg)
-                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  self.calc_firstTermE_atom_decomposable(atomidxB, all_lines, atom_multipole_file, df_ptchg=df_ptchg)
+                [A_bonded_E, A_bonded_position, A_bonded_atom,  A_atom_wise_E]  =  self.monopole_atomicEfield(atomidxA, all_lines, atom_multipole_file, df_ptchg=df_ptchg)
+                [B_bonded_E, B_bonded_position, B_bonded_atom, B_atom_wise_E]  =  self.monopole_atomicEfield(atomidxB, all_lines, atom_multipole_file, df_ptchg=df_ptchg)
 
                 bond_vec_unnorm = np.subtract(np.array(A_bonded_position), np.array(B_bonded_position))
                 bond_len = np.linalg.norm(bond_vec_unnorm)
@@ -1532,41 +1259,7 @@ Input commands that were to be sent:
         E_proj_atomwise = E_proj_atomwise_list[-1] if E_proj_atomwise_list else None
         return [E_projected, bonded_atoms, bond_indices, bond_lens, E_proj_atomwise, E_proj_atomwise_list]
 
-    
 
-    def E_proj_first_coord(self, metal_idx, xyz_file_path, atom_multipole_file, all_lines):
-        '''Function to calculate Efield projection accounting only for electrostatic effects of directly bound atoms 
-        Input: metal_idx: integer of atom index
-        xyz_file_path: string of xyz filename
-        atom_multipole_file: string of multipole filename
-        all_lines: list of strings of lines in xyz file
-        Output: list of E-field vector and atomic symbol
-        '''
-        bonded_atoms = []
-        E_projected = []
-        E_monopole_proj = []
-        bonded_positions = []
-        # Determine the Efield vector at point of central metal stom
-        [center_E, center_position, center_atom, Monopole_E_center]  =  self.calc_fullE(metal_idx, all_lines, xyz_file_path, atom_multipole_file)
-        lst_bonded_atoms = self.getBondedAtoms(xyz_file_path, metal_idx) 
-        bond_lens = []
-        for bonded_atom_idx in lst_bonded_atoms:
-            [bonded_E, bonded_position, bonded_atom, monopole_E_bonded]  =  self.calc_fullE(bonded_atom_idx, all_lines, xyz_file_path, atom_multipole_file)    
-            bond_vec_unnorm = np.subtract(np.array(center_position), np.array(bonded_position)) 
-            bond_len = np.linalg.norm(bond_vec_unnorm)
-            bond_vec = bond_vec_unnorm/(bond_len)
-
-            # Initialized a bond_dipole_vec as the (bond_vec_unnorm )*(sum of the partial charges).. can just use dipole! 
-            # Compute E-field projected along this bond!
-            E_proj = (1/2)*np.dot((np.array(bonded_E) + np.array(center_E)), bond_vec)
-            E_proj_monopole= (1/2)*np.dot((Monopole_E_center + monopole_E_bonded), bond_vec)
-            E_projected.append(E_proj)
-            E_monopole_proj.append(E_proj_monopole)
-            bonded_atoms.append(bonded_atom)
-            bonded_positions.append(bonded_position)
-            bond_lens.append(bond_len)
-        return [E_projected, bonded_atoms, lst_bonded_atoms, bond_lens, E_monopole_proj]
-            
     def esp_coord_shell(self, metal_idx, charge_file, path_to_xyz, n_shells=1):
         """Calculate ESP accounting for electrostatic contributions from n coordination shells.
 
@@ -2711,60 +2404,6 @@ Input commands that were to be sent:
         df.to_csv(partial_chg_filename +'.csv')
         return df
 
-
-    def analyze_atomwise_contributions(self, df_atomwise, top_n=10):
-        """
-        Analyze and summarize atom-wise contributions to electrostatic stabilization.
-
-        Parameters:
-        -----------
-        df_atomwise : DataFrame
-            DataFrame containing atom-wise contribution data (output from getElectrostatic_stabilization
-            with decompose_atomwise=True)
-        top_n : int, default=10
-            Number of top/bottom contributors to display
-
-        Returns:
-        --------
-        dict containing:
-            - 'summary': DataFrame with total contributions per environment atom (sorted)
-            - 'top_stabilizing': DataFrame with top stabilizing atoms (most negative contribution)
-            - 'top_destabilizing': DataFrame with top destabilizing atoms (most positive contribution)
-            - 'statistics': dict with overall statistics
-        """
-        # Get unique environment atoms and their total contributions
-        env_summary = df_atomwise.groupby(['Env_Atom_Index', 'Env_Element']).agg({
-            'Total_Energy_Contribution_kcal_mol': 'first',  # All rows for same env atom have same total
-            'Energy_Contribution_kcal_mol': 'sum'  # Verify by summing individual contributions
-        }).reset_index()
-
-        env_summary = env_summary.sort_values('Total_Energy_Contribution_kcal_mol', ascending=True)
-
-        # Top stabilizing atoms (most negative values = most stabilizing)
-        top_stabilizing = env_summary.head(top_n).copy()
-        top_stabilizing['Rank'] = range(1, len(top_stabilizing) + 1)
-
-        # Top destabilizing atoms (most positive values = most destabilizing)
-        top_destabilizing = env_summary.tail(top_n).iloc[::-1].copy()
-        top_destabilizing['Rank'] = range(1, len(top_destabilizing) + 1)
-
-        # Calculate statistics
-        statistics = {
-            'total_stabilization_energy': env_summary['Total_Energy_Contribution_kcal_mol'].sum(),
-            'mean_contribution': env_summary['Total_Energy_Contribution_kcal_mol'].mean(),
-            'std_contribution': env_summary['Total_Energy_Contribution_kcal_mol'].std(),
-            'num_stabilizing_atoms': (env_summary['Total_Energy_Contribution_kcal_mol'] < 0).sum(),
-            'num_destabilizing_atoms': (env_summary['Total_Energy_Contribution_kcal_mol'] > 0).sum(),
-            'most_stabilizing_atom': env_summary.iloc[0]['Env_Atom_Index'] if len(env_summary) > 0 else None,
-            'most_destabilizing_atom': env_summary.iloc[-1]['Env_Atom_Index'] if len(env_summary) > 0 else None,
-        }
-
-        return {
-            'summary': env_summary,
-            'top_stabilizing': top_stabilizing,
-            'top_destabilizing': top_destabilizing,
-            'statistics': statistics
-        }
 
     def _compute_atomwise_dipole_contributions(self, atomwise_Efield, df_substrate, df_env, df_all_atoms, one_mol, filename):
         """
