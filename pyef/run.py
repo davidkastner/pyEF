@@ -68,11 +68,12 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
     """
 
     # Path from each initial directory to the directory containing the .molden file
+    # NOTE: If jobs already contain complete paths, set folder_to_file_path = ''
     folder_to_file_path  = '/scr/'
 
     # Initialize Electrostatics Object
     incage_bool = False
-    # Only pass metal indices if they are provided (needed for ESP or auto-find bonds)
+    # Metal indices only needed for ESP calculations or auto-finding bonds
     if metal_indices:
         dataObject = Electrostatics(jobs, folder_to_file_path, lst_of_tmcm_idx=metal_indices,
                                     incage_bool=incage_bool, dielectric=dielectric)
@@ -120,7 +121,7 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
         else:
             print("Performing electrostatic stabilization analysis...")
             estab_filename = f'{job_name}_Estab'
-            dataObject.get_Electrostatic_stabilization(
+            dataObject.getElectrostatic_stabilization(
                 multiwfn_path, multiwfn_module, atmrad_path,
                 substrate_idxs=substrate_idxs,
                 charge_type=charge_types[0] if isinstance(charge_types, list) else charge_types,

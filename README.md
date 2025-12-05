@@ -121,18 +121,18 @@ multipole_order: 2                # 1=monopole, 2=+dipole, 3=+quadrupole
 ```python
 from pyef.analysis import Electrostatics
 
-# Initialize
-es = Electrostatics(['structure/'], [25], '/scr/', dielectric=4.0)
+# Initialize with complete folder path
+es = Electrostatics(['structure/scr'], dielectric=4.0)
 es.prepData()
 es.fix_allECPmolden()
 
-# Calculate E-field
+# Calculate E-field (no metal indices needed when using bond indices)
 df = es.getEfield('Hirshfeld_I', 'output', 'multiwfn',
                   '/path/to/multiwfn', '/path/to/atmrad',
                   input_bond_indices=[(25, 26)])
 
 # Calculate stabilization
-estab_df = es.get_Electrostatic_stabilization(
+estab_df = es.getElectrostatic_stabilization(
     '/path/to/multiwfn', 'multiwfn', '/path/to/atmrad',
     substrate_idxs=[1,2,3,4,5], multipole_order=2
 )
@@ -155,12 +155,11 @@ The most common way to use PyEF is by importing it directly in your Python scrip
 ```python
 from pyef.analysis import Electrostatics
 
-# Initialize the Electrostatics object
-folders = ['structure1/', 'structure2/']
-metal_indices = [25, 30]  # 0-indexed atom positions
-path_to_molden = '/scr/'
+# Initialize the Electrostatics object with complete folder paths
+folders = ['structure1/scr', 'structure2/scr']  # Complete paths to data
+metal_indices = [25, 30]  # 0-indexed atom positions (only needed for ESP)
 
-es = Electrostatics(folders, metal_indices, path_to_molden, dielectric=4.0)
+es = Electrostatics(folders, lst_of_tmcm_idx=metal_indices, dielectric=4.0)
 
 # Prepare data
 es.prepData()
@@ -188,7 +187,7 @@ efield_df = es.getEfield(
 )
 
 # Calculate Electrostatic Stabilization
-estab_df = es.get_Electrostatic_stabilization(
+estab_df = es.getElectrostatic_stabilization(
     multiwfn_path='/path/to/multiwfn',
     multiwfn_module='multiwfn',
     atmrad_path='/path/to/atmrad',

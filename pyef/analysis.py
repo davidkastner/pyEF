@@ -43,6 +43,7 @@ from distutils.dir_util import copy_tree
 
 from .geometry import Geometry, Visualize
 from .utility import MoldenObject
+from .multiwfn_interface import MultiwfnInterface
 from . import constants
 class Electrostatics:
     """Compute electrostatic properties from quantum chemistry calculations.
@@ -91,25 +92,33 @@ class Electrostatics:
 
     Examples
     --------
-    >>> folders = ['calc1/', 'calc2/']
-    >>> path = '/scr/'
-    >>> # For E-field or stabilization analysis (no metal indices needed)
-    >>> es = Electrostatics(folders, path, dielectric=2.0)
-    >>> # For ESP analysis (metal indices required)
-    >>> es_with_metals = Electrostatics(folders, path, lst_of_tmcm_idx=[0, 0], dielectric=2.0)
+    >>> # Recommended: Use complete folder paths
+    >>> folders = ['calc1/scr', 'calc2/scr']
+    >>> es = Electrostatics(folders, dielectric=2.0)
+    >>>
+    >>> # Legacy: Use separate folder names and subdirectory
+    >>> folders = ['calc1', 'calc2']
+    >>> es = Electrostatics(folders, '/scr/', dielectric=2.0)
+    >>>
+    >>> # For ESP calculations (metal indices required)
+    >>> es_with_metals = Electrostatics(folders, lst_of_tmcm_idx=[0, 0], dielectric=2.0)
     >>> data = es_with_metals.getESP(['Hirshfeld', 'Hirshfeld_I'], 'esp_results', ...)
     """
 
-    def __init__(self, lst_of_folders, folder_to_file_path, lst_of_tmcm_idx=None,
+    def __init__(self, lst_of_folders, folder_to_file_path='', lst_of_tmcm_idx=None,
                  **kwargs):
         """Initialize Electrostatics analysis object.
 
         Parameters
         ----------
         lst_of_folders : list of str
-            List of folder names containing calculation outputs.
-        folder_to_file_path : str
-            Relative path from folder to .molden/.xyz files.
+            List of folder paths containing calculation outputs.
+            Can be complete paths (e.g., ['job1/scr', 'job2/scr']) or just
+            folder names if using folder_to_file_path.
+        folder_to_file_path : str, optional
+            Optional subdirectory path to append to each folder (default: '').
+            Use '' or '/' if lst_of_folders contains complete paths.
+            Legacy usage: '/scr/' to append 'scr/' to each folder name.
         lst_of_tmcm_idx : list of int, optional
             List of atom indices for ESP calculation (0-indexed).
             Only required when running ESP analysis. Not needed for E-field
@@ -150,20 +159,8 @@ class Electrostatics:
         self.lst_of_tmcm_idx = lst_of_tmcm_idx if lst_of_tmcm_idx is not None else []
         self.folder_to_file_path = folder_to_file_path
 
-        # Multiwfn command codes for charge calculation methods
-        self.dict_of_calcs = {
-            'Hirshfeld': '1', 'Voronoi': '2', 'Mulliken': '5',
-            'Lowdin': '6', 'SCPA': '7', 'Becke': '10', 'ADCH': '11',
-            'CHELPG': '12', 'MK': '13', 'AIM': '14', 'Hirshfeld_I': '15',
-            'CM5': '16', 'EEM': '17', 'RESP': '18', 'PEOE': '19'
-        }
-
-        # Multiwfn command codes for multipole moment calculations
-        self.dict_of_multipole = {
-            'Hirshfeld': ['3', '2'],
-            'Hirshfeld_I': ['4', '1', '2'],
-            'Becke': ['1', '2']
-        }
+        # Initialize Multiwfn interface with current config
+        self.multiwfn = MultiwfnInterface(config=self.config)
 
         # Periodic table: element symbol -> atomic number
         # Source: molsimplify, http://www.webelements.com/
@@ -404,12 +401,12 @@ Input commands that were to be sent:
         Switches Hirshfeld-I calculation to slower but lower-memory algorithm.
         Useful for large systems that would otherwise exceed memory limits.
         """
-        self.dict_of_multipole = {
+        self.multiwfn.dict_of_multipole = {
             'Hirshfeld': ['3', '2'],
             'Hirshfeld_I': ['4', '-2', '1', '2'],
             'Becke': ['1', '2']
         }
-        self.dict_of_calcs = {
+        self.multiwfn.dict_of_calcs = {
             'Hirshfeld': '1', 'Voronoi': '2', 'Mulliken': '5', 'Lowdin': '6',
             'SCPA': '7', 'Becke': '10', 'ADCH': '11', 'CHELPG': '12',
             'MK': '13', 'AIM': '14', 'Hirshfeld_I': ['15', '-2'],
@@ -440,6 +437,7 @@ Input commands that were to be sent:
             Name of the molden file to read.
         """
         self.config['molden_filename'] = new_name
+        self.multiwfn.config['molden_filename'] = new_name
 
     def set_xyzfilename(self, new_name):
         """Set the expected XYZ coordinate filename.
@@ -450,6 +448,7 @@ Input commands that were to be sent:
             Name of the XYZ file to read.
         """
         self.config['xyzfilename'] = new_name
+        self.multiwfn.config['xyzfilename'] = new_name
 
     def rePrep(self):
         """Re-run data preparation (file extraction and validation).
@@ -992,7 +991,7 @@ Input commands that were to be sent:
             # Note: This may fail if ptChgfp is not a full path
             df_ptchg = self.getPtChgs(self.config['ptChgfp'])
         #load multipole moments from processed outputs 
-        lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
+        lst_multipole_dict = MultiwfnInterface.getmultipoles(atom_multipole_file)
 
         #make a list for each term in multipole expansion
         lst_multipole_idxs = list(range(0, len(lst_multipole_dict)))
@@ -1101,7 +1100,7 @@ Input commands that were to be sent:
             df_ptchg = self.getPtChgs(self.config['ptChgfp'])
 
         #load multipole moments from processed outputs
-        lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
+        lst_multipole_dict = MultiwfnInterface.getmultipoles(atom_multipole_file)
 
         #make a list for each term in multipole expansion
         # Create mapping: atom_index (0-indexed) -> multipole_dict
@@ -1336,7 +1335,7 @@ Input commands that were to be sent:
         one_mol = 6.02*(10**23)
         #cal_J = 4.184
         dielectric = self.config['dielectric']
-        lst_multipole_dict = Electrostatics.getmultipoles(atom_multipole_file)
+        lst_multipole_dict = MultiwfnInterface.getmultipoles(atom_multipole_file)
         #create list of bound atoms, these are treated with a different dielectric
         bound_atoms = Geometry(xyzfilepath).getBondedAtoms(idx_atom)
         total_esp= 0
@@ -1428,7 +1427,7 @@ Input commands that were to be sent:
 
         # Get charge information
         if bool_multipole:
-            multipole_data = Electrostatics.getmultipoles(atom_multipole_file)
+            multipole_data = MultiwfnInterface.getmultipoles(atom_multipole_file)
             # Use enumerate for proper 0-indexed mapping, regardless of Index field value
             charge_dict = {idx: atom['Atom_Charge'] for idx, atom in enumerate(multipole_data)}
         else:
@@ -1639,7 +1638,7 @@ Input commands that were to be sent:
     def charge_atoms(self, chg_filename, xyzfilename):
         '''Input: filename: string of charge filename or multipole filename... if the xyzfilename is included must be multipole! '''
         if len(xyzfilename) > 1:
-            dict_multipole = Electrostatics.getmultipoles(chg_filename)  #Index, Element, Atom_Charge, Dipole_Moment....
+            dict_multipole = MultiwfnInterface.getmultipoles(chg_filename)  #Index, Element, Atom_Charge, Dipole_Moment....
             df_multipole = pd.DataFrame(dict_multipole)
             df_geom = Geometry(xyzfilename).getGeomInfo()
             merged_df = pd.merge(df_geom, df_multipole, left_index=True, right_index=True)
@@ -1878,7 +1877,7 @@ Input commands that were to be sent:
                 print(f'Partial Charge Scheme: {charge_type}')
                 try:
                     # Use centralized partitionCharge() to get/compute charges
-                    comp_cost = self.partitionCharge(
+                    comp_cost = self.multiwfn.partitionCharge(
                         multipole_bool=use_multipole,
                         f=f,
                         folder_to_molden=folder_to_molden,
@@ -2036,7 +2035,6 @@ Input commands that were to be sent:
             try:
                 results_dict = {}
                 file_path_xyz = f"{owd}/{f + folder_to_molden}{final_structure_file}"
-                atom_idx = metal_idxs[counter]
                 total_lines = Electrostatics.mapcount(file_path_xyz)
                 init_all_lines = range(0, total_lines - 2)
 
@@ -2059,6 +2057,7 @@ Input commands that were to be sent:
                             "Please provide lst_of_tmcm_idx when initializing the Electrostatics object, "
                             "or specify bond indices explicitly via input_bond_indices parameter."
                         )
+                    atom_idx = metal_idxs[counter]
                     bonded_atoms_list = self.getBondedAtoms(file_path_xyz, atom_idx)
                     bond_indices_to_use = [(atom_idx, bonded_idx) for bonded_idx in bonded_atoms_list]
                     print(f"Auto-found {len(bond_indices_to_use)} bonds for atom {atom_idx}: {bond_indices_to_use}")
@@ -2073,7 +2072,7 @@ Input commands that were to be sent:
                     continue
 
                 # Partition charges
-                comp_cost = self.partitionCharge(
+                comp_cost = self.multiwfn.partitionCharge(
                     multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd
                 )
 
@@ -2133,7 +2132,7 @@ Input commands that were to be sent:
                             # Expand E_atomwise to include all atoms (zeros for excluded)
                             E_atomwise_full = np.zeros(total_atoms)
                             E_atomwise_full[all_lines] = E_atomwise_qm
-                            pdbName = f'Efield_bond{bond_idx}_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/")}{charge_type}_.pdb'
+                            pdbName = f'Efield_bond{bond_idx}_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
                             Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise_full, pdbName)
                     elif len(E_proj_atomwise_list) == 1:
                         # Single bond: create one PDB with bond info in name
@@ -2141,20 +2140,20 @@ Input commands that were to be sent:
                         E_atomwise_full = np.zeros(total_atoms)
                         E_atomwise_full[all_lines] = E_atomwise_qm
                         bond_pair = bonded_idx[0]
-                        pdbName = f'Efield_bond0_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/")}{charge_type}_.pdb'
+                        pdbName = f'Efield_bond0_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
                         Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise_full, pdbName)
                     else:
                         # Fallback: use the combined E_proj_atomwise
                         E_proj_atomwise_qm = E_proj_atomwise[:n_qm_atoms]
                         E_proj_atomwise_full = np.zeros(total_atoms)
                         E_proj_atomwise_full[all_lines] = E_proj_atomwise_qm
-                        pdbName = f'Efield_cont{f.rstrip("/")}{charge_type}_.pdb'
+                        pdbName = f'Efield_cont_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
                         Visualize(file_path_xyz).makePDB(path_to_pol, E_proj_atomwise_full, pdbName)
 
                 # Visualization: partial charges
                 if viz_charges:
                     charge_b_col = df['charge']
-                    pdbName = f'Charges_{f.rstrip("/")}{charge_type}_.pdb'
+                    pdbName = f'Charges_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
                     Visualize(file_path_xyz).makePDB(path_to_pol, charge_b_col, pdbName)
 
                 # Store results
@@ -2271,7 +2270,7 @@ Input commands that were to be sent:
                         path_to_init_file = str(ini_path)
                         command = f"{multiwfn_path} {molden_filename} -set {path_to_init_file}"
 
-                    multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
+                    multiwfn_commands = ['15', '-1'] + self.multiwfn.dict_of_multipole[charge_type] + ['0', 'q']
                     num_atoms = Electrostatics.mapcount(final_structure_file) - 2
                     if charge_type == 'Hirshfeld_I':
                         #get the number of basis functions
@@ -2286,7 +2285,7 @@ Input commands that were to be sent:
                             print(f'I-Hirshfeld command should be low memory and slow to accomodate large system')
 
                     # Use centralized Multiwfn runner
-                    self._run_multiwfn(
+                    self.multiwfn.run_multiwfn(
                         command=command,
                         input_commands=multiwfn_commands,
                         output_file=file_path_multipole,
@@ -2296,7 +2295,7 @@ Input commands that were to be sent:
                 else:
                     command = f"{multiwfn_path} {molden_filename}"
                     chg_prefix,  _ = os.path.splitext(molden_filename)
-                    calc_command = self.dict_of_calcs[charge_type]
+                    calc_command = self.multiwfn.dict_of_calcs[charge_type]
                     commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                     if charge_type == 'CHELPG':
                         commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
@@ -2310,7 +2309,7 @@ Input commands that were to be sent:
                         #if too many atoms will need to change calc to run with reasonable memory
 
                     # Use centralized Multiwfn runner
-                    self._run_multiwfn(
+                    self.multiwfn.run_multiwfn(
                         command=command,
                         input_commands=commands,
                         description=f"Monopole {charge_type} calculation for {f}"
@@ -2356,7 +2355,7 @@ Input commands that were to be sent:
 
         for f in list_of_folders:
             try:
-                comp_cost = self.partitionCharge(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
+                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
                 #If the calculation is not successful, continue
                 if comp_cost == -1:
                     print(f"Warning: Charge calculation failed for {f}, skipping")
@@ -2487,7 +2486,7 @@ Input commands that were to be sent:
 
                         # Re-run multiwfn computation of partial charge
                         proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                        calc_command = self.dict_of_calcs[key]
+                        calc_command = self.multiwfn.dict_of_calcs[key]
                         commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                         if key == 'CHELPG':
                             commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
@@ -2639,7 +2638,7 @@ Input commands that were to be sent:
                     copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                     print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                     proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                    polarization_commands = ['15', '-1'] + self.dict_of_multipole[polarization_scheme] + ['0', 'q']
+                    polarization_commands = ['15', '-1'] + self.multiwfn.dict_of_multipole[polarization_scheme] + ['0', 'q']
                     proc.communicate("\n".join(polarization_commands).encode())
               
 
@@ -2648,7 +2647,7 @@ Input commands that were to be sent:
                 results_dict['Name'] = f
 
 
-                lst_multipole_dict = Electrostatics.getmultipoles(path_to_pol)
+                lst_multipole_dict = MultiwfnInterface.getmultipoles(path_to_pol)
                 for res_name in res_dict.keys():
                    all_res_idxs = res_dict[res_name]
                    res_idxs = all_res_idxs[file_idx]
@@ -2688,7 +2687,7 @@ Input commands that were to be sent:
 
                             # Re-run multiwfn computation of partial charge
                             proc = subprocess.Popen(command_A, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-                            calc_command = self.dict_of_calcs[key]
+                            calc_command = self.multiwfn.dict_of_calcs[key]
                             commands = ['7', calc_command, '1', 'y', '0', 'q'] # for atomic charge type corresponding to dict key
                             if key == 'CHELPG':
                                 commands = ['7', calc_command, '1','\n', 'y', '0', 'q']
@@ -2720,7 +2719,7 @@ Input commands that were to be sent:
         Parameters:
         -----------
         df_atomwise : DataFrame
-            DataFrame containing atom-wise contribution data (output from get_Electrostatic_stabilization
+            DataFrame containing atom-wise contribution data (output from getElectrostatic_stabilization
             with decompose_atomwise=True)
         top_n : int, default=10
             Number of top/bottom contributors to display
@@ -3149,7 +3148,7 @@ Input commands that were to be sent:
 
         return np.array(M)
 
-    def get_Electrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path,
+    def getElectrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path,
                                               substrate_idxs, charge_type='Hirshfeld_I',
                                               name_dataStorage='estaticFile_tensor', env_idxs=None,
                                               decompose_atomwise=False, visualize=None,
@@ -3217,7 +3216,7 @@ Input commands that were to be sent:
         Notes:
         ------
         **Comparison with other methods:**
-        - `get_Electrostatic_stabilization()`: Computes q·V (substrate charge in environment potential)
+        - `getElectrostatic_stabilization()`: Computes q·V (substrate charge in environment potential)
         - `get_Electrostatic_stabilization_dipole()`: Computes -μ·E (substrate dipole in environment field)
         - This function: Computes DIRECT pairwise multipole-multipole interactions
 
@@ -3300,7 +3299,7 @@ Input commands that were to be sent:
                 env_idx = env_idxs[counter]
 
             # Partition charges (with multipole analysis if needed)
-            comp_cost = self.partitionCharge(need_multipoles, f, folder_to_molden,
+            comp_cost = self.multiwfn.partitionCharge(need_multipoles, f, folder_to_molden,
                                             multiwfn_path, atmrad_path, charge_type, owd)
 
             if comp_cost == -1:
@@ -3329,7 +3328,7 @@ Input commands that were to be sent:
 
             if multipole_available and need_multipoles:
                 # Load multipole data
-                atomicDict = Electrostatics.getmultipoles(multipole_name)
+                atomicDict = MultiwfnInterface.getmultipoles(multipole_name)
                 df_all = pd.DataFrame(atomicDict)
                 df_all['Index'] = df_all['Index'].astype(int) - 1
                 multipole_dict = {int(row['Index']): row for _, row in df_all.iterrows()}

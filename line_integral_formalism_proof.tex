@@ -1,0 +1,404 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{physics}
+\usepackage{geometry}
+\usepackage{xcolor}
+\geometry{margin=1in}
+
+\title{Line Integral Formalism: E-field$\cdot$Dipole vs. Potential$\cdot$Charges}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Question}
+
+For charges distributed along bonds with dipole moments $\vec{\mu}_{\text{bond}}$, does:
+\begin{equation}
+-\int_{\text{bond}} \vec{E}(\vec{r}) \cdot d\vec{l} \times \text{(charge distribution)} \stackrel{?}{=} \int_{\text{bond}} \lambda(s) V(\vec{r}(s)) \, ds
+\end{equation}
+
+And for discrete bond dipoles, is the energy just:
+\begin{equation}
+E = -\sum_i \vec{\mu}_i \cdot \vec{E}_i \quad ?
+\end{equation}
+
+\section{Review: Fundamental Relationships}
+
+\subsection{Electric Field and Potential}
+
+The fundamental relationship is:
+\begin{equation}
+\vec{E}(\vec{r}) = -\nabla V(\vec{r})
+\end{equation}
+
+In line integral form:
+\begin{equation}
+V(\vec{r}_B) - V(\vec{r}_A) = -\int_A^B \vec{E}(\vec{r}) \cdot d\vec{l}
+\end{equation}
+
+Or equivalently:
+\begin{equation}
+\boxed{V(\vec{r}) = V_0 - \int_{\vec{r}_0}^{\vec{r}} \vec{E}(\vec{r}') \cdot d\vec{l}'}
+\end{equation}
+
+\subsection{Energy of Charges in External Potential}
+
+The exact energy is:
+\begin{equation}
+E_{\text{exact}} = \int \rho(\vec{r}) V(\vec{r}) \, d^3r
+\end{equation}
+
+For 1D distribution along a bond:
+\begin{equation}
+E_{\text{bond,exact}} = \int_0^L \lambda(s) V(\vec{r}(s)) \, ds
+\end{equation}
+
+\section{Line Integral Formulation for Bond Energy}
+
+\subsection{Setup: Bond from A to B}
+
+Consider a bond from $\vec{r}_A$ to $\vec{r}_B$ with:
+\begin{itemize}
+    \item Position along bond: $\vec{r}(s) = \vec{r}_A + s\hat{n}$, where $s \in [0, L]$
+    \item Unit vector: $\hat{n} = \frac{\vec{r}_B - \vec{r}_A}{L}$
+    \item Linear charge density: $\lambda(s)$
+    \item Total charge: $Q_{\text{bond}} = \int_0^L \lambda(s) \, ds$
+    \item Dipole moment: $\vec{\mu}_{\text{bond}} = \int_0^L \vec{r}(s) \lambda(s) \, ds$
+\end{itemize}
+
+\subsection{Exact Energy Using Potential}
+
+\begin{equation}
+E_{\text{exact}} = \int_0^L \lambda(s) V(\vec{r}(s)) \, ds
+\end{equation}
+
+\subsection{Line Integral Formulation}
+
+Using $V(\vec{r}(s)) = V_0 - \int_{\vec{r}_0}^{\vec{r}(s)} \vec{E}(\vec{r}') \cdot d\vec{l}'$:
+
+\begin{align}
+E &= \int_0^L \lambda(s) \left[V_0 - \int_{\vec{r}_0}^{\vec{r}(s)} \vec{E}(\vec{r}') \cdot d\vec{l}'\right] ds \\
+&= V_0 \int_0^L \lambda(s) \, ds - \int_0^L \lambda(s) \left[\int_{\vec{r}_0}^{\vec{r}(s)} \vec{E}(\vec{r}') \cdot d\vec{l}'\right] ds \\
+&= V_0 Q_{\text{bond}} - \int_0^L \lambda(s) \left[\int_{\vec{r}_0}^{\vec{r}(s)} \vec{E}(\vec{r}') \cdot d\vec{l}'\right] ds
+\end{align}
+
+For neutral bonds ($Q_{\text{bond}} = 0$):
+\begin{equation}
+\boxed{E = -\int_0^L \lambda(s) \left[\int_{\vec{r}_0}^{\vec{r}(s)} \vec{E}(\vec{r}') \cdot d\vec{l}'\right] ds}
+\end{equation}
+
+This is a \textbf{nested integral}: we integrate the field along a path to each point $\vec{r}(s)$, weighted by the charge density at that point.
+
+\section{Uniform Field: Simple Case}
+
+\subsection{Setup}
+\begin{itemize}
+    \item Uniform field: $\vec{E}(\vec{r}) = \vec{F}$ (constant)
+    \item Potential: $V(\vec{r}) = V_0 - \vec{F} \cdot \vec{r}$
+\end{itemize}
+
+\subsection{Exact Energy}
+
+\begin{align}
+E_{\text{exact}} &= \int_0^L \lambda(s) V(\vec{r}(s)) \, ds \\
+&= \int_0^L \lambda(s) (V_0 - \vec{F} \cdot \vec{r}(s)) \, ds \\
+&= V_0 Q_{\text{bond}} - \vec{F} \cdot \int_0^L \vec{r}(s) \lambda(s) \, ds \\
+&= V_0 Q_{\text{bond}} - \vec{F} \cdot \vec{\mu}_{\text{bond}}
+\end{align}
+
+For neutral bond:
+\begin{equation}
+E_{\text{exact}} = -\vec{F} \cdot \vec{\mu}_{\text{bond}}
+\end{equation}
+
+\subsection{Line Integral Formulation}
+
+For uniform $\vec{E} = \vec{F}$:
+\begin{align}
+\int_{\vec{r}_0}^{\vec{r}(s)} \vec{F} \cdot d\vec{l}' &= \vec{F} \cdot \int_{\vec{r}_0}^{\vec{r}(s)} d\vec{l}' \\
+&= \vec{F} \cdot [\vec{r}(s) - \vec{r}_0]
+\end{align}
+
+Therefore:
+\begin{align}
+E &= V_0 Q_{\text{bond}} - \int_0^L \lambda(s) \vec{F} \cdot [\vec{r}(s) - \vec{r}_0] \, ds \\
+&= V_0 Q_{\text{bond}} - \vec{F} \cdot \int_0^L \vec{r}(s) \lambda(s) \, ds + \vec{F} \cdot \vec{r}_0 \int_0^L \lambda(s) \, ds \\
+&= V_0 Q_{\text{bond}} - \vec{F} \cdot \vec{\mu}_{\text{bond}} + \vec{F} \cdot \vec{r}_0 Q_{\text{bond}}
+\end{align}
+
+For neutral bond ($Q_{\text{bond}} = 0$):
+\begin{equation}
+\boxed{E = -\vec{F} \cdot \vec{\mu}_{\text{bond}}}
+\end{equation}
+
+\textbf{Perfect match!} For uniform fields, the line integral formulation gives the exact answer.
+
+\section{Discrete Dipole Approximation}
+
+\subsection{Simple Dipole Formula}
+
+The standard approximation is:
+\begin{equation}
+E_{\text{dipole}} = -\vec{\mu}_{\text{bond}} \cdot \vec{E}_{\text{center}}
+\end{equation}
+
+where $\vec{E}_{\text{center}}$ is evaluated at some representative point (e.g., bond center).
+
+\subsection{Is This Correct?}
+
+\subsubsection{For Uniform Fields}
+
+If $\vec{E}(\vec{r}) = \vec{F}$ everywhere:
+\begin{equation}
+E_{\text{dipole}} = -\vec{\mu}_{\text{bond}} \cdot \vec{F} = -\vec{F} \cdot \vec{\mu}_{\text{bond}}
+\end{equation}
+
+This \textbf{exactly} matches the exact result! ✓
+
+\subsubsection{For Non-Uniform Fields}
+
+The exact energy is:
+\begin{equation}
+E_{\text{exact}} = \int_0^L \lambda(s) V(\vec{r}(s)) \, ds
+\end{equation}
+
+The dipole approximation:
+\begin{equation}
+E_{\text{dipole}} = -\vec{\mu}_{\text{bond}} \cdot \vec{E}(\vec{r}_{\text{center}})
+\end{equation}
+
+These are \textbf{NOT equal} in general. The dipole approximation misses:
+\begin{itemize}
+    \item Higher-order multipole contributions (quadrupole, octupole, etc.)
+    \item Spatial variation of the field across the charge distribution
+\end{itemize}
+
+\section{Point Charge Example: Non-Uniform Field}
+
+\subsection{Setup}
+
+External point charge $Q_{\text{ext}}$ at origin:
+\begin{itemize}
+    \item Field: $\vec{E}(\vec{r}) = k_e Q_{\text{ext}} \frac{\vec{r}}{r^3}$
+    \item Potential: $V(\vec{r}) = k_e \frac{Q_{\text{ext}}}{r}$
+\end{itemize}
+
+Bond from $\vec{r}_A$ to $\vec{r}_B$ with simple charge distribution: $+q$ at B, $-q$ at A.
+
+Dipole moment: $\vec{\mu}_{\text{bond}} = q(\vec{r}_B - \vec{r}_A)$
+
+\subsection{Exact Energy}
+
+\begin{align}
+E_{\text{exact}} &= (-q) V(\vec{r}_A) + (+q) V(\vec{r}_B) \\
+&= -q \cdot k_e \frac{Q_{\text{ext}}}{r_A} + q \cdot k_e \frac{Q_{\text{ext}}}{r_B} \\
+&= k_e q Q_{\text{ext}} \left(\frac{1}{r_B} - \frac{1}{r_A}\right)
+\end{align}
+
+\subsection{Dipole Approximation}
+
+At bond center $\vec{r}_c = \frac{\vec{r}_A + \vec{r}_B}{2}$:
+\begin{equation}
+\vec{E}(\vec{r}_c) = k_e Q_{\text{ext}} \frac{\vec{r}_c}{r_c^3}
+\end{equation}
+
+\begin{equation}
+E_{\text{dipole}} = -\vec{\mu}_{\text{bond}} \cdot \vec{E}(\vec{r}_c) = -q(\vec{r}_B - \vec{r}_A) \cdot k_e Q_{\text{ext}} \frac{\vec{r}_c}{r_c^3}
+\end{equation}
+
+\subsection{Comparison}
+
+In general:
+\begin{equation}
+k_e q Q_{\text{ext}} \left(\frac{1}{r_B} - \frac{1}{r_A}\right) \neq -q(\vec{r}_B - \vec{r}_A) \cdot k_e Q_{\text{ext}} \frac{\vec{r}_c}{r_c^3}
+\end{equation}
+
+The dipole approximation is only accurate when the bond is:
+\begin{itemize}
+    \item Small compared to distance from field source
+    \item In a slowly-varying field region
+\end{itemize}
+
+\section{Discrete Sum of Bond Dipoles}
+
+\subsection{The Question}
+
+For a molecule with multiple bonds, each with dipole $\vec{\mu}_i$, is the total energy:
+\begin{equation}
+E_{\text{total}} = -\sum_i \vec{\mu}_i \cdot \vec{E}_i \quad ?
+\end{equation}
+
+\subsection{Answer}
+
+\textbf{It depends on the field!}
+
+\subsubsection{Uniform Field: YES}
+
+If $\vec{E}(\vec{r}) = \vec{F}$ everywhere:
+\begin{align}
+E_{\text{exact}} &= -\vec{F} \cdot \sum_i \vec{\mu}_i \\
+&= -\sum_i \vec{F} \cdot \vec{\mu}_i \\
+&= -\sum_i \vec{\mu}_i \cdot \vec{E}_i
+\end{align}
+
+Since $\vec{E}_i = \vec{F}$ for all $i$, this is \textbf{exact}! ✓
+
+\subsubsection{Non-Uniform Field: APPROXIMATION}
+
+For non-uniform fields, this is an approximation that:
+\begin{itemize}
+    \item Assumes each bond's energy $\approx -\vec{\mu}_i \cdot \vec{E}_i$ (dipole approximation)
+    \item Neglects higher-order multipole terms
+    \item Becomes more accurate when:
+    \begin{itemize}
+        \item Bonds are small compared to field variation length scale
+        \item Field gradient is weak across each bond
+    \end{itemize}
+\end{itemize}
+
+\subsection{Discrete Sum Formula}
+
+For discrete bond dipoles in a field $\vec{E}(\vec{r})$:
+
+\begin{equation}
+\boxed{E_{\text{dipole}} = -\sum_{i=1}^{N_{\text{bonds}}} \vec{\mu}_i \cdot \vec{E}(\vec{r}_i)}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $\vec{\mu}_i$ = dipole moment of bond $i$
+    \item $\vec{r}_i$ = position where field is evaluated (typically bond center or midpoint)
+    \item $\vec{E}(\vec{r}_i)$ = electric field at that position
+\end{itemize}
+
+\textbf{Yes, it's just a sum of dot products!} But remember:
+\begin{itemize}
+    \item This is \textbf{exact} for uniform fields
+    \item This is an \textbf{approximation} for non-uniform fields
+\end{itemize}
+
+\section{Line Integral Along Bond Path}
+
+\subsection{Alternative Formulation}
+
+Instead of evaluating $\vec{E}$ at a single point, we could integrate along the bond:
+
+\begin{equation}
+E_{\text{bond}} = -\int_{\vec{r}_A}^{\vec{r}_B} \vec{E}(\vec{r}) \cdot d\vec{l}
+\end{equation}
+
+But wait—this is just $V(\vec{r}_B) - V(\vec{r}_A)$!
+
+For a simple dipole with charges $\pm q$ at the ends:
+\begin{align}
+E_{\text{exact}} &= (-q) V(\vec{r}_A) + (+q) V(\vec{r}_B) \\
+&= q[V(\vec{r}_B) - V(\vec{r}_A)] \\
+&= -q \int_{\vec{r}_A}^{\vec{r}_B} \vec{E}(\vec{r}) \cdot d\vec{l}
+\end{align}
+
+\subsection{Comparison with Dipole Approximation}
+
+\textbf{Line integral (exact):}
+\begin{equation}
+E = -q \int_{\vec{r}_A}^{\vec{r}_B} \vec{E}(\vec{r}) \cdot d\vec{l}
+\end{equation}
+
+\textbf{Dipole approximation:}
+\begin{equation}
+E_{\text{dipole}} = -q \vec{E}(\vec{r}_c) \cdot (\vec{r}_B - \vec{r}_A)
+\end{equation}
+
+The dipole approximation assumes $\vec{E}$ is constant (equals $\vec{E}(\vec{r}_c)$) along the entire path!
+
+\subsection{When Are They Equal?}
+
+Using mean value theorem for line integrals:
+\begin{equation}
+\int_{\vec{r}_A}^{\vec{r}_B} \vec{E}(\vec{r}) \cdot d\vec{l} = \vec{E}(\vec{r}_*) \cdot (\vec{r}_B - \vec{r}_A)
+\end{equation}
+
+for some point $\vec{r}_*$ on the bond.
+
+If we choose $\vec{r}_c = \vec{r}_*$, they match! But in general, we don't know where $\vec{r}_*$ is without knowing $\vec{E}(\vec{r})$.
+
+For uniform fields: $\vec{r}_*$ can be anywhere (field is constant), so choosing the center works perfectly.
+
+For slowly-varying fields: $\vec{r}_* \approx \vec{r}_c$ (center), so the approximation is good.
+
+\section{Summary and Conclusions}
+
+\begin{enumerate}
+    \item \textbf{Line integral relationship}: The exact energy can be written as:
+    \begin{equation}
+    E = -\int_0^L \lambda(s) \left[\int_{\vec{r}_0}^{\vec{r}(s)} \vec{E}(\vec{r}') \cdot d\vec{l}'\right] ds
+    \end{equation}
+    This is a nested integral—NOT a simple line integral along the bond.
+
+    \item \textbf{For uniform fields}: Everything simplifies beautifully:
+    \begin{equation}
+    \boxed{E = -\vec{F} \cdot \vec{\mu}_{\text{total}} = -\sum_i \vec{\mu}_i \cdot \vec{F}}
+    \end{equation}
+    The discrete dipole sum is \textbf{exact}! ✓
+
+    \item \textbf{Discrete dipole formula}: Yes, it's just a sum of dot products:
+    \begin{equation}
+    \boxed{E = -\sum_i \vec{\mu}_i \cdot \vec{E}(\vec{r}_i)}
+    \end{equation}
+    where $\vec{r}_i$ is typically the bond center.
+
+    \item \textbf{For non-uniform fields}: This is an \textbf{approximation} that:
+    \begin{itemize}
+        \item Works well when bonds are small compared to field variation
+        \item Misses higher-order multipole contributions
+        \item Can be improved by evaluating $\vec{E}$ more carefully
+    \end{itemize}
+
+    \item \textbf{Line integral for two-charge dipole}:
+    \begin{equation}
+    E_{\text{exact}} = -q \int_{\vec{r}_A}^{\vec{r}_B} \vec{E}(\vec{r}) \cdot d\vec{l}
+    \end{equation}
+    The dipole approximation replaces this integral with $\vec{E}(\vec{r}_c) \cdot L\hat{n}$.
+
+    \item \textbf{Recommendation}:
+    \begin{itemize}
+        \item For \textbf{uniform fields}: Use $E = -\sum_i \vec{\mu}_i \cdot \vec{F}$ (exact)
+        \item For \textbf{non-uniform fields}: Use $E = \int \rho V \, dV$ or $E = \sum_i q_i V(\vec{r}_i)$ (exact)
+        \item The dipole sum $-\sum_i \vec{\mu}_i \cdot \vec{E}_i$ is a useful approximation but not exact
+    \end{itemize}
+\end{enumerate}
+
+\section{Answer to Your Questions}
+
+\subsection{Does line integral of E-field$\cdot$dipole equal potential$\cdot$charges?}
+
+\textbf{Answer}:
+\begin{itemize}
+    \item \textcolor{green}{\textbf{YES}} for uniform electric fields (exact)
+    \item \textcolor{orange}{\textbf{APPROXIMATELY}} for slowly-varying non-uniform fields
+    \item \textcolor{red}{\textbf{NO}} in general for strongly non-uniform fields
+\end{itemize}
+
+The exact formulation using $\int \rho V \, dV$ is always correct and should be used as ground truth.
+
+\subsection{Is discrete version just sum of dot products?}
+
+\textbf{Answer}: \textcolor{green}{\textbf{YES!}}
+
+\begin{equation}
+\boxed{E_{\text{discrete}} = -\sum_{i=1}^{N_{\text{bonds}}} \vec{\mu}_i \cdot \vec{E}(\vec{r}_i)}
+\end{equation}
+
+This is:
+\begin{itemize}
+    \item \textbf{Exact} for uniform fields
+    \item A good \textbf{approximation} for non-uniform fields when bonds are small
+    \item Simple to compute: just dot products!
+\end{itemize}
+
+Each term $-\vec{\mu}_i \cdot \vec{E}(\vec{r}_i)$ represents the interaction energy of dipole $i$ with the external field evaluated at position $\vec{r}_i$ (typically the bond center or midpoint).
+
+\end{document}

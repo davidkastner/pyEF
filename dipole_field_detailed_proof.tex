@@ -1,0 +1,444 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{physics}
+\usepackage{geometry}
+\usepackage{xcolor}
+\geometry{margin=1in}
+
+\title{Detailed Proof: When Does Dipole-Field Equal Charge-Potential?}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Explicit Proof: Uniform Field Equivalence}
+
+\subsection{Setup}
+
+Consider a molecule with $N$ atoms:
+\begin{itemize}
+    \item Charges: $\{q_1, q_2, \ldots, q_N\}$
+    \item Positions: $\{\vec{r}_1, \vec{r}_2, \ldots, \vec{r}_N\}$
+    \item Total charge: $Q_{\text{total}} = \sum_{i=1}^N q_i$
+    \item Uniform electric field: $\vec{F}$ (constant everywhere)
+    \item Potential in uniform field: $V(\vec{r}) = V_0 - \vec{F} \cdot \vec{r}$
+\end{itemize}
+
+\subsection{Atom-Wise Sum (Ground Truth)}
+
+The exact electrostatic energy is:
+\begin{align}
+E_{\text{exact}} &= \sum_{i=1}^N q_i V(\vec{r}_i) \\
+&= \sum_{i=1}^N q_i (V_0 - \vec{F} \cdot \vec{r}_i) \\
+&= V_0 \sum_{i=1}^N q_i - \sum_{i=1}^N q_i (\vec{F} \cdot \vec{r}_i) \\
+&= V_0 \sum_{i=1}^N q_i - \vec{F} \cdot \sum_{i=1}^N q_i \vec{r}_i
+\end{align}
+
+\subsection{Molecular Dipole Formulation}
+
+Define the total molecular dipole moment (relative to origin):
+\begin{equation}
+\vec{\mu}_{\text{total}} = \sum_{i=1}^N q_i \vec{r}_i
+\end{equation}
+
+The dipole-field energy is:
+\begin{equation}
+E_{\text{dipole}} = -\vec{F} \cdot \vec{\mu}_{\text{total}} = -\vec{F} \cdot \sum_{i=1}^N q_i \vec{r}_i
+\end{equation}
+
+\subsection{Comparison}
+
+From above:
+\begin{align}
+E_{\text{exact}} &= V_0 Q_{\text{total}} - \vec{F} \cdot \sum_{i=1}^N q_i \vec{r}_i \\
+E_{\text{dipole}} &= -\vec{F} \cdot \sum_{i=1}^N q_i \vec{r}_i
+\end{align}
+
+\textbf{Difference:}
+\begin{equation}
+E_{\text{exact}} - E_{\text{dipole}} = V_0 Q_{\text{total}}
+\end{equation}
+
+\textbf{For a neutral molecule} ($Q_{\text{total}} = 0$):
+\begin{equation}
+\boxed{E_{\text{exact}} = E_{\text{dipole}}}
+\end{equation}
+
+\textbf{Conclusion:} In a uniform field, for a neutral molecule, the atom-wise sum $\sum_i q_i V(\vec{r}_i)$ \textbf{exactly equals} the molecular dipole-field interaction $-\vec{\mu}_{\text{total}} \cdot \vec{F}$.
+
+\subsection{Explicit Numerical Example}
+
+Consider three atoms in a line:
+\begin{itemize}
+    \item Atom 0: $q_0 = +0.5e$, $\vec{r}_0 = (0, 0, 0)$
+    \item Atom 1: $q_1 = -1.0e$, $\vec{r}_1 = (1, 0, 0)$ Å
+    \item Atom 2: $q_2 = +0.5e$, $\vec{r}_2 = (2, 0, 0)$ Å
+    \item Total charge: $Q_{\text{total}} = 0$ (neutral)
+\end{itemize}
+
+Uniform field: $\vec{F} = (0, 1, 0)$ V/Å (pointing in +y direction)
+
+Potential: $V(\vec{r}) = 10 - \vec{F} \cdot \vec{r} = 10 - y$ V
+
+\textbf{Atom-wise calculation:}
+\begin{align}
+V(\vec{r}_0) &= 10 - 0 = 10 \text{ V} \\
+V(\vec{r}_1) &= 10 - 0 = 10 \text{ V} \\
+V(\vec{r}_2) &= 10 - 0 = 10 \text{ V}
+\end{align}
+
+\begin{equation}
+E_{\text{exact}} = 0.5(10) - 1.0(10) + 0.5(10) = 5 - 10 + 5 = 0 \text{ eV}
+\end{equation}
+
+\textbf{Dipole-field calculation:}
+\begin{align}
+\vec{\mu}_{\text{total}} &= q_0 \vec{r}_0 + q_1 \vec{r}_1 + q_2 \vec{r}_2 \\
+&= 0.5(0, 0, 0) + (-1.0)(1, 0, 0) + 0.5(2, 0, 0) \\
+&= (0, 0, 0) + (-1, 0, 0) + (1, 0, 0) \\
+&= (0, 0, 0) \text{ e·Å}
+\end{align}
+
+\begin{equation}
+E_{\text{dipole}} = -\vec{F} \cdot \vec{\mu}_{\text{total}} = -(0, 1, 0) \cdot (0, 0, 0) = 0 \text{ eV}
+\end{equation}
+
+\textbf{Result:} $E_{\text{exact}} = E_{\text{dipole}} = 0$ eV ✓
+
+\textbf{Different field direction:} $\vec{F} = (1, 0, 0)$ V/Å (pointing in +x direction)
+
+Potential: $V(\vec{r}) = 10 - x$ V
+
+\begin{align}
+V(\vec{r}_0) &= 10 - 0 = 10 \text{ V} \\
+V(\vec{r}_1) &= 10 - 1 = 9 \text{ V} \\
+V(\vec{r}_2) &= 10 - 2 = 8 \text{ V}
+\end{align}
+
+\begin{equation}
+E_{\text{exact}} = 0.5(10) - 1.0(9) + 0.5(8) = 5 - 9 + 4 = 0 \text{ eV}
+\end{equation}
+
+\begin{equation}
+E_{\text{dipole}} = -(1, 0, 0) \cdot (0, 0, 0) = 0 \text{ eV}
+\end{equation}
+
+Again: $E_{\text{exact}} = E_{\text{dipole}}$ ✓
+
+\section{Bond Dipole Formulations with Different E-field Definitions}
+
+Now we explore whether bond-by-bond calculations with different E-field definitions can reproduce $\sum_i q_i V(\vec{r}_i)$.
+
+\subsection{General Bond Dipole Energy}
+
+For a bond between atoms $i$ and $j$, the energy is:
+\begin{equation}
+E_{ij} = -\vec{\mu}_{ij} \cdot \vec{E}_{ij}
+\end{equation}
+
+where we consider different definitions of both $\vec{\mu}_{ij}$ and $\vec{E}_{ij}$.
+
+\subsection{Dipole Moment Definitions}
+
+\subsubsection{Definition A: Charge difference × half bond length}
+\begin{equation}
+\vec{\mu}_{ij}^{(A)} = (q_j - q_i) \frac{\vec{r}_j - \vec{r}_i}{2}
+\end{equation}
+
+\subsubsection{Definition B: Charge difference × full bond length}
+\begin{equation}
+\vec{\mu}_{ij}^{(B)} = (q_j - q_i) (\vec{r}_j - \vec{r}_i)
+\end{equation}
+
+\subsubsection{Definition C: Single charge × bond vector}
+\begin{equation}
+\vec{\mu}_{ij}^{(C)} = q_j (\vec{r}_j - \vec{r}_i)
+\end{equation}
+
+\subsection{E-field Definitions}
+
+\subsubsection{Field 1: Averaged at endpoints}
+\begin{equation}
+\vec{E}_{ij}^{(1)} = \frac{\vec{E}(\vec{r}_i) + \vec{E}(\vec{r}_j)}{2}
+\end{equation}
+
+\subsubsection{Field 2: At bond midpoint}
+\begin{equation}
+\vec{E}_{ij}^{(2)} = \vec{E}\left(\frac{\vec{r}_i + \vec{r}_j}{2}\right)
+\end{equation}
+
+\subsubsection{Field 3: Projected along bond (using averaged field)}
+\begin{equation}
+E_{ij}^{(3)} = \frac{\vec{E}(\vec{r}_i) + \vec{E}(\vec{r}_j)}{2} \cdot \frac{\vec{r}_j - \vec{r}_i}{|\vec{r}_j - \vec{r}_i|}
+\end{equation}
+
+\subsubsection{Field 4: From potential difference}
+\begin{equation}
+E_{ij}^{(4)} = -\frac{V(\vec{r}_j) - V(\vec{r}_i)}{|\vec{r}_j - \vec{r}_i|}
+\end{equation}
+
+\section{Testing All Combinations}
+
+\subsection{Linear Chain Example: Uniform Field}
+
+Same system as before:
+\begin{itemize}
+    \item Atoms: $q_0 = +0.5e$ at $x=0$, $q_1 = -1.0e$ at $x=1$ Å, $q_2 = +0.5e$ at $x=2$ Å
+    \item Field: $\vec{F} = (1, 0, 0)$ V/Å
+    \item Potential: $V(x) = 10 - x$ V
+    \item Bonds: (0,1) with length 1 Å, (1,2) with length 1 Å
+\end{itemize}
+
+\textbf{Exact result:} $E_{\text{exact}} = 0$ eV (as calculated above)
+
+\subsection{Combination: Dipole A × Field 1}
+
+$\vec{\mu}_{ij}^{(A)} = (q_j - q_i) \frac{\vec{r}_j - \vec{r}_i}{2}$, $\vec{E}_{ij}^{(1)} = \frac{\vec{E}(\vec{r}_i) + \vec{E}(\vec{r}_j)}{2}$
+
+For uniform field: $\vec{E}(\vec{r}) = \vec{F} = (1, 0, 0)$ everywhere.
+
+\textbf{Bond 0-1:}
+\begin{align}
+\vec{\mu}_{01}^{(A)} &= (-1.0 - 0.5) \frac{(1,0,0) - (0,0,0)}{2} = -1.5 \cdot \frac{(1,0,0)}{2} = (-0.75, 0, 0) \text{ e·Å} \\
+\vec{E}_{01}^{(1)} &= \frac{(1,0,0) + (1,0,0)}{2} = (1, 0, 0) \text{ V/Å} \\
+E_{01} &= -(-0.75, 0, 0) \cdot (1, 0, 0) = 0.75 \text{ eV}
+\end{align}
+
+\textbf{Bond 1-2:}
+\begin{align}
+\vec{\mu}_{12}^{(A)} &= (0.5 - (-1.0)) \frac{(2,0,0) - (1,0,0)}{2} = 1.5 \cdot \frac{(1,0,0)}{2} = (0.75, 0, 0) \text{ e·Å} \\
+\vec{E}_{12}^{(1)} &= (1, 0, 0) \text{ V/Å} \\
+E_{12} &= -(0.75, 0, 0) \cdot (1, 0, 0) = -0.75 \text{ eV}
+\end{align}
+
+\textbf{Total:}
+\begin{equation}
+E_{\text{total}}^{(A,1)} = 0.75 - 0.75 = 0 \text{ eV} \quad \checkmark
+\end{equation}
+
+\textbf{Matches exact result!}
+
+\subsection{Combination: Dipole B × Field 1}
+
+$\vec{\mu}_{ij}^{(B)} = (q_j - q_i) (\vec{r}_j - \vec{r}_i)$, $\vec{E}_{ij}^{(1)} = \vec{F}$
+
+\textbf{Bond 0-1:}
+\begin{align}
+\vec{\mu}_{01}^{(B)} &= -1.5 \cdot (1,0,0) = (-1.5, 0, 0) \text{ e·Å} \\
+E_{01} &= -(-1.5) \cdot 1 = 1.5 \text{ eV}
+\end{align}
+
+\textbf{Bond 1-2:}
+\begin{align}
+\vec{\mu}_{12}^{(B)} &= 1.5 \cdot (1,0,0) = (1.5, 0, 0) \text{ e·Å} \\
+E_{12} &= -(1.5) \cdot 1 = -1.5 \text{ eV}
+\end{align}
+
+\textbf{Total:}
+\begin{equation}
+E_{\text{total}}^{(B,1)} = 1.5 - 1.5 = 0 \text{ eV} \quad \checkmark
+\end{equation}
+
+\textbf{Also matches!}
+
+\subsection{Combination: Dipole A × Field 4 (Potential Difference)}
+
+$\vec{\mu}_{ij}^{(A)} = (q_j - q_i) \frac{\vec{r}_j - \vec{r}_i}{2}$
+
+$E_{ij}^{(4)} = -\frac{V(\vec{r}_j) - V(\vec{r}_i)}{|\vec{r}_j - \vec{r}_i|}$
+
+But we need to use it as a vector projection:
+\begin{equation}
+E_{ij,\text{scalar}}^{(4)} = -\frac{V_j - V_i}{L_{ij}}
+\end{equation}
+
+Energy (taking dot product along bond direction):
+\begin{equation}
+E_{ij} = -|\vec{\mu}_{ij}^{(A)}| \cdot E_{ij,\text{scalar}}^{(4)} = -(q_j - q_i) \frac{L_{ij}}{2} \cdot \left(-\frac{V_j - V_i}{L_{ij}}\right) = \frac{(q_j - q_i)(V_j - V_i)}{2}
+\end{equation}
+
+\textbf{Bond 0-1:}
+\begin{align}
+V_1 - V_0 &= 9 - 10 = -1 \text{ V} \\
+E_{01} &= \frac{(-1.0 - 0.5)(-1)}{2} = \frac{(-1.5)(-1)}{2} = 0.75 \text{ eV}
+\end{align}
+
+\textbf{Bond 1-2:}
+\begin{align}
+V_2 - V_1 &= 8 - 9 = -1 \text{ V} \\
+E_{12} &= \frac{(0.5 - (-1.0))(-1)}{2} = \frac{(1.5)(-1)}{2} = -0.75 \text{ eV}
+\end{align}
+
+\textbf{Total:}
+\begin{equation}
+E_{\text{total}}^{(A,4)} = 0.75 - 0.75 = 0 \text{ eV} \quad \checkmark
+\end{equation}
+
+\textbf{Still matches!}
+
+\subsection{Key Observation for Uniform Fields}
+
+For \textbf{uniform fields}, different combinations of dipole and field definitions give the \textbf{same total energy} because:
+\begin{itemize}
+    \item The field is constant everywhere
+    \item Linear potential variation ensures consistent relationships
+    \item Bond contributions sum correctly to total
+\end{itemize}
+
+\section{Non-Uniform Field: Different Definitions Give Different Results}
+
+\subsection{Setup: Point Charge Field}
+
+Same molecule, but now with a point charge creating a non-uniform field:
+\begin{itemize}
+    \item Atoms at $x = 0, 1, 2$ Å (same as before)
+    \item Point charge: $Q = +1e$ at position $(0, 3, 0)$ Å
+    \item Field from point charge: $\vec{E}(\vec{r}) = k_e Q \frac{\vec{r} - \vec{R}}{|\vec{r} - \vec{R}|^3}$
+\end{itemize}
+
+where $k_e = 14.4$ eV·Å/e² (Coulomb constant).
+
+\subsection{Exact Calculation}
+
+Potential at each atom:
+\begin{align}
+V(\vec{r}_0) &= \frac{k_e Q}{|\vec{r}_0 - \vec{R}|} = \frac{14.4 \cdot 1}{|(0,0,0) - (0,3,0)|} = \frac{14.4}{3} = 4.8 \text{ V} \\
+V(\vec{r}_1) &= \frac{14.4}{\sqrt{1^2 + 3^2}} = \frac{14.4}{\sqrt{10}} = 4.553 \text{ V} \\
+V(\vec{r}_2) &= \frac{14.4}{\sqrt{2^2 + 3^2}} = \frac{14.4}{\sqrt{13}} = 3.994 \text{ V}
+\end{align}
+
+\begin{equation}
+E_{\text{exact}} = 0.5(4.8) - 1.0(4.553) + 0.5(3.994) = 2.4 - 4.553 + 1.997 = -0.156 \text{ eV}
+\end{equation}
+
+\subsection{E-field at Each Atom}
+
+\begin{align}
+\vec{E}(\vec{r}_0) &= 14.4 \cdot 1 \cdot \frac{(0,0,0) - (0,3,0)}{3^3} = 14.4 \frac{(0,-3,0)}{27} = (0, -1.6, 0) \text{ V/Å} \\
+\vec{E}(\vec{r}_1) &= 14.4 \frac{(1,-3,0)}{(\sqrt{10})^3} = 14.4 \frac{(1,-3,0)}{31.62} = (0.455, -1.366, 0) \text{ V/Å} \\
+\vec{E}(\vec{r}_2) &= 14.4 \frac{(2,-3,0)}{(\sqrt{13})^3} = 14.4 \frac{(2,-3,0)}{46.87} = (0.614, -0.921, 0) \text{ V/Å}
+\end{align}
+
+\subsection{Combination: Dipole A × Field 1 (Averaged)}
+
+\textbf{Bond 0-1:}
+\begin{align}
+\vec{\mu}_{01}^{(A)} &= (-1.5) \frac{(1,0,0)}{2} = (-0.75, 0, 0) \text{ e·Å} \\
+\vec{E}_{01}^{(1)} &= \frac{(0, -1.6, 0) + (0.455, -1.366, 0)}{2} = (0.228, -1.483, 0) \text{ V/Å} \\
+E_{01} &= -(-0.75, 0, 0) \cdot (0.228, -1.483, 0) = 0.75 \cdot 0.228 = 0.171 \text{ eV}
+\end{align}
+
+\textbf{Bond 1-2:}
+\begin{align}
+\vec{\mu}_{12}^{(A)} &= (0.75, 0, 0) \text{ e·Å} \\
+\vec{E}_{12}^{(1)} &= \frac{(0.455, -1.366, 0) + (0.614, -0.921, 0)}{2} = (0.535, -1.144, 0) \text{ V/Å} \\
+E_{12} &= -(0.75) \cdot 0.535 = -0.401 \text{ eV}
+\end{align}
+
+\textbf{Total:}
+\begin{equation}
+E_{\text{total}}^{(A,1)} = 0.171 - 0.401 = -0.230 \text{ eV}
+\end{equation}
+
+\textbf{Compare to exact:} $E_{\text{exact}} = -0.156$ eV
+
+\textbf{Error:} $\Delta E = -0.230 - (-0.156) = -0.074$ eV
+
+\colorbox{yellow}{Does NOT match exactly!}
+
+\subsection{Combination: Dipole A × Field 2 (Midpoint)}
+
+\textbf{Bond 0-1 midpoint:} $(0.5, 0, 0)$
+\begin{align}
+\vec{E}(0.5, 0, 0) &= 14.4 \frac{(0.5, -3, 0)}{(\sqrt{0.25 + 9})^3} = 14.4 \frac{(0.5, -3, 0)}{29.30} = (0.246, -1.474, 0) \text{ V/Å}
+\end{align}
+
+\begin{equation}
+E_{01} = 0.75 \cdot 0.246 = 0.184 \text{ eV}
+\end{equation}
+
+\textbf{Bond 1-2 midpoint:} $(1.5, 0, 0)$
+\begin{align}
+\vec{E}(1.5, 0, 0) &= 14.4 \frac{(1.5, -3, 0)}{(\sqrt{2.25 + 9})^3} = 14.4 \frac{(1.5, -3, 0)}{35.59} = (0.607, -1.214, 0) \text{ V/Å}
+\end{align}
+
+\begin{equation}
+E_{12} = -0.75 \cdot 0.607 = -0.455 \text{ eV}
+\end{equation}
+
+\textbf{Total:}
+\begin{equation}
+E_{\text{total}}^{(A,2)} = 0.184 - 0.455 = -0.271 \text{ eV}
+\end{equation}
+
+\textbf{Error:} $\Delta E = -0.271 - (-0.156) = -0.115$ eV
+
+\colorbox{yellow}{Even worse error with midpoint!}
+
+\subsection{Combination: Dipole A × Field 4 (Potential Difference)}
+
+\begin{align}
+E_{01} &= \frac{(q_1 - q_0)(V_1 - V_0)}{2} = \frac{(-1.5)(4.553 - 4.8)}{2} = \frac{(-1.5)(-0.247)}{2} = 0.185 \text{ eV} \\
+E_{12} &= \frac{(q_2 - q_1)(V_2 - V_1)}{2} = \frac{(1.5)(3.994 - 4.553)}{2} = \frac{(1.5)(-0.559)}{2} = -0.419 \text{ eV}
+\end{align}
+
+\textbf{Total:}
+\begin{equation}
+E_{\text{total}}^{(A,4)} = 0.185 - 0.419 = -0.234 \text{ eV}
+\end{equation}
+
+\textbf{Error:} $\Delta E = -0.234 - (-0.156) = -0.078$ eV
+
+\colorbox{yellow}{Also does not match!}
+
+\section{Summary Table: Accuracy for Non-Uniform Field}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Method} & \textbf{Energy (eV)} & \textbf{Error (eV)} \\
+\hline
+Exact: $\sum_i q_i V(\vec{r}_i)$ & $-0.156$ & $0$ (reference) \\
+\hline
+Dipole A × Field 1 (averaged) & $-0.230$ & $-0.074$ \\
+\hline
+Dipole A × Field 2 (midpoint) & $-0.271$ & $-0.115$ \\
+\hline
+Dipole A × Field 4 (potential diff.) & $-0.234$ & $-0.078$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Conclusions}
+
+\subsection{Uniform Fields}
+\begin{enumerate}
+    \item The atom-wise sum $\sum_i q_i V(\vec{r}_i)$ \textbf{exactly equals} the molecular dipole-field energy $-\vec{\mu}_{\text{total}} \cdot \vec{F}$ for neutral molecules
+    \item Different bond dipole/field definitions all give the \textbf{same correct result}
+    \item This is because the potential is linear: $V(\vec{r}) = V_0 - \vec{F} \cdot \vec{r}$
+\end{enumerate}
+
+\subsection{Non-Uniform Fields}
+\begin{enumerate}
+    \item \textbf{ALL} bond dipole formulations give \textbf{different results} from the exact $\sum_i q_i V(\vec{r}_i)$
+    \item Different E-field definitions (averaged, midpoint, potential difference) give \textbf{different errors}
+    \item The errors arise from neglecting higher-order multipole terms (quadrupole-field gradient interactions)
+    \item \textbf{Only} the atom-wise sum $\sum_i q_i V(\vec{r}_i)$ is exact
+\end{enumerate}
+
+\subsection{Recommendation}
+
+\colorbox{green!30}{\textbf{Always use} $E = \sum_i q_i V(\vec{r}_i)$ \textbf{as the ground truth}}
+
+The bond dipole formulation is:
+\begin{itemize}
+    \item Useful for \textit{interpreting} which bonds contribute to stabilization
+    \item Approximate for non-uniform fields
+    \item Good for qualitative trends, not quantitative accuracy
+\end{itemize}
+
+\end{document}

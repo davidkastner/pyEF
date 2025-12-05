@@ -1,0 +1,358 @@
+================================================================================
+                    PyEF PACKAGE ARCHITECTURE MAP
+                    For Scientific Publication
+================================================================================
+
+OVERVIEW:
+PyEF (Python Electric Field) is a modular computational chemistry package for
+calculating electrostatic properties from quantum mechanics calculations.
+
+================================================================================
+                        HIERARCHICAL MODULE STRUCTURE
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         USER INTERFACE LAYER                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  cli.py                        run.py                 manage.py         │
+│  ┌──────────────┐             ┌──────────┐          ┌──────────┐       │
+│  │ Click-based  │────calls───>│ Workflow │<──uses──│  Batch   │       │
+│  │   Command    │             │Orchestr. │         │  File    │       │
+│  │   Interface  │             │          │         │  Parser  │       │
+│  └──────────────┘             └──────────┘         └──────────┘       │
+│         │                            │                                 │
+└─────────┼────────────────────────────┼─────────────────────────────────┘
+          │                            │
+          └────────────┬───────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      CORE CALCULATION ENGINE                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│                        analysis.py (3,901 lines)                        │
+│                     ┌──────────────────────────┐                        │
+│                     │   Electrostatics Class   │                        │
+│                     └──────────────────────────┘                        │
+│                                 │                                       │
+│         ┌───────────────────────┼───────────────────────┐               │
+│         ▼                       ▼                       ▼               │
+│  ┌─────────────┐        ┌─────────────┐        ┌─────────────┐         │
+│  │   Multiwfn  │        │   Charge    │        │  E-field &  │         │
+│  │  Interface  │───────>│ Calculation │───────>│    ESP      │         │
+│  │             │        │             │        │ Calculation │         │
+│  └─────────────┘        └─────────────┘        └─────────────┘         │
+│         │                       │                       │               │
+│         │              ┌────────┴────────┐              │               │
+│         │              ▼                 ▼              │               │
+│         │        ┌──────────┐      ┌──────────┐        │               │
+│         │        │Monopole  │      │Multipole │        │               │
+│         │        │  (Point  │      │(Dipole + │        │               │
+│         │        │ Charges) │      │Quadru.)  │        │               │
+│         │        └──────────┘      └──────────┘        │               │
+│         │              │                 │              │               │
+│         └──────────────┴─────────────────┴──────────────┘               │
+│                                 │                                       │
+│                                 ▼                                       │
+│                     ┌──────────────────────┐                            │
+│                     │   Output Generation  │                            │
+│                     │  - CSV Data Files    │                            │
+│                     │  - Atom-wise Decomp. │                            │
+│                     └──────────────────────┘                            │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+                       │
+                       │ uses
+                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        SUPPORT MODULES LAYER                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  geometry.py              utility.py              constants.py          │
+│  ┌──────────────┐        ┌──────────────┐        ┌──────────────┐      │
+│  │  Geometry    │        │ MoldenObject │        │  Physical    │      │
+│  │   Class      │        │    Class     │        │  Constants   │      │
+│  ├──────────────┤        ├──────────────┤        ├──────────────┤      │
+│  │ • Parse XYZ  │        │ • Parse      │        │ • Periodic   │      │
+│  │ • Bond       │        │   Molden     │        │   Table      │      │
+│  │   Detection  │        │ • Count      │        │ • Atomic     │      │
+│  │ • Distance   │        │   Basis      │        │   Properties │      │
+│  │   Calc.      │        │ • ECP Fix    │        │ • VDW Radii  │      │
+│  │ • H-bond ID  │        │              │        │ • Unit Conv. │      │
+│  └──────────────┘        └──────────────┘        └──────────────┘      │
+│                                                                         │
+│  ┌──────────────┐                                                       │
+│  │  Visualize   │                                                       │
+│  │    Class     │                                                       │
+│  ├──────────────┤                                                       │
+│  │ • PDB Gen.   │                                                       │
+│  │ • Charge     │                                                       │
+│  │   Visual.    │                                                       │
+│  │ • E-field    │                                                       │
+│  │   Mapping    │                                                       │
+│  └──────────────┘                                                       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+                            DATA FLOW DIAGRAM
+================================================================================
+
+INPUT FILES                PROCESSING STAGES              OUTPUT FILES
+───────────                ──────────────────              ────────────
+
+┌──────────────┐                                         ┌──────────────┐
+│ QM Calc      │                                         │ E-field Data │
+│ • .molden    │──┐                                   ┌─>│ • CSV files  │
+│ • .xyz       │  │                                   │  └──────────────┘
+│ • .wfn       │  │      ┌──────────────────┐         │
+└──────────────┘  ├─────>│  Data Prep &     │─────────┤  ┌──────────────┐
+                  │      │  Multiwfn Call   │         ├─>│  ESP Data    │
+┌──────────────┐  │      └──────────────────┘         │  │ • CSV files  │
+│ QMMM Point   │  │              │                    │  └──────────────┘
+│ Charges      │──┘              │                    │
+│ (optional)   │                 ▼                    │  ┌──────────────┐
+└──────────────┘      ┌──────────────────┐            ├─>│ Charge Data  │
+                      │ Charge Analysis  │            │  │ • CSV files  │
+                      │ • Monopole       │────────────┤  └──────────────┘
+                      │ • Multipole      │            │
+                      └──────────────────┘            │  ┌──────────────┐
+                              │                       └─>│ PDB Visual.  │
+                              ▼                          │ • B-factor   │
+                   ┌──────────────────────┐              │   colored    │
+                   │  Electrostatic Calc  │              └──────────────┘
+                   │  • E-field (15      │
+                   │    charge schemes)   │
+                   │  • ESP              │
+                   │  • Atom-wise decomp.│
+                   └──────────────────────┘
+
+================================================================================
+                        COMPUTATIONAL METHODS HIERARCHY
+================================================================================
+
+                        Electrostatic Calculations
+                                   │
+              ┌────────────────────┴────────────────────┐
+              ▼                                         ▼
+    Electric Field (E)                      Electrostatic Potential (ESP)
+              │                                         │
+    ┌─────────┴─────────┐                    ┌─────────┴─────────┐
+    ▼                   ▼                    ▼                   ▼
+Monopole            Multipole            Monopole            Multipole
+(Traditional)       Expansion            (Traditional)       Expansion
+    │                   │                    │                   │
+    │          ┌────────┴────────┐           │          ┌────────┴────────┐
+    │          ▼        ▼        ▼           │          ▼        ▼        ▼
+    │      Monopole  Dipole  Quadrupole      │      Monopole  Dipole  Quadrupole
+    │      E = kq/r²  E ∝ μ   E ∝ Q          │      V = kq/r  V ∝ μ   V ∝ Q
+    │                                         │
+    └─────────────────┬───────────────────────┘
+                      ▼
+              Atom-wise Decomposition
+              (Per-atom contributions)
+
+================================================================================
+                    SUPPORTED CHARGE PARTITIONING SCHEMES
+================================================================================
+
+┌─────────────────┬──────────────────────────────────────────────────────┐
+│ Scheme          │ Description                                          │
+├─────────────────┼──────────────────────────────────────────────────────┤
+│ Hirshfeld       │ Stockholder partitioning                             │
+│ Hirshfeld-I     │ Iterative Hirshfeld (self-consistent)                │
+│ Mulliken        │ Basis function overlap-based                         │
+│ Lowdin          │ Orthogonalized Mulliken                              │
+│ Voronoi         │ Spatial tessellation                                 │
+│ Becke           │ Fuzzy atomic boundary weights                        │
+│ AIM             │ Atoms-in-molecules (QTAIM)                           │
+│ CHELPG          │ Electrostatic potential fitting (grid)               │
+│ RESP            │ Restrained ESP fitting                               │
+│ MK              │ Merz-Kollman ESP fitting                             │
+│ CM5             │ Charge Model 5                                       │
+│ ADCH            │ Adjusted density charges                             │
+│ SCPA            │ Self-consistent population analysis                  │
+│ EEM             │ Electronegativity equalization                       │
+│ PEOE            │ Partial orbital electronegativity equalization       │
+└─────────────────┴──────────────────────────────────────────────────────┘
+
+================================================================================
+                        KEY FEATURES & CAPABILITIES
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  1. CHARGE ANALYSIS                                                     │
+│     • 15 different charge partitioning schemes via Multiwfn             │
+│     • Monopole (point charge) and multipole (dipole + quadrupole)       │
+│     • Effective Core Potential (ECP) support                            │
+│                                                                         │
+│  2. ELECTRIC FIELD CALCULATIONS                                         │
+│     • Total E-field at specified atoms or bonds                         │
+│     • Atom-wise decomposition (contribution from each atom)             │
+│     • Projection along bond vectors                                     │
+│     • Multipole expansion for higher accuracy                           │
+│                                                                         │
+│  3. ELECTROSTATIC POTENTIAL                                             │
+│     • ESP at atomic positions                                           │
+│     • Per-atom source decomposition                                     │
+│     • Monopole and multipole modes                                      │
+│                                                                         │
+│  4. QMMM INTEGRATION                                                    │
+│     • Import external point charges                                     │
+│     • Combined QM/MM electrostatic calculations                         │
+│                                                                         │
+│  5. DIELECTRIC EFFECTS                                                  │
+│     • Configurable dielectric constant                                  │
+│     • Distance-dependent dielectric scaling                             │
+│     • Bond-specific dielectric treatment                                │
+│                                                                         │
+│  6. VISUALIZATION                                                       │
+│     • PDB file generation with B-factor color mapping                   │
+│     • E-field magnitude and direction visualization                     │
+│     • Charge distribution visualization                                 │
+│     • Atom-wise contribution maps                                       │
+│                                                                         │
+│  7. BATCH PROCESSING                                                    │
+│     • CSV-based job batch files                                         │
+│     • Multiple structure processing                                     │
+│     • Automated workflow orchestration                                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+                        EXTERNAL DEPENDENCIES
+================================================================================
+
+┌──────────────────┬─────────────────────────────────────────────────────┐
+│ Component        │ Purpose                                             │
+├──────────────────┼─────────────────────────────────────────────────────┤
+│ Multiwfn         │ Wavefunction analysis and charge partitioning       │
+│ NumPy            │ Array operations and linear algebra                 │
+│ Pandas           │ Tabular data management (DataFrames)                │
+│ SciPy            │ Scientific computing and optimization               │
+│ Click            │ Command-line interface framework                    │
+│ PyYAML           │ Configuration file parsing                          │
+│ basis_set_exch   │ ECP and basis set data retrieval                    │
+└──────────────────┴─────────────────────────────────────────────────────┘
+
+================================================================================
+                        TYPICAL USAGE WORKFLOW
+================================================================================
+
+1. PREPARATION
+   ├─ Run QM calculation (e.g., TeraChem, Gaussian, ORCA)
+   ├─ Generate .molden file (molecular orbitals, basis functions)
+   └─ Generate .xyz file (atomic coordinates)
+
+2. INITIALIZATION
+   ├─ Create Electrostatics object
+   ├─ Configure settings (dielectric, ECP, charge scheme)
+   └─ Specify atoms/bonds of interest
+
+3. DATA PREPROCESSING
+   ├─ Extract final frame from trajectory (if applicable)
+   ├─ Fix molden file for ECP (if applicable)
+   └─ Load QMMM point charges (if applicable)
+
+4. CHARGE CALCULATION
+   ├─ Call Multiwfn via subprocess
+   ├─ Parse charge data (monopole or multipole)
+   └─ Store in DataFrame/dictionary structures
+
+5. ELECTROSTATIC CALCULATION
+   ├─ Compute E-field at target atoms/bonds
+   ├─ Compute ESP at target atoms
+   ├─ Optionally decompose by source atoms
+   └─ Output to CSV files
+
+6. VISUALIZATION (Optional)
+   ├─ Generate PDB files with B-factor encoding
+   └─ View in molecular visualization software (VMD, PyMOL, etc.)
+
+================================================================================
+                    MULTIPOLE EXPANSION FORMALISM
+================================================================================
+
+The electric field is decomposed into a series expansion:
+
+    E_total = E_monopole + E_dipole + E_quadrupole + ...
+
+Where:
+
+    E_monopole = k * q / r²                  (Coulomb's law)
+
+    E_dipole = k/r³ * [3(μ·r̂)r̂ - μ]        (Dipole field)
+
+    E_quadrupole = k/r⁴ * [15(Q·r̂)r̂ - 3Qr̂ - 3r̂Q]  (Quadrupole field)
+
+Similarly for ESP:
+
+    V_total = V_monopole + V_dipole + V_quadrupole + ...
+
+    V_monopole = k * q / r
+
+    V_dipole = k/r² * (μ·r̂)
+
+    V_quadrupole = k/r³ * (r̂·Q·r̂)
+
+Units:
+    • k = Coulomb constant
+    • q = charge (e)
+    • μ = dipole moment (e·Bohr)
+    • Q = quadrupole moment tensor (e·Bohr²)
+    • r = distance (Angstrom → converted to meters)
+    • E-field output: V/Angstrom
+
+================================================================================
+                        MODULE FILE STATISTICS
+================================================================================
+
+┌─────────────────────┬────────────┬──────────────────────────────────────┐
+│ Module              │ Lines      │ Primary Responsibility               │
+├─────────────────────┼────────────┼──────────────────────────────────────┤
+│ analysis.py         │ 3,901      │ Core electrostatic calculations      │
+│ geometry.py         │ 625        │ Geometric analysis & visualization   │
+│ constants.py        │ 289        │ Physical constants & atomic data     │
+│ TMCgeometry.py      │ 298        │ TMC-specific geometry operations     │
+│ utility.py          │ 171        │ File format handling & utilities     │
+│ replace_efield...   │ 114        │ Legacy E-field wrappers              │
+│ verify_atomwise...  │ 133        │ Validation tools                     │
+│ run.py              │ 86         │ Workflow orchestration               │
+│ cli.py              │ 84         │ Command-line interface               │
+│ manage.py           │ 50         │ Batch file parsing                   │
+└─────────────────────┴────────────┴──────────────────────────────────────┘
+
+Total: ~5,751 lines of core functionality
+
+================================================================================
+                            DESIGN PHILOSOPHY
+================================================================================
+
+1. MODULARITY
+   Each module has a single, well-defined responsibility with minimal coupling
+
+2. FLEXIBILITY
+   Support for multiple charge schemes, calculation modes, and QM packages
+
+3. EXTENSIBILITY
+   Easy addition of new charge partitioning schemes or calculation methods
+
+4. ACCURACY
+   Multipole expansion for beyond-point-charge accuracy
+
+5. USABILITY
+   CLI interface with YAML configuration for streamlined workflows
+
+6. INTEGRATION
+   Seamless interfacing with Multiwfn and other computational chemistry tools
+
+7. REPRODUCIBILITY
+   Comprehensive output files (CSV) with metadata for reproducible research
+
+================================================================================
+
+Generated: 2025-12-02
+Package: pyEF (Python Electric Field Analysis)
+Location: /home/gridsan/mmanetsch/pyEF/pyef/

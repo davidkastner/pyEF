@@ -4,57 +4,75 @@ from analysis import Electrostatics
 
 
 ####Steps to use#######
-### 1.) Change the paths to the files in list_of_folders
-### 2.) Change the index of the atom (zero-indexed) to the metla atom of interest
-### 3.) change folder_to_file path such that the path listed in list_of_folders _ folder_to_file_path should provide math to molden
-### 4.) If running ESP calculation, pick desired partial charge schemes (see documentation in DataAnalysis.py at top of possible options, un-comment this line and re-set the name of the csv as desired (ESP calc for ~400atom system takes about 15 minutes on one node)
-### 5.) If runing E-field Calculation, retitle the name of the outpt file as needed (Efield Calc for ~400atom system takes ~1 hour on one node)
-##Load conda environment which contains access to molsimplify
-##Run in command line or use Analysis_Jobscript (after adjusting file path, name of conda environment, and file names) to run on gibraltar
-##If jobs ends abruptly, will need to delete the polarization file before restarting
+### 1.) Provide complete paths to your calculation folders in list_of_folders
+### 2.) For ESP calculations: Specify metal atom indices (zero-indexed) in lst_of_tmcm_idx
+### 3.) For E-field calculations: Specify bond indices in input_bond_indices
+### 4.) For stabilization calculations: Specify substrate_idxs and env_idxs
+### 5.) Update paths to multiwfn and atmrad executables
+##Load conda environment which contains access to required tools
+##Run in command line or submit as a batch job
+##If job ends abruptly, you may need to delete polarization files before restarting
 
 
-list_of_folders = ['/home/manets12/DavidMimichrome/ABAJOD', '/home/manets12/DavidMimichrome/CAXFOX']
+# NEW RECOMMENDED USAGE: Provide complete folder paths
+list_of_folders = [
+    '/home/manets12/DavidMimichrome/ABAJOD/scr',
+    '/home/manets12/DavidMimichrome/CAXFOX/scr'
+]
 print(str(list_of_folders))
 
-#For atoms in molecules corresponding to the folder, identify the index of atom at which to compute ESP
-#Note that this uses zero-indexing!
-list_of_atoms = len(list_of_folders)*[0]
-#adjust for differing indices of the metal number
-list_of_atoms[0] = 5
-list_of_atoms[1] =7
-#list_of_atoms[1] = 486
+# For ESP calculations only: specify metal atom indices (zero-indexed)
+metal_indices = [5, 7]  # Metal atom indices for each folder
 
-#path from each initial directory to the directory containing the .molden file
-folder_to_file_path  = '/scr/'
+# Initialize Electrostatics Object (new simplified signature)
+dataObject = Electrostatics(
+    list_of_folders,
+    lst_of_tmcm_idx=metal_indices,  # Only needed for ESP calculations
+    dielectric=4.0  # Optional: set dielectric constant
+)
 
-#Initialize Electrostatics Object
-incage_bool = False
-dataObject = Electrostatics(list_of_folders, list_of_atoms, folder_to_file_path, incage_bool)
+# Prepare data: fix/reformat .molden files if needed
+dataObject.prepData()
+dataObject.fix_allECPmolden()  # Use if ECP basis sets were used
 
-#fix/reformat the name and charges on atoms in .molden file to set up for future calculations
-#dataObject.prepData()
-#dataObject.fix_ECPmolden()
+# ========================================
+# EXAMPLE 1: Calculate ESP at metal centers
+# ========================================
+esp_df = dataObject.getESP(
+    charge_types=['Hirshfeld_I'],
+    ESPdata_filename='MinimiChrome_ESP',
+    multiwfn_module='multiwfn',
+    multiwfn_path='/path/to/multiwfn',
+    atmrad_path='/path/to/atmrad',
+    use_multipole=True
+)
+print("ESP calculation complete!")
 
-#Define name of .csv to contain error data
-err_csv_name = 'gfn2xtb_Error'
+# ========================================
+# EXAMPLE 2: Calculate E-field on specific bonds
+# ========================================
+bond_indices = [(1, 2), (5, 6)]  # Bonds to analyze
+efield_df = dataObject.getEfield(
+    charge_types='Hirshfeld_I',
+    Efielddata_filename='MinimiChrome_Efield',
+    multiwfn_module='multiwfn',
+    multiwfn_path='/path/to/multiwfn',
+    atmrad_path='/path/to/atmrad',
+    input_bond_indices=bond_indices,
+    multipole_bool=True
+)
+print("E-field calculation complete!")
 
-#Determine Filename prefix for output 
-ESPdata_filename = 'MinimiChrome_ESP'
-
-#List of partial C... for ESP also need a list of partial charges of interest
-lst_charge_types = ['Hirshfeld_I']
-
-#Create CSV with ESP data
-dataObject.getESPData(lst_charge_types, ESPdata_filename)
-
-
-#Define prefix name  of E-field datafile
-Efield_data_filename = 'MinimiChrome_Efield'
-
-#Method to Compute Efield Projections on bonds connected to the atom specified by index in list_of_atoms
-
-#A list of a list of tuples... each nested list is the list of bond tuples for a specific molecule in the list
-list_of_Efields = [[(1,2), (5,6)], [(1,4), (7,8)]]
-dataObject.getEFieldData(Efield_data_filename, list_of_Efields)
-dataObject.getEFieldData(Efield_data_filename)
+# ========================================
+# EXAMPLE 3: Calculate Electrostatic Stabilization
+# ========================================
+estab_df = dataObject.getElectrostatic_stabilization(
+    multiwfn_path='/path/to/multiwfn',
+    multiwfn_module='multiwfn',
+    atmrad_path='/path/to/atmrad',
+    substrate_idxs=[1, 2, 3, 4, 5],  # Substrate atoms
+    env_idxs=[6, 7, 8, 9, 10],       # Environment atoms
+    charge_type='Hirshfeld_I',
+    multipole_order=2
+)
+print("Electrostatic stabilization calculation complete!")
