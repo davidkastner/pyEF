@@ -17,7 +17,7 @@ from distutils.dir_util import copy_tree
 import math
 import time
 
-from . import constants
+from . import utility as constants  # Backward compatibility alias
 
 class Geometry:
 
