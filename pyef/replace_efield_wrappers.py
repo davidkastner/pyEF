@@ -97,7 +97,7 @@ pattern2 = re.compile(
 # Pattern to match getEFieldMultipole
 pattern3 = re.compile(
     r'(    def getEFieldMultipole\(self,.*?\):)\s*\'\'\'.*?\'\'\'.*?'
-    r'(?=\n    def get_Electrostatic_stabilization)',
+    r'(?=\n    def getElectrostatic_stabilization)',
     re.DOTALL
 )
 

@@ -1,0 +1,286 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{physics}
+\usepackage{geometry}
+\usepackage{xcolor}
+\geometry{margin=1in}
+
+\title{Differential Formalism: Does $\int \vec{E} \cdot d\vec{\mu}$ Equal $\int \rho V \, dV$?}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Question}
+
+For a continuous charge distribution $\rho(\vec{r})$ in an external field $\vec{E}(\vec{r})$ with potential $V(\vec{r})$, does:
+\begin{equation}
+-\int \vec{E}(\vec{r}) \cdot d\vec{\mu} \stackrel{?}{=} \int \rho(\vec{r}) V(\vec{r}) \, d^3r
+\end{equation}
+
+where the differential dipole element is:
+\begin{equation}
+d\vec{\mu} = \vec{r} \rho(\vec{r}) \, d^3r
+\end{equation}
+
+\section{Dimensionality Check}
+
+\textbf{Left side:} $-\int \vec{E}(\vec{r}) \cdot d\vec{\mu}$
+\begin{align}
+&= -\int \vec{E}(\vec{r}) \cdot \vec{r} \rho(\vec{r}) \, d^3r \\
+&\text{Units: } \left[\frac{V}{m}\right] \cdot [m] \cdot \left[\frac{C}{m^3}\right] \cdot [m^3] = [V] \cdot [C] = [J] \quad \checkmark
+\end{align}
+
+\textbf{Right side:} $\int \rho(\vec{r}) V(\vec{r}) \, d^3r$
+\begin{align}
+&\text{Units: } \left[\frac{C}{m^3}\right] \cdot [V] \cdot [m^3] = [C] \cdot [V] = [J] \quad \checkmark
+\end{align}
+
+\textbf{Dimensionality is correct!}
+
+\section{Uniform Field: Do They Match?}
+
+\subsection{Setup}
+\begin{itemize}
+    \item Uniform field: $\vec{E}(\vec{r}) = \vec{F}$ (constant)
+    \item Potential: $V(\vec{r}) = V_0 - \vec{F} \cdot \vec{r}$
+    \item Charge distribution: $\rho(\vec{r})$
+    \item Total charge: $Q = \int \rho(\vec{r}) \, d^3r$
+\end{itemize}
+
+\subsection{Right Side: Standard Formulation}
+\begin{align}
+E_{\text{standard}} &= \int \rho(\vec{r}) V(\vec{r}) \, d^3r \\
+&= \int \rho(\vec{r}) (V_0 - \vec{F} \cdot \vec{r}) \, d^3r \\
+&= V_0 \int \rho(\vec{r}) \, d^3r - \vec{F} \cdot \int \vec{r} \rho(\vec{r}) \, d^3r \\
+&= V_0 Q - \vec{F} \cdot \vec{\mu}_{\text{total}}
+\end{align}
+
+For neutral system ($Q = 0$):
+\begin{equation}
+E_{\text{standard}} = -\vec{F} \cdot \vec{\mu}_{\text{total}}
+\end{equation}
+
+\subsection{Left Side: Differential Dipole Formulation}
+\begin{align}
+E_{\text{dipole}} &= -\int \vec{E}(\vec{r}) \cdot \vec{r} \rho(\vec{r}) \, d^3r \\
+&= -\int \vec{F} \cdot \vec{r} \rho(\vec{r}) \, d^3r \\
+&= -\vec{F} \cdot \int \vec{r} \rho(\vec{r}) \, d^3r \\
+&= -\vec{F} \cdot \vec{\mu}_{\text{total}}
+\end{align}
+
+\subsection{Result}
+\begin{equation}
+\boxed{E_{\text{standard}} = E_{\text{dipole}} = -\vec{F} \cdot \vec{\mu}_{\text{total}}}
+\end{equation}
+
+\textbf{For uniform fields, they are IDENTICAL!}
+
+\section{Non-Uniform Field: Do They Match?}
+
+\subsection{Setup}
+Consider a point charge creating a non-uniform field:
+\begin{itemize}
+    \item External point charge $Q_{\text{ext}}$ at position $\vec{R}$
+    \item Field: $\vec{E}(\vec{r}) = k_e Q_{\text{ext}} \frac{\vec{r} - \vec{R}}{|\vec{r} - \vec{R}|^3}$
+    \item Potential: $V(\vec{r}) = k_e \frac{Q_{\text{ext}}}{|\vec{r} - \vec{R}|}$
+\end{itemize}
+
+\subsection{Standard Formulation}
+\begin{equation}
+E_{\text{standard}} = \int \rho(\vec{r}) V(\vec{r}) \, d^3r = k_e Q_{\text{ext}} \int \frac{\rho(\vec{r})}{|\vec{r} - \vec{R}|} \, d^3r
+\end{equation}
+
+This is the \textbf{exact} energy.
+
+\subsection{Differential Dipole Formulation}
+\begin{align}
+E_{\text{dipole}} &= -\int \vec{E}(\vec{r}) \cdot \vec{r} \rho(\vec{r}) \, d^3r \\
+&= -k_e Q_{\text{ext}} \int \frac{\vec{r} - \vec{R}}{|\vec{r} - \vec{R}|^3} \cdot \vec{r} \, \rho(\vec{r}) \, d^3r \\
+&= -k_e Q_{\text{ext}} \int \frac{\vec{r} \cdot \vec{r} - \vec{R} \cdot \vec{r}}{|\vec{r} - \vec{R}|^3} \rho(\vec{r}) \, d^3r \\
+&= -k_e Q_{\text{ext}} \int \frac{|\vec{r}|^2 - \vec{R} \cdot \vec{r}}{|\vec{r} - \vec{R}|^3} \rho(\vec{r}) \, d^3r
+\end{align}
+
+\subsection{Comparison}
+
+These are \textbf{NOT equal} in general!
+
+\begin{equation}
+\int \frac{\rho(\vec{r})}{|\vec{r} - \vec{R}|} \, d^3r \neq \int \frac{|\vec{r}|^2 - \vec{R} \cdot \vec{r}}{|\vec{r} - \vec{R}|^3} \rho(\vec{r}) \, d^3r
+\end{equation}
+
+\textbf{The formulations differ for non-uniform fields!}
+
+\section{Physical Interpretation}
+
+\subsection{What is $-\int \vec{E}(\vec{r}) \cdot \vec{r} \rho(\vec{r}) \, d^3r$?}
+
+This is NOT the correct energy! It's related to the energy but includes extra terms.
+
+The issue is that $\vec{E}(\vec{r}) \cdot \vec{r}$ is not equal to $V(\vec{r})$ in general.
+
+\subsection{Correct Relationship}
+
+The fundamental relationship is:
+\begin{equation}
+\vec{E}(\vec{r}) = -\nabla V(\vec{r})
+\end{equation}
+
+In integral form:
+\begin{equation}
+V(\vec{r}) = V(\vec{r}_0) - \int_{\vec{r}_0}^{\vec{r}} \vec{E}(\vec{r}') \cdot d\vec{r}'
+\end{equation}
+
+This is a \textbf{line integral} along a path from $\vec{r}_0$ to $\vec{r}$, NOT a simple dot product $\vec{E}(\vec{r}) \cdot \vec{r}$.
+
+\subsection{When Do They Match?}
+
+For a uniform field $\vec{E} = \vec{F}$:
+\begin{align}
+V(\vec{r}) &= V_0 - \int_0^{\vec{r}} \vec{F} \cdot d\vec{r}' \\
+&= V_0 - \vec{F} \cdot \vec{r}
+\end{align}
+
+Therefore:
+\begin{equation}
+-\vec{F} \cdot \vec{r} = V(\vec{r}) - V_0
+\end{equation}
+
+So for uniform fields:
+\begin{align}
+-\int \vec{F} \cdot \vec{r} \rho(\vec{r}) \, d^3r &= \int \rho(\vec{r}) [V(\vec{r}) - V_0] \, d^3r \\
+&= \int \rho(\vec{r}) V(\vec{r}) \, d^3r - V_0 \int \rho(\vec{r}) \, d^3r
+\end{align}
+
+For neutral systems ($\int \rho \, d^3r = 0$):
+\begin{equation}
+-\int \vec{F} \cdot \vec{r} \rho(\vec{r}) \, d^3r = \int \rho(\vec{r}) V(\vec{r}) \, d^3r
+\end{equation}
+
+\textbf{They match only for uniform fields!}
+
+\section{Bond Dipole in Differential Form}
+
+\subsection{1D Charge Distribution Along Bond}
+
+For a bond from $\vec{r}_A$ to $\vec{r}_B$ with linear charge density $\lambda(s)$:
+
+Position along bond: $\vec{r}(s) = \vec{r}_A + s\hat{n}$, where $s \in [0, L]$ and $\hat{n} = \frac{\vec{r}_B - \vec{r}_A}{L}$
+
+\subsubsection{Standard Formulation}
+\begin{equation}
+E_{\text{bond,standard}} = \int_0^L \lambda(s) V(\vec{r}(s)) \, ds
+\end{equation}
+
+\subsubsection{Differential Dipole Formulation}
+\begin{equation}
+E_{\text{bond,dipole}} = -\int_0^L \vec{E}(\vec{r}(s)) \cdot \vec{r}(s) \lambda(s) \, ds
+\end{equation}
+
+\subsection{Uniform Field}
+
+For $\vec{E} = \vec{F}$ and $V(\vec{r}) = V_0 - \vec{F} \cdot \vec{r}$:
+
+\textbf{Standard:}
+\begin{align}
+E_{\text{bond,standard}} &= \int_0^L \lambda(s) (V_0 - \vec{F} \cdot \vec{r}(s)) \, ds \\
+&= V_0 \int_0^L \lambda(s) \, ds - \vec{F} \cdot \int_0^L \vec{r}(s) \lambda(s) \, ds \\
+&= V_0 Q_{\text{bond}} - \vec{F} \cdot \vec{\mu}_{\text{bond}}
+\end{align}
+
+\textbf{Dipole:}
+\begin{align}
+E_{\text{bond,dipole}} &= -\int_0^L \vec{F} \cdot \vec{r}(s) \lambda(s) \, ds \\
+&= -\vec{F} \cdot \int_0^L \vec{r}(s) \lambda(s) \, ds \\
+&= -\vec{F} \cdot \vec{\mu}_{\text{bond}}
+\end{align}
+
+For neutral bond ($Q_{\text{bond}} = 0$):
+\begin{equation}
+\boxed{E_{\text{bond,standard}} = E_{\text{bond,dipole}} = -\vec{F} \cdot \vec{\mu}_{\text{bond}}}
+\end{equation}
+
+\subsection{Non-Uniform Field}
+
+For non-uniform fields:
+\begin{equation}
+\int_0^L \lambda(s) V(\vec{r}(s)) \, ds \neq -\int_0^L \vec{E}(\vec{r}(s)) \cdot \vec{r}(s) \lambda(s) \, ds
+\end{equation}
+
+The dipole formulation is an \textbf{approximation} that misses higher-order multipole contributions.
+
+\section{Correct Differential Formulation}
+
+\subsection{The Key Issue}
+
+The problem with $-\int \vec{E} \cdot \vec{r} \rho \, d^3r$ is that it uses $\vec{r}$ (position relative to origin), not the proper potential.
+
+\subsection{Alternative: Integration by Parts}
+
+For a neutral distribution, we can relate the two formulations:
+
+Starting from $E = \int \rho V \, d^3r$ with $\vec{E} = -\nabla V$:
+
+Using integration by parts (and assuming $\rho$ vanishes at infinity):
+\begin{align}
+E &= \int \rho(\vec{r}) V(\vec{r}) \, d^3r \\
+&= -\int \rho(\vec{r}) \int_{\vec{r}_0}^{\vec{r}} \vec{E}(\vec{r}') \cdot d\vec{r}' \, d^3r + V(\vec{r}_0) \int \rho \, d^3r
+\end{align}
+
+For neutral systems ($\int \rho \, d^3r = 0$):
+\begin{equation}
+E = -\int \rho(\vec{r}) \left[\int_{\vec{r}_0}^{\vec{r}} \vec{E}(\vec{r}') \cdot d\vec{r}'\right] d^3r
+\end{equation}
+
+This is NOT the same as $-\int \vec{E}(\vec{r}) \cdot \vec{r} \rho(\vec{r}) \, d^3r$ unless the field is uniform.
+
+\section{Summary and Conclusions}
+
+\begin{enumerate}
+    \item \textbf{Dimensionality}: The formulation $-\int \vec{E}(\vec{r}) \cdot d\vec{\mu}$ with $d\vec{\mu} = \vec{r} \rho(\vec{r}) d^3r$ is dimensionally correct ✓
+
+    \item \textbf{Uniform fields}: For uniform $\vec{E} = \vec{F}$ and neutral systems:
+    \begin{equation}
+    \boxed{\int \rho V \, d^3r = -\int \vec{F} \cdot \vec{r} \rho \, d^3r = -\vec{F} \cdot \vec{\mu}_{\text{total}}}
+    \end{equation}
+    The formulations are \textbf{IDENTICAL} ✓
+
+    \item \textbf{Non-uniform fields}: The formulations are \textbf{DIFFERENT}:
+    \begin{equation}
+    \int \rho V \, d^3r \neq -\int \vec{E}(\vec{r}) \cdot \vec{r} \rho \, d^3r
+    \end{equation}
+
+    \item \textbf{Physical reason}: $V(\vec{r}) \neq -\vec{E}(\vec{r}) \cdot \vec{r}$ for non-uniform fields
+
+    Only for uniform fields: $V(\vec{r}) = V_0 - \vec{F} \cdot \vec{r}$, so they match.
+
+    \item \textbf{Bond formulation}: Same conclusions apply to 1D distributions along bonds:
+    \begin{itemize}
+        \item Uniform field: $\int \lambda V \, ds = -\int \vec{F} \cdot \vec{r} \lambda \, ds$ ✓
+        \item Non-uniform field: $\int \lambda V \, ds \neq -\int \vec{E} \cdot \vec{r} \lambda \, ds$ ✗
+    \end{itemize}
+
+    \item \textbf{Recommendation}: Always use $\boxed{E = \int \rho(\vec{r}) V(\vec{r}) \, d^3r}$ as ground truth
+\end{enumerate}
+
+\section{Answer to Original Question}
+
+\textbf{Question}: If we take the integral of the electric field over the bond dipole as the total stabilization, would we get the same thing as the potential and electron density?
+
+\textbf{Answer}:
+\begin{itemize}
+    \item \textcolor{green}{\textbf{YES}} for uniform electric fields on neutral systems
+    \item \textcolor{red}{\textbf{NO}} for non-uniform electric fields
+    \item The exact formula $\int \rho V \, dV$ is always correct
+    \item The dipole formula $-\int \vec{E} \cdot \vec{r} \rho \, dV$ is an approximation for non-uniform fields
+\end{itemize}
+
+The bond dipole \textbf{should} be in differential formalism as:
+\begin{equation}
+d\vec{\mu} = \vec{r}(s) \lambda(s) \, ds \quad \text{(for 1D)} \quad \text{or} \quad d\vec{\mu} = \vec{r} \rho(\vec{r}) \, d^3r \quad \text{(for 3D)}
+\end{equation}
+
+\end{document}
