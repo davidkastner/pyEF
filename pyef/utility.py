@@ -38,7 +38,6 @@ from distutils.dir_util import copy_tree
 import math
 import time
 import basis_set_exchange as bse
-from .geometry import Geometry
 import json
 
 # ============================================================================
@@ -388,6 +387,7 @@ class MoldenObject:
 
     def fix_ECPmolden(self, owd, ECP):
         """Prepares output terachem data for analysis, mainly isolating final .xyz frame and naming .molden file appropriotely"""
+        from .geometry import Geometry  # Import here to avoid circular dependency
         FAMILIES = ["lanl2dz", "stuttgart_rsc", "def2", "crenbl"]
         # Hybrid families with cutoff rules
         HYBRID_FAMILIES = {

@@ -717,7 +717,7 @@ Input commands that were to be sent:
     # Electrostatic Potential (ESP) Calculation Methods
     # =========================================================================
 
-    def calcesp(self, path_to_xyz, espatom_idx, charge_range, charge_file):
+    def ESPfromMonopole(self, path_to_xyz, espatom_idx, charge_range, charge_file):
         """Calculate electrostatic potential at specified atom.
 
         Parameters
@@ -1308,7 +1308,7 @@ Input commands that were to be sent:
         unique_atoms = list(dict.fromkeys(atoms_to_include))
 
         # Calculate ESP
-        [coord_shell_ESP, atom_type] = self.calcesp(path_to_xyz, metal_idx, unique_atoms, charge_file)
+        [coord_shell_ESP, atom_type] = self.ESPfromMonopole(path_to_xyz, metal_idx, unique_atoms, charge_file)
         return coord_shell_ESP
 
 
@@ -1596,7 +1596,7 @@ Input commands that were to be sent:
                         results_dict['Total ESP'] = final_esp
                         results_dict['Atom'] = atom_name
                     else:
-                        [ESP_all, atom_type] = self.calcesp(
+                        [ESP_all, atom_type] = self.ESPfromMonopole(
                             file_path_xyz, atom_idx, all_lines, file_path_monopole
                         )
                         [total_charge, partial_charge_atom] = Electrostatics.charge_atom(
