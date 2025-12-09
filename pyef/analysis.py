@@ -473,12 +473,13 @@ Input commands that were to be sent:
         """
         owd = os.getcwd()
         basis_set_fam = self.config['ECP']
-        folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         print('   > Re-formatting .molden files to fix ECP artifacts')
 
         for f in list_of_folders:
-            folder_path = os.path.join(owd, f + folder_to_molden)
+            # Convert f to string if it's not already (handles int folder names)
+            f = str(f)
+            folder_path = os.path.join(owd, f)
             final_optim_molden = os.path.join(
                 folder_path, self.config['molden_filename']
             )
@@ -502,7 +503,6 @@ Input commands that were to be sent:
         - Removes folders from processing list if files cannot be located
         """
 
-        folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd()
         print('   > Pre-processing data')
@@ -510,7 +510,9 @@ Input commands that were to be sent:
 
         for f in list_of_folders:
             try:
-                folder_path = os.path.join(owd, f + folder_to_molden)
+                # Convert f to string if it's not already (handles int folder names)
+                f = str(f)
+                folder_path = os.path.join(owd, f)
                 print('      > .molden and .xyz file should be located here: ' + folder_path)
 
                 # Processing optim.xyz to create final_optim.xyz
@@ -1544,21 +1546,25 @@ Input commands that were to be sent:
 
         self.config['dielectric'] = dielectric
         metal_idxs = self.lst_of_tmcm_idx
-        folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
         final_structure_file = self.config['xyzfilename']
+        # Handle xyzfilename being a list (take first element)
+        if isinstance(final_structure_file, list):
+            final_structure_file = final_structure_file[0]
 
         owd = os.getcwd()
         allspeciesdict = []
         counter = 0
 
         for f in list_of_file:
+            # Convert f to string if it's not already (handles int folder names)
+            f = str(f)
             print(f'-----------------{f}------------------')
             atom_idx = metal_idxs[counter]
             counter += 1
             results_dict = {}
             results_dict['Name'] = f
-            file_path_xyz = f"{owd}/{f + folder_to_molden}{final_structure_file}"
+            file_path_xyz = f"{owd}/{f}/{final_structure_file}"
 
             # Calculate total lines for monopole calculations
             if not use_multipole or include_decay:
@@ -1573,7 +1579,6 @@ Input commands that were to be sent:
                     comp_cost = self.multiwfn.partitionCharge(
                         multipole_bool=use_multipole,
                         f=f,
-                        folder_to_molden=folder_to_molden,
                         multiwfn_path=multiwfn_path,
                         atmrad_path=atmrad_path,
                         charge_type=charge_type,
@@ -1584,9 +1589,9 @@ Input commands that were to be sent:
                         print(f"WARNING: Charge calculation failed for {charge_type} in {f}")
                         continue
 
-                    file_path_multipole = f"{owd}/{f + folder_to_molden}Multipole{charge_type}.txt"
-                    file_path_monopole = f"{owd}/{f + folder_to_molden}Charges{charge_type}.txt"
-                    path_to_xyz = f"{owd}/{f + folder_to_molden}{final_structure_file}"
+                    file_path_multipole = f"{owd}/{f}/Multipole{charge_type}.txt"
+                    file_path_monopole = f"{owd}/{f}/Charges{charge_type}.txt"
+                    path_to_xyz = f"{owd}/{f}/{final_structure_file}"
 
                     # Calculate ESP using appropriate method
                     if use_multipole:
@@ -1706,9 +1711,11 @@ Input commands that were to be sent:
 
         self.config['dielectric'] = dielectric
         metal_idxs = self.lst_of_tmcm_idx
-        folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
         final_structure_file = self.config['xyzfilename']
+        # Handle xyzfilename being a list (take first element)
+        if isinstance(final_structure_file, list):
+            final_structure_file = final_structure_file[0]
 
         # Handle visualization settings
         if visualize is None:
@@ -1726,8 +1733,10 @@ Input commands that were to be sent:
 
         for f in list_of_file:
             try:
+                # Convert f to string if it's not already (handles int folder names)
+                f = str(f)
                 results_dict = {}
-                file_path_xyz = f"{owd}/{f + folder_to_molden}{final_structure_file}"
+                file_path_xyz = f"{owd}/{f}/{final_structure_file}"
                 total_lines = Electrostatics.mapcount(file_path_xyz)
                 init_all_lines = range(0, total_lines - 2)
 
@@ -1766,7 +1775,7 @@ Input commands that were to be sent:
 
                 # Partition charges
                 comp_cost = self.multiwfn.partitionCharge(
-                    multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd
+                    multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd
                 )
 
                 if comp_cost == -1:
@@ -1774,8 +1783,8 @@ Input commands that were to be sent:
                     counter += 1
                     continue
 
-                file_path_multipole = f"{owd}/{f + folder_to_molden}Multipole{charge_type}.txt"
-                file_path_charges = f"{owd}/{f + folder_to_molden}Charges{charge_type}.txt"
+                file_path_multipole = f"{owd}/{f}Multipole{charge_type}.txt"
+                file_path_charges = f"{owd}/{f}Charges{charge_type}.txt"
 
                 # Handle point charges
                 df_ptchg = None
@@ -1893,7 +1902,7 @@ Input commands that were to be sent:
 
 
 
-    def partitionCharge(self, multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type,  owd):
+    def partitionCharge(self, multipole_bool, f, multiwfn_path, atmrad_path, charge_type,  owd):
         '''
         Partition electron density using Multiwfn to generate partial charges or multipole moments.
 
@@ -1905,9 +1914,7 @@ Input commands that were to be sent:
         multipole_bool : bool
             True to compute multipole moments, False for monopoles only
         f : str
-            Folder name containing the calculation
-        folder_to_molden : str
-            Path from folder to molden file location
+            Complete path to folder containing the calculation
         multiwfn_path : str
             Path to Multiwfn executable
         atmrad_path : str
@@ -1925,12 +1932,15 @@ Input commands that were to be sent:
         '''
         molden_filename = self.config['molden_filename']
         final_structure_file = self.config['xyzfilename']
+        # Handle xyzfilename being a list (take first element)
+        if isinstance(final_structure_file, list):
+            final_structure_file = final_structure_file[0]
         print(f"Do we need to run calcs?: {self.config['rerun']}")
         comp_cost = 0  # Default to 0 for "already exists" case
         num_atoms = 0
         need_to_run_calculation = True
         os.chdir(owd)
-        os.chdir(f + folder_to_molden)
+        os.chdir(f)
         #subprocess.call(multiwfn_module, shell=True)
         file_path_multipole = f"{os.getcwd()}/{self.config['chgprefix']}Multipole{charge_type}.txt"
         file_path_monopole = f"{os.getcwd()}/{self.config['chgprefix']}Charges{charge_type}.txt"
@@ -2038,24 +2048,28 @@ Input commands that were to be sent:
 
 
         # Access Class Variables
-        folder_to_molden = self.folder_to_file_path
         list_of_folders = self.lst_of_folders
         owd = os.getcwd() # Old working directory
         molden_filename = self.config['molden_filename']
         final_structure_file = self.config['xyzfilename']
+        # Handle xyzfilename being a list (take first element)
+        if isinstance(final_structure_file, list):
+            final_structure_file = final_structure_file[0]
         frame_num_lst = []
 
 
         for f in list_of_folders:
             try:
-                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, folder_to_molden, multiwfn_path, atmrad_path, charge_type, owd)
+                # Convert f to string if it's not already (handles int folder names)
+                f = str(f)
+                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd)
                 #If the calculation is not successful, continue
                 if comp_cost == -1:
                     print(f"Warning: Charge calculation failed for {f}, skipping")
                     continue
-                file_path_multipole = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
-                file_path_monopole = f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
-                file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
+                file_path_multipole = f"{os.getcwd()}/{f}/Multipole{charge_type}.txt"
+                file_path_monopole = f"{os.getcwd()}/{f}/Charges{charge_type}.txt"
+                file_path_xyz = f"{os.getcwd()}/{f}/{final_structure_file}"
                     
                 if multipole_bool:
                     xyz_fp =  file_path_xyz
@@ -2141,17 +2155,18 @@ Input commands that were to be sent:
         Will Create a csv file entitled partial_chg_filename.csv with partial charge info
         '''
        # Access Class Variables
-        folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
 
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
         counter = 0  # Iterator to account for atomic indices of interest
         for f in list_of_file:
-            print('-----------------' + str(f) + '------------------')
+            # Convert f to string if it's not already (handles int folder names)
+            f = str(f)
+            print('-----------------' + f + '------------------')
             counter = counter + 1
             os.chdir(owd)
-            os.chdir(f + folder_to_molden)
+            os.chdir(f)
             subprocess.call(multiwfn_module, shell=True)
             command_A = f"{multiwfn_path} {self.config['molden_filename']}"
             results_dir = os.getcwd() + '/'
@@ -2281,7 +2296,6 @@ Input commands that were to be sent:
         Will Create a csv file entitled partial_chg_filename.csv with partial charge info
         '''
        # Access Class Variables
-        folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
 
         owd = os.getcwd() # Old working directory
@@ -2290,15 +2304,20 @@ Input commands that were to be sent:
 
         if multipole_mode:
             final_structure_file = self.config['xyzfilename']
+            # Handle xyzfilename being a list (take first element)
+            if isinstance(final_structure_file, list):
+                final_structure_file = final_structure_file[0]
             polarization_file = "Multipole" + polarization_scheme + ".txt"
             molden_filename = self.config['molden_filename']
 
             file_idx = 0
             for f in list_of_file:
-                print('-----------------' + str(f) + '------------------')
+                # Convert f to string if it's not already (handles int folder names)
+                f = str(f)
+                print('-----------------' + f + '------------------')
                 counter = counter + 1
                 os.chdir(owd)
-                os.chdir(f + folder_to_molden)
+                os.chdir(f)
                 results_dir = os.getcwd() + '/'
                 # Check if the atomic polarizations have been computed
                 path_to_pol = os.path.join(os.getcwd(), polarization_file)
@@ -2356,10 +2375,12 @@ Input commands that were to be sent:
          
         else:
             for f in list_of_file:
-                print('-----------------' + str(f) + '------------------')
+                # Convert f to string if it's not already (handles int folder names)
+                f = str(f)
+                print('-----------------' + f + '------------------')
                 counter = counter + 1
                 os.chdir(owd)
-                os.chdir(f + folder_to_molden)
+                os.chdir(f)
                 #working in key mode!
                 for key in charge_types:
                     try:
@@ -2789,7 +2810,7 @@ Input commands that were to be sent:
 
     def getElectrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path,
                                               substrate_idxs, charge_type='Hirshfeld_I',
-                                              name_dataStorage='estaticFile_tensor', env_idxs=None,
+                                              name_dataStorage='estatic', env_idxs=None,
                                               decompose_atomwise=False, visualize=None,
                                               multipole_order=2, substrate_multipole_order=None,
                                               env_multipole_order=None):
@@ -2899,9 +2920,11 @@ Input commands that were to be sent:
         ... )
         """
         dielectric = self.config['dielectric']
-        folder_to_molden = self.folder_to_file_path
         list_of_file = self.lst_of_folders
         final_structure_file = self.config['xyzfilename']
+        # Handle xyzfilename being a list (take first element)
+        if isinstance(final_structure_file, list):
+            final_structure_file = final_structure_file[0]
 
         # Handle visualization settings
         if visualize is None:
@@ -2926,9 +2949,11 @@ Input commands that were to be sent:
         need_multipoles = (substrate_multipole_order >= 2 or env_multipole_order >= 2)
 
         for f in list_of_file:
+            # Convert f to string if it's not already (handles int folder names)
+            f = str(f)
             substrate_idx = substrate_idxs[counter]
             results_dict = {}
-            file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
+            file_path_xyz = f"{os.getcwd()}/{f}/{final_structure_file}"
             total_lines = Electrostatics.mapcount(file_path_xyz)
             init_all_lines = np.arange(0, total_lines - 2)
 
@@ -2938,7 +2963,7 @@ Input commands that were to be sent:
                 env_idx = env_idxs[counter]
 
             # Partition charges (with multipole analysis if needed)
-            comp_cost = self.multiwfn.partitionCharge(need_multipoles, f, folder_to_molden,
+            comp_cost = self.multiwfn.partitionCharge(need_multipoles, f,
                                             multiwfn_path, atmrad_path, charge_type, owd)
 
             if comp_cost == -1:
@@ -2951,14 +2976,15 @@ Input commands that were to be sent:
             df_geom = geom.getGeomInfo()
 
             # Load charge/multipole data with automatic fallback
-            multipole_name = f"{os.getcwd()}/{f + folder_to_molden}Multipole{charge_type}.txt"
-            monopole_name = f"{os.getcwd()}/{f + folder_to_molden}Charges{charge_type}.txt"
+            multipole_name = f"{os.getcwd()}/{f}/Multipole{charge_type}.txt"
+            monopole_name = f"{os.getcwd()}/{f}/Charges{charge_type}.txt"
 
             # Try to load multipole file first, fall back to charges if not available
             multipole_available = os.path.exists(multipole_name)
 
             if need_multipoles and not multipole_available:
                 print(f"Warning: Multipole file not found for {f}, falling back to charges-only")
+                print(f"  Expected path: {multipole_name}")
                 print(f"  Requested multipole_order={multipole_order}, but only charges available")
                 print(f"  Setting both substrate and environment to monopole-only")
                 substrate_multipole_order = 1
@@ -2967,10 +2993,26 @@ Input commands that were to be sent:
 
             if multipole_available and need_multipoles:
                 # Load multipole data
+                print(f"Loading multipole data from: {multipole_name}")
                 atomicDict = MultiwfnInterface.getmultipoles(multipole_name)
-                df_all = pd.DataFrame(atomicDict)
-                df_all['Index'] = df_all['Index'].astype(int) - 1
-                multipole_dict = {int(row['Index']): row for _, row in df_all.iterrows()}
+                if not atomicDict:
+                    print(f"Warning: Multipole file exists but parsing failed for {f}")
+                    print(f"  File path: {multipole_name}")
+                    print(f"  Falling back to charges-only mode")
+                    substrate_multipole_order = 1
+                    env_multipole_order = 1
+                    need_multipoles = False
+                    # Load charges instead
+                    df_all = pd.read_csv(monopole_name, sep='\s+',
+                                        names=["Element", 'x', 'y', 'z', "Atom_Charge"])
+                    df_all["Index"] = range(0, len(df_all))
+                    df_all['Dipole_Moment'] = [[0.0, 0.0, 0.0]] * len(df_all)
+                    df_all['Quadrupole_Moment'] = [np.zeros((3, 3))] * len(df_all)
+                    multipole_dict = {int(row['Index']): row for _, row in df_all.iterrows()}
+                else:
+                    df_all = pd.DataFrame(atomicDict)
+                    df_all['Index'] = df_all['Index'].astype(int) - 1
+                    multipole_dict = {int(row['Index']): row for _, row in df_all.iterrows()}
             else:
                 # Load charges-only data
                 df_all = pd.read_csv(monopole_name, sep='\s+',
@@ -3117,8 +3159,10 @@ Input commands that were to be sent:
                             if 0 <= atom_idx < total_atoms:
                                 b_factors[atom_idx] = row['Energy_Contribution_kcal_mol']
 
+                        name_abbrev = f.split('/')[0]
+
                         # Create PDB file
-                        pdb_name = f'Estabilization_tensor_{f}_sub{substrate_multipole_order}_env{env_multipole_order}.pdb'
+                        pdb_name = f'Estabilization_tensor_{name_abbrev}_sub{substrate_multipole_order}_env{env_multipole_order}.pdb'
                         if multipole_available and (substrate_multipole_order >= 2 or env_multipole_order >= 2):
                             Visualize(file_path_xyz).makePDB(multipole_name, b_factors, pdb_name)
                         else:
@@ -3134,7 +3178,7 @@ Input commands that were to be sent:
 
         # Create output DataFrames
         df = pd.DataFrame(allspeciesdict)
-        df.to_csv(name_dataStorage + '.csv', index=False)
+        df.to_csv(name_dataStorage + 'multipole_' + str(multipole_order) + '.csv', index=False)
 
         if decompose_atomwise:
             df_atomwise = pd.DataFrame(all_atomwise_data)

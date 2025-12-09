@@ -213,7 +213,7 @@ class MultiwfnInterface:
             print(f"{'='*60}\n")
             raise
 
-    def partitionCharge(self, multipole_bool, f, folder_to_molden,
+    def partitionCharge(self, multipole_bool, f,
                        multiwfn_path, atmrad_path, charge_type, owd):
         """
         Partition electron density using Multiwfn to generate partial charges or multipole moments.
@@ -226,9 +226,7 @@ class MultiwfnInterface:
         multipole_bool : bool
             True to compute multipole moments, False for monopoles only
         f : str
-            Folder name containing the calculation
-        folder_to_molden : str
-            Path from folder to molden file location
+            Complete path to folder containing the calculation
         multiwfn_path : str
             Path to Multiwfn executable
         atmrad_path : str
@@ -244,15 +242,21 @@ class MultiwfnInterface:
             Computation time in seconds, 0 if calculation was previously completed (skipped),
             or -1 if calculation failed
         """
+        # Handle f being a list (take first element)
+        if isinstance(f, list):
+            f = f[0]
         molden_filename = self.config['molden_filename']
         final_structure_file = self.config['xyzfilename']
+        # Handle xyzfilename being a list (take first element)
+        if isinstance(final_structure_file, list):
+            final_structure_file = final_structure_file[0]
         print(f"Do we need to run calcs?: {self.config['rerun']}")
         comp_cost = 0  # Default to 0 for "already exists" case
         num_atoms = 0
         need_to_run_calculation = True
 
         os.chdir(owd)
-        os.chdir(f + folder_to_molden)
+        os.chdir(f)
 
         file_path_multipole = f"{os.getcwd()}/{self.config['chgprefix']}Multipole{charge_type}.txt"
         file_path_monopole = f"{os.getcwd()}/{self.config['chgprefix']}Charges{charge_type}.txt"
