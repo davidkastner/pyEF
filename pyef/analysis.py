@@ -1430,7 +1430,7 @@ Input commands that were to be sent:
     # These unified methods replace the previous separate implementations
     # ============================================================================
 
-    def getESP(self, charge_types, ESPdata_filename, multiwfn_path, atmrad_path,
+    def getESP(self, charge_types, ESPdata_filename, multiwfn_path,
                use_multipole=False, include_decay=False, include_coord_shells=False,
                visualize=None, dielectric=1):
         """Unified ESP calculation method supporting multiple modes.
@@ -1449,8 +1449,6 @@ Input commands that were to be sent:
             Output CSV filename (without extension).
         multiwfn_path : str
             Path to Multiwfn executable.
-        atmrad_path : str
-            Path to atmrad executable.
         use_multipole : bool, optional
             If True, use multipole expansion; if False, use monopole charges (default: False).
         include_decay : bool, optional
@@ -1536,7 +1534,6 @@ Input commands that were to be sent:
                         multipole_bool=use_multipole,
                         f=f,
                         multiwfn_path=multiwfn_path,
-                        atmrad_path=atmrad_path,
                         charge_type=charge_type,
                         owd=owd,
                         molden_filename=molden_filename,
@@ -1637,7 +1634,7 @@ Input commands that were to be sent:
         df.to_csv(f"{ESPdata_filename}.csv")
         return df
 
-    def getEfield(self, charge_types, Efielddata_filename, multiwfn_path, atmrad_path,
+    def getEfield(self, charge_types, Efielddata_filename, multiwfn_path,
                   multipole_bool=False, input_bond_indices=[], auto_find_bonds=False,
                   save_atomwise_decomposition=False, visualize=None, dielectric=1):
         """Unified E-field calculation method supporting multiple modes.
@@ -1653,8 +1650,6 @@ Input commands that were to be sent:
             Output CSV filename (without extension).
         multiwfn_path : str
             Path to Multiwfn executable.
-        atmrad_path : str
-            Path to atmrad executable.
         multipole_bool : bool, optional
             If True, use multipole expansion; if False, use monopole charges (default: True).
         input_bond_indices : list, optional
@@ -1766,7 +1761,7 @@ Input commands that were to be sent:
                 molden_filename = os.path.basename(self.molden_paths[counter])
                 xyz_filename = os.path.basename(self.xyz_paths[counter])
                 comp_cost = self.multiwfn.partitionCharge(
-                    multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd,
+                    multipole_bool, f, multiwfn_path, charge_type, owd,
                     molden_filename=molden_filename, xyz_filename=xyz_filename
                 )
 
@@ -1927,7 +1922,7 @@ Input commands that were to be sent:
 
 
 
-    def partitionCharge(self, multipole_bool, f, multiwfn_path, atmrad_path, charge_type,  owd):
+    def partitionCharge(self, multipole_bool, f, multiwfn_path, charge_type, owd):
         '''
         Partition electron density using Multiwfn to generate partial charges or multipole moments.
 
@@ -1942,8 +1937,6 @@ Input commands that were to be sent:
             Complete path to folder containing the calculation
         multiwfn_path : str
             Path to Multiwfn executable
-        atmrad_path : str
-            Path to atmrad directory (for Hirshfeld-I calculations)
         charge_type : str
             Partitioning scheme (e.g., 'Hirshfeld', 'CHELPG', 'Hirshfeld_I')
         owd : str
@@ -1954,6 +1947,11 @@ Input commands that were to be sent:
         comp_cost : float
             Computation time in seconds, 0 if calculation was previously completed (skipped),
             or -1 if calculation failed
+
+        Notes:
+        ------
+        For Hirshfeld-I calculations, atmrad files are automatically loaded from
+        pyef.resources.atmrad (bundled with the package).
         '''
         molden_filename = self.config['molden_filename']
         final_structure_file = self.config['xyzfilename']
@@ -2003,8 +2001,12 @@ Input commands that were to be sent:
                     if charge_type == 'Hirshfeld_I':
                         #get the number of basis functions
                         num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+
+                        # Use bundled atmrad from package resources
+                        with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+
                         print(f'Current num of basis is: {num_basis}')
                         print(f'The current max num is: {self.config["maxIHirshFuzzyBasis"]}')
                         if  num_basis > self.config['maxIHirshFuzzyBasis']:
@@ -2032,8 +2034,11 @@ Input commands that were to be sent:
                         print(f'Number of basis functions: {num_basis}')
                         if num_basis > self.config['maxIHirshBasis']:
                             commands = ['7', '15', '-2', '1', '\n', 'y', '0', 'q']
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+
+                        # Use bundled atmrad from package resources
+                        with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                         #if too many atoms will need to change calc to run with reasonable memory
 
                     # Use centralized Multiwfn runner
@@ -2060,7 +2065,7 @@ Input commands that were to be sent:
         os.chdir(owd)
         return comp_cost
 
-    def get_residueDipoles(self, charge_type, multiwfn_path, atmrad_path, multipole_bool, solute_indices = [], num_atoms_solvent=0):
+    def get_residueDipoles(self, charge_type, multiwfn_path, multipole_bool, solute_indices = [], num_atoms_solvent=0):
         '''
         Function computes a partial charges of all atoms in one system... if the desired file already exists the just return it!!
         Inputs:
@@ -2090,7 +2095,7 @@ Input commands that were to be sent:
                 # Extract actual filenames from paths
                 molden_filename = os.path.basename(self.molden_paths[counter])
                 xyz_filename = os.path.basename(self.xyz_paths[counter])
-                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd,
+                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, multiwfn_path, charge_type, owd,
                                                          molden_filename=molden_filename, xyz_filename=xyz_filename)
                 #If the calculation is not successful, continue
                 if comp_cost == -1:
@@ -2159,7 +2164,7 @@ Input commands that were to be sent:
 
 
 
-    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path, atmrad_path):
+    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path):
         '''
         Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
         
@@ -2173,7 +2178,7 @@ Input commands that were to be sent:
             Name of the output file name    
         multiwfn_path: string
             Path to the multiwfn executable
-        atmrad_path: string
+
             Path to the atmrad executable
         
        Outputs:
@@ -2211,7 +2216,8 @@ Input commands that were to be sent:
                     full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
                     path_to_xyz = os.getcwd() + '/' + self.config['xyzfilename']
                     if key == "Hirshfeld_I":
-                        atmrad_src = atmrad_path
+                        with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
                         copy_tree(atmrad_src, results_dir + 'atmrad/')
                     try:
                         for atom_idx in lst_atom_idxs:
@@ -2297,7 +2303,7 @@ Input commands that were to be sent:
 
 
 
-    def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, atmrad_path, multipole_mode=True, polarization_scheme='Hirshfeld_I'):
+    def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multipole_mode=True, polarization_scheme='Hirshfeld_I'):
         '''Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
 
         Inputs:
@@ -2310,7 +2316,7 @@ Input commands that were to be sent:
             Name of the output file name
         multiwfn_path: string
             Path to the multiwfn executable
-        atmrad_path: string
+
             Path to the atmrad executable
         multipole_mode: boolean
             If True, will use multipole mode to compute partial charges, if False will use the standard method
@@ -2373,7 +2379,8 @@ Input commands that were to be sent:
                     command_A = f"{multiwfn_path} final_optim.molden"
                     print('Atomic Multipole Calculation initialized')
                     # Now Run the calculation for atomic dipole and quadrupole moment
-                    atmrad_src = atmrad_path
+                    with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
                     copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
                     print(f"   > Submitting Multiwfn job using: {Command_Polarization}")
                     proc = subprocess.Popen(Command_Polarization, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
@@ -2413,7 +2420,8 @@ Input commands that were to be sent:
                     try:
                         full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
                         if key == "Hirshfeld_I":
-                            atmrad_src = atmrad_path
+                            with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
                             copy_tree(atmrad_src, results_dir + 'atmrad/')
                         try:
                             for res_name in res_dict.keys():
@@ -2835,7 +2843,7 @@ Input commands that were to be sent:
 
         return np.array(M)
 
-    def getElectrostatic_stabilization(self, multiwfn_path, atmrad_path,
+    def getElectrostatic_stabilization(self, multiwfn_path,
                                               substrate_idxs, charge_type='Hirshfeld_I',
                                               name_dataStorage='estatic', env_idxs=None,
                                               save_atomwise_decomposition=False, visualize=None,
@@ -2864,8 +2872,6 @@ Input commands that were to be sent:
         -----------
         multiwfn_path : str
             Path to Multiwfn executable
-        atmrad_path : str
-            Path to atmrad executable
         substrate_idxs : list
             List of substrate atom indices (the molecule being stabilized)
         charge_type : str, optional
@@ -2923,14 +2929,14 @@ Input commands that were to be sent:
         ---------
         >>> # Compute monopole + dipole + dipole-dipole interactions
         >>> df = estat.get_Electrostatic_stabilization_tensor(
-        ...     multiwfn_path, atmrad_path,
+        ...     multiwfn_path,
         ...     substrate_idxs=[[0, 1, 2]],  # 3-atom substrate
         ...     multipole_order=2  # Include dipole-dipole terms
         ... )
 
         >>> # Include quadrupole terms with atom-wise decomposition
         >>> df, df_atomwise = estat.get_Electrostatic_stabilization_tensor(
-        ...     multiwfn_path, atmrad_path,
+        ...     multiwfn_path,
         ...     substrate_idxs=[[0, 1, 2]],
         ...     multipole_order=3,
         ...     save_atomwise_decomposition=True
@@ -2938,7 +2944,7 @@ Input commands that were to be sent:
 
         >>> # QM/MM: QM substrate (with dipoles) interacting with MM environment (charges only)
         >>> df = estat.get_Electrostatic_stabilization_tensor(
-        ...     multiwfn_path, atmrad_path,
+        ...     multiwfn_path,
         ...     substrate_idxs=[[0, 1, 2]],  # QM region
         ...     substrate_multipole_order=2,  # QM: charges + dipoles
         ...     env_multipole_order=1         # MM: charges only
@@ -2993,7 +2999,7 @@ Input commands that were to be sent:
             molden_filename = os.path.basename(self.molden_paths[counter])
             xyz_filename = os.path.basename(self.xyz_paths[counter])
             comp_cost = self.multiwfn.partitionCharge(need_multipoles, f,
-                                            multiwfn_path, atmrad_path, charge_type, owd,
+                                            multiwfn_path, charge_type, owd,
                                             molden_filename=molden_filename, xyz_filename=xyz_filename)
 
             if comp_cost == -1:

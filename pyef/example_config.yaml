@@ -6,7 +6,6 @@
 # ============================================================
 input: jobs.csv                          # Path to job batch CSV file
 multiwfn_path: /path/to/Multiwfn         # Path to Multiwfn executable
-atmrad_path: /path/to/atmrad             # Path to atmrad directory
 
 # ============================================================
 # CHARGE PARTITIONING OPTIONS

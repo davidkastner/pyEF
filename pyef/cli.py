@@ -186,7 +186,7 @@ def read_file_lines(file_path):
 
 def run_analysis(job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_indices, dielectric,
          geom_flag,
-         multiwfn_path, atmrad_path,
+         multiwfn_path,
          charge_types=['Hirshfeld_I'], multipole_bool=True, use_multipole=False,
          save_atomwise_decomposition=False, substrate_idxs=None, env_idxs=None, multipole_order=2,
          include_ptchgs=False, ptchg_file='', dielectric_scale=1.0, use_ecp=False, exclude_atoms=[]):
@@ -213,8 +213,6 @@ def run_analysis(job_name, molden_paths, xyz_paths, analysis_types, metal_indice
         Run geometry checks
     multiwfn_path : str
         Path to Multiwfn executable
-    atmrad_path : str
-        Path to atmrad file
     charge_types : list of str, optional
         Charge partitioning schemes (default: ['Hirshfeld_I'])
     multipole_bool : bool, optional
@@ -320,14 +318,14 @@ def run_analysis(job_name, molden_paths, xyz_paths, analysis_types, metal_indice
             chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
             ESPdata_filename = f'{analysis_type}_{job_name}_{chg_type}'
             dataObject.getESP(charge_types, ESPdata_filename,
-                           multiwfn_path, atmrad_path, use_multipole=use_multipole,
+                           multiwfn_path, use_multipole=use_multipole,
                            dielectric=dielectric)
 
         elif analysis_type == 'ef':
             chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
             Efielddata_filename = f'{analysis_type}_{job_name}_{chg_type}'
             dataObject.getEfield(chg_type,
-                               Efielddata_filename, multiwfn_path, atmrad_path,
+                               Efielddata_filename, multiwfn_path,
                                multipole_bool=multipole_bool, input_bond_indices=filtered_bonds,
                                save_atomwise_decomposition=save_atomwise_decomposition, dielectric=dielectric)
 
@@ -338,7 +336,7 @@ def run_analysis(job_name, molden_paths, xyz_paths, analysis_types, metal_indice
                 chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
                 estab_filename = f'{analysis_type}_{job_name}_{chg_type}'
                 dataObject.getElectrostatic_stabilization(
-                    multiwfn_path, atmrad_path,
+                    multiwfn_path,
                     substrate_idxs=substrate_idxs,
                     charge_type=chg_type,
                     name_dataStorage=estab_filename,
@@ -368,8 +366,6 @@ def run(config):
     run_estab = config_data.get('estab', False)
     run_geometry_check = config_data.get('geometry_check', False)
     multiwfn_path = config_data.get('multiwfn_path', False)
-    atmrad_path = config_data.get('atmrad_path', False)
-
     # Additional configuration options
     charge_types = config_data.get('charge_types', ['Hirshfeld_I'])
     multipole_bool = config_data.get('multipole', True)
@@ -408,7 +404,7 @@ def run(config):
     run_analysis(
         job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_indices, dielectric,
         run_geometry_check,
-        multiwfn_path, atmrad_path,
+        multiwfn_path,
         charge_types, multipole_bool, use_multipole,
         save_atomwise_decomposition, substrate_idxs, env_idxs, multipole_order,
         include_ptchgs, ptchg_file, dielectric_scale, use_ecp, exclude_atoms

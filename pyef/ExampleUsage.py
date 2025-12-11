@@ -42,7 +42,6 @@ esp_df = dataObject.getESP(
     charge_types=['Hirshfeld_I'],
     ESPdata_filename='MinimiChrome_ESP',
     multiwfn_path='/path/to/multiwfn',
-    atmrad_path='/path/to/atmrad',
     use_multipole=True
 )
 print("ESP calculation complete!")
@@ -55,7 +54,6 @@ efield_df = dataObject.getEfield(
     charge_types='Hirshfeld_I',
     Efielddata_filename='MinimiChrome_Efield',
     multiwfn_path='/path/to/multiwfn',
-    atmrad_path='/path/to/atmrad',
     input_bond_indices=bond_indices,
     multipole_bool=True
 )
@@ -66,7 +64,6 @@ print("E-field calculation complete!")
 # ========================================
 estab_df = dataObject.getElectrostatic_stabilization(
     multiwfn_path='/path/to/multiwfn',
-    atmrad_path='/path/to/atmrad',
     substrate_idxs=[1, 2, 3, 4, 5],  # Substrate atoms
     env_idxs=[6, 7, 8, 9, 10],       # Environment atoms
     charge_type='Hirshfeld_I',

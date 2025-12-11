@@ -6,7 +6,7 @@ from pyef.analysis import Electrostatics
 
 def main(job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_indices, dielectric,
          geom_flag,
-         multiwfn_path, atmrad_path,
+         multiwfn_path,
          charge_types=['Hirshfeld_I'], multipole_bool=True, use_multipole=False,
          decompose_atomwise=False, substrate_idxs=None, env_idxs=None, multipole_order=2,
          include_ptchgs=False, ptchg_file='', dielectric_scale=1.0, use_ecp=False, exclude_atoms=[]):
@@ -33,8 +33,6 @@ def main(job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_
         Run geometry checks
     multiwfn_path : str
         Path to Multiwfn executable
-    atmrad_path : str
-        Path to atmrad file
     charge_types : list of str, optional
         Charge partitioning schemes (default: ['Hirshfeld_I'])
     multipole_bool : bool, optional
@@ -139,14 +137,12 @@ def main(job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_
             chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
             ESPdata_filename = f'{analysis_type}_{job_name}_{chg_type}'
             dataObject.getESP(charge_types, ESPdata_filename,
-                           multiwfn_path, atmrad_path, use_multipole=use_multipole,
                            dielectric=dielectric)
 
         elif analysis_type == 'ef':
             chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
             Efielddata_filename = f'{analysis_type}_{job_name}_{chg_type}'
             dataObject.getEfield(chg_type,
-                               Efielddata_filename, multiwfn_path, atmrad_path,
                                multipole_bool=multipole_bool, input_bond_indices=filtered_bonds,
                                decompose_atomwise=decompose_atomwise, dielectric=dielectric)
 
@@ -157,7 +153,6 @@ def main(job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_
                 chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
                 estab_filename = f'{analysis_type}_{job_name}_{chg_type}'
                 dataObject.getElectrostatic_stabilization(
-                    multiwfn_path, atmrad_path,
                     substrate_idxs=substrate_idxs,
                     charge_type=chg_type,
                     name_dataStorage=estab_filename,
@@ -172,7 +167,6 @@ def read_file_lines(file_path):
         return [line.strip() for line in file.readlines()]
 
 if __name__ == "__main__":
-    # Example: python run.py --ef --esp --estab --jobs_file path/to/jobs.in --metals_file path/to/metals.in --job_name myJob --bonds_file path/to/bonds.in --multiwfn_path /path/to/multiwfn --atmrad_path /path/to/atmrad --dielectric 1.0 --substrate_idxs 1,2,3 > pyEF.log
     parser = argparse.ArgumentParser(description="PyEF Analysis Pipeline")
     parser.add_argument("--geom", action="store_true", help="Perform a geometry check")
     parser.add_argument("--esp", action="store_true", help="Perform electrostatic potential (ESP) analysis")
@@ -183,7 +177,6 @@ if __name__ == "__main__":
     parser.add_argument("--job_name", required=True, help="Name for the job/output files")
     parser.add_argument("--bonds_file", required=True, help="Path to file containing bond indices")
     parser.add_argument("--multiwfn_path", required=True, help="Path to multiwfn executable")
-    parser.add_argument("--atmrad_path", required=True, help="Path to atmrad file")
     parser.add_argument("--dielectric", type=float, default=1.0, help="Dielectric constant (default: 1.0)")
     parser.add_argument("--charge_types", nargs='+', default=['Hirshfeld_I'], help="Charge partitioning schemes (default: Hirshfeld_I)")
     parser.add_argument("--multipole", action="store_true", default=True, help="Use multipole expansion for E-field")
@@ -208,6 +201,5 @@ if __name__ == "__main__":
 
     main(args.job_name, jobs, metal_indices, bond_indices, args.dielectric,
          geom_flag, esp_flag, ef_flag, estab_flag,
-         args.multiwfn_path, args.atmrad_path,
          args.charge_types, args.multipole, args.use_multipole,
          args.decompose_atomwise, substrate_idxs, env_idxs, args.multipole_order)

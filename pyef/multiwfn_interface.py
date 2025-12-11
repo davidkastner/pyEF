@@ -212,7 +212,7 @@ class MultiwfnInterface:
             raise
 
     def partitionCharge(self, multipole_bool, f,
-                       multiwfn_path, atmrad_path, charge_type, owd,
+                       multiwfn_path, charge_type, owd,
                        molden_filename=None, xyz_filename=None):
         """
         Partition electron density using Multiwfn to generate partial charges or multipole moments.
@@ -228,8 +228,6 @@ class MultiwfnInterface:
             Complete path to folder containing the calculation
         multiwfn_path : str
             Path to Multiwfn executable
-        atmrad_path : str
-            Path to atmrad directory (for Hirshfeld-I calculations)
         charge_type : str
             Partitioning scheme (e.g., 'Hirshfeld', 'CHELPG', 'Hirshfeld_I')
         owd : str
@@ -246,6 +244,11 @@ class MultiwfnInterface:
         float
             Computation time in seconds, 0 if calculation was previously completed (skipped),
             or -1 if calculation failed
+
+        Notes
+        -----
+        For Hirshfeld-I calculations, atmrad files are automatically loaded from
+        pyef.resources.atmrad (bundled with the package).
         """
         # Handle f being a list (take first element)
         if isinstance(f, list):
@@ -302,8 +305,12 @@ class MultiwfnInterface:
                     if charge_type == 'Hirshfeld_I':
                         # Get the number of basis functions
                         num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+
+                        # Use bundled atmrad from package resources
+                        with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+
                         print(f'Current num of basis is: {num_basis}')
                         print(f'The current max num is: {self.config["maxIHirshFuzzyBasis"]}')
                         if num_basis > self.config['maxIHirshFuzzyBasis']:
@@ -332,8 +339,11 @@ class MultiwfnInterface:
                         print(f'Number of basis functions: {num_basis}')
                         if num_basis > self.config['maxIHirshBasis']:
                             commands = ['7', '15', '-2', '1', '\n', 'y', '0', 'q']
-                        atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+
+                        # Use bundled atmrad from package resources
+                        with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
+                            atmrad_src = str(atmrad_resource)
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
 
                     # Use centralized Multiwfn runner
                     self.run_multiwfn(
