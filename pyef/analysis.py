@@ -72,10 +72,9 @@ class Electrostatics:
             - ECP (str): ECP basis set family
             - dielectric (float): Dielectric constant
             - dielectric_scale (float): Scaling factor for dielectric
-            - chgprefix (str): Prefix for charge filenames
             - excludeAtomfromEcalc (list): Atoms to exclude from E-field calc
             - changeDielectBoundBool (bool): Use dielectric=1 for bonded atoms
-            - visualize_efield (bool): Create PDB files for atom-wise E-fields
+            - visualize_ef (bool): Create PDB files for atom-wise E-fields
             - visualize_charges (bool): Create PDB files for partial charges
             - visualize_per_bond (bool): Create separate PDB files for each bond
     dict_of_calcs : dict
@@ -104,20 +103,18 @@ class Electrostatics:
     >>> data = es_with_metals.getESP(['Hirshfeld', 'Hirshfeld_I'], 'esp_results', ...)
     """
 
-    def __init__(self, lst_of_folders, folder_to_file_path='', lst_of_tmcm_idx=None,
+    def __init__(self, molden_paths, xyz_paths, lst_of_tmcm_idx=None,
                  **kwargs):
         """Initialize Electrostatics analysis object.
 
         Parameters
         ----------
-        lst_of_folders : list of str
-            List of folder paths containing calculation outputs.
-            Can be complete paths (e.g., ['job1/scr', 'job2/scr']) or just
-            folder names if using folder_to_file_path.
-        folder_to_file_path : str, optional
-            Optional subdirectory path to append to each folder (default: '').
-            Use '' or '/' if lst_of_folders contains complete paths.
-            Legacy usage: '/scr/' to append 'scr/' to each folder name.
+        molden_paths : list of str
+            List of absolute paths to .molden files for each job.
+            Example: ['/path/to/job1/optim.molden', '/path/to/job2/optim.molden']
+        xyz_paths : list of str
+            List of absolute paths to .xyz files for each job.
+            Example: ['/path/to/job1/optim.xyz', '/path/to/job2/optim.xyz']
         lst_of_tmcm_idx : list of int, optional
             List of atom indices for ESP calculation (0-indexed).
             Only required when running ESP analysis. Not needed for E-field
@@ -130,33 +127,41 @@ class Electrostatics:
         -----
         ECP options: "stuttgart_rsc", "def2", "crenbl", "lanl2dz", "lacvps"
         """
+        # Validate inputs
+        if len(molden_paths) != len(xyz_paths):
+            raise ValueError(f"molden_paths and xyz_paths must have the same length. "
+                           f"Got {len(molden_paths)} molden files and {len(xyz_paths)} xyz files.")
+
         # Initialize configuration with defaults
         self.config = {
             'hasECP': False,              # Use Effective Core Potentials
             'includePtChgs': False,       # Include QMMM point charges
             'ptChgfp': '',                # Point charge file path
-            'molden_filename': 'final_optim.molden',  # Molden file name
-            'xyzfilename': 'final_optim.xyz',         # XYZ file name
+            'molden_filename': 'final_optim.molden',  # Molden file name (legacy, kept for compatibility)
+            'xyzfilename': 'final_optim.xyz',         # XYZ file name (legacy, kept for compatibility)
             'rerun': False,               # Force recalculation
             'maxIHirshBasis': 12000,      # Hirshfeld-I basis limit
             'maxIHirshFuzzyBasis': 6000,  # Fuzzy Hirshfeld-I basis limit
             'ECP': "lacvps",              # ECP basis set family
             'dielectric': 1,              # Dielectric constant
             'dielectric_scale': 1,        # Dielectric scaling factor
-            'chgprefix': '',              # Charge filename prefix
             'excludeAtomfromEcalc': [],   # Atoms to exclude from E-field
             'changeDielectBoundBool': False,  # Special dielectric for bonds
-            'visualize_efield': False,    # Create PDB files for atom-wise E-fields
+            'visualize_ef': False,    # Create PDB files for atom-wise E-fields
             'visualize_charges': False,   # Create PDB files for partial charges
             'visualize_per_bond': False   # Create separate PDB files for each bond
         }
         # Override defaults with user-provided kwargs
         self.config.update(kwargs)
 
-        # Store required parameters
-        self.lst_of_folders = lst_of_folders
+        # Store file paths directly
+        self.molden_paths = [os.path.abspath(p) for p in molden_paths]
+        self.xyz_paths = [os.path.abspath(p) for p in xyz_paths]
         self.lst_of_tmcm_idx = lst_of_tmcm_idx if lst_of_tmcm_idx is not None else []
-        self.folder_to_file_path = folder_to_file_path
+
+        # Create list of working directories (one per job) from the molden file paths
+        self.lst_of_folders = [os.path.dirname(p) for p in self.molden_paths]
+        self.folder_to_file_path = ''  # No longer needed, but kept for compatibility
 
         # Initialize Multiwfn interface with current config
         self.multiwfn = MultiwfnInterface(config=self.config)
@@ -180,7 +185,7 @@ class Electrostatics:
     # Multiwfn Interface Methods
     # =========================================================================
 
-    def _run_multiwfn(self, command, input_commands, output_file=None,
+    def run_multiwfn(self, command, input_commands, output_file=None,
                      description="Multiwfn calculation", capture_output=True):
         """Centralized Multiwfn runner with proper error handling and output display.
 
@@ -321,19 +326,6 @@ Input commands that were to be sent:
         """
         self.dict_settings[key] = value
 
-    def setRunrunBool(self, rename, setbool=True):
-        """Set rerun flag and charge filename prefix.
-
-        Parameters
-        ----------
-        rename : str
-            Prefix for charge output filenames.
-        setbool : bool, default=True
-            Whether to force recalculation of charges.
-        """
-        self.config['chgprefix'] = rename
-        self.config['rerun'] = setbool
-
     def setExcludeAtomFromCalc(self, lstExcludeAtoms):
         """Set atoms to exclude from electric field calculations.
 
@@ -350,12 +342,14 @@ Input commands that were to be sent:
         Parameters
         ----------
         name_ptch_file : str
-            Path to point charge file.
+            Filename of point charge file (e.g., 'pointcharges.txt').
+            The file will be looked for in the same directory as each job's molden file.
 
         Notes
         -----
-        Sets includePtChgs config to True and stores file path.
+        Sets includePtChgs config to True and stores filename.
         Point charges are typically from MM region in QM/MM calculations.
+        The file is automatically located in each job's working directory.
         """
         self.config['ptChgfp'] = name_ptch_file
         self.config['includePtChgs'] = True
@@ -469,119 +463,69 @@ Input commands that were to be sent:
         -----
         ECPs can cause artifacts in molden files that make them incompatible
         with Multiwfn. This method reformats the molden files to fix these issues.
-        Processes all folders in lst_of_folders.
+        Processes all molden/xyz file pairs.
         """
         owd = os.getcwd()
         basis_set_fam = self.config['ECP']
-        list_of_folders = self.lst_of_folders
         print('   > Re-formatting .molden files to fix ECP artifacts')
 
-        for f in list_of_folders:
-            # Convert f to string if it's not already (handles int folder names)
-            f = str(f)
-            folder_path = os.path.join(owd, f)
-            final_optim_molden = os.path.join(
-                folder_path, self.config['molden_filename']
-            )
-            final_optim_xyz = os.path.join(
-                folder_path, self.config['xyzfilename']
-            )
-            molden = MoldenObject(final_optim_xyz, final_optim_molden)
+        for molden_path, xyz_path in zip(self.molden_paths, self.xyz_paths):
+            os.chdir(owd)
+            molden = MoldenObject(xyz_path, molden_path)
             molden.fix_ECPmolden(owd, basis_set_fam)
 
-    def prepData(self):
-        """Prepare calculation data for analysis.
-
-        Extracts final frames from optimization trajectories, validates file
-        existence, and sets up consistent naming conventions for .molden and
-        .xyz files across all calculation folders.
-
-        Notes
-        -----
-        - Extracts last frame from optim.xyz to create final_optim.xyz
-        - Locates .molden files and updates config if non-standard names found
-        - Removes folders from processing list if files cannot be located
-        """
-
-        list_of_folders = self.lst_of_folders
-        owd = os.getcwd()
-        print('   > Pre-processing data')
-        backup_xyz = ['xyz.xyz']
-
-        for f in list_of_folders:
-            try:
-                # Convert f to string if it's not already (handles int folder names)
-                f = str(f)
-                folder_path = os.path.join(owd, f)
-                print('      > .molden and .xyz file should be located here: ' + folder_path)
-
-                # Processing optim.xyz to create final_optim.xyz
-                final_optim_xyz = os.path.join(folder_path, self.config['xyzfilename'])
-
-                # Copying .molden files to final_optim.molden
-                final_optim_molden = os.path.join(folder_path, self.config['molden_filename'])
-
-                #this is for the full optimization cycle
-                optim_file_path = os.path.join(folder_path, 'optim.xyz')
-
-
-                if not os.path.exists(final_optim_molden):
-                    print(f'Expected .molden with filename: {self.config["molden_filename"]} in {folder_path}. We could not find a .molden filename with the default prefix, you can alter using: set_molden_filename()')
-                    print(f"For now searching for all .molden files in directory. If you only have one .molden file in this directory, the defauly prefix will be altered ")
-                    files = glob.iglob(os.path.join(folder_path, "*.molden"))
-                    for file in files:
-                        if os.path.abspath(file) != os.path.abspath(final_optim_molden):
-                            #change the defauly path the the molden file!
-                            self.set_molden_filename(os.path.basename(file))
-                            #set the backup_xyz filename to this prefix here. Generally a good guess!
-                            file_prefix, _ = os.path.splitext(os.path.basename(file))
-                            backup_xyz = file_prefix + '.xyz'
-                            print(f'Default .molden file name is now changed to {self.config["molden_filename"]}')
-                            break
-                    else:
-                        raise Exception("Unable to locate any .molden file in directory: {f}")
-                else:
-                    print(f"      > {self.config['molden_filename']} sucessflly located in {folder_path}.")
-
-
-
-                if not os.path.exists(final_optim_xyz):
-                    try:
-                        with open(optim_file_path, 'r') as full_traj:
-                            num_atoms = int(full_traj.readline())
-                            num_lines = num_atoms + 2
-                            # If ends on first optimization of cycle, change cutting pattern
-                            full_traj.seek(0)
-                            head = [next(full_traj) for _ in range(num_lines)]
-                            full_traj.seek(0)
-                            with open(os.path.join(folder_path, 'initial_' + os.path.basename(optim_file_path)), 'w') as initxyz:
-                                initxyz.writelines(head)
-                            with open(final_optim_xyz, 'w') as finalxyz:
-                                finalxyz.writelines(deque(full_traj, num_lines))
-                    except Exception as e:
-                        print(f'Expected .xyz with filename: {self.config["xyzfilename"]} in {folder_path}. If your xyz filename does NOT match the default, you can alter using: set_xyzfilename()')
-                        print(f'We will try to use the anticipated prefix from the associated molden file: {backup_xyz}')
-                        backup_file = os.path.join(folder_path, backup_xyz)
-                        if os.path.exists(backup_file):
-                            self.config['xyzfilename'] = backup_xyz
-                            logging.info(f'Single point data found. Using {backup_xyz} as fallback.')
-                        else:
-                            raise Exception("Could not locate .molden or corresponding .xyz file in directory {f}")
-
-                else:
-                    print(f'      > {self.config["xyzfilename"]} succesfully located in {folder_path}.')            
-
-                # Copying .molden files to final_optim.molden
-                final_optim_molden = os.path.join(folder_path, self.config['molden_filename'])
-                backup_xyz = 'final_optim'
-            except Exception as e:
-                print(f'Could not locate molden and corresponding xyz file in {f} please rename these files if they exist')
-                print(f'For now I am just taking this folder out of the list')
-
-                list_of_folders.remove(f)
-                os.chdir(owd)
-        self.lst_of_folders = list_of_folders
         os.chdir(owd)
+
+    def prepData(self):
+        """Validate that all specified .molden and .xyz files exist.
+
+        Checks that all file paths provided during initialization are valid
+        and accessible. Removes invalid entries from processing lists.
+
+        Raises
+        ------
+        FileNotFoundError
+            If any of the specified .molden or .xyz files cannot be found.
+        """
+        print('   > Validating file paths')
+
+        valid_indices = []
+        for idx, (molden_path, xyz_path) in enumerate(zip(self.molden_paths, self.xyz_paths)):
+            try:
+                # Check if molden file exists
+                if not os.path.exists(molden_path):
+                    print(f'ERROR: Molden file not found: {molden_path}')
+                    continue
+
+                # Check if xyz file exists
+                if not os.path.exists(xyz_path):
+                    print(f'ERROR: XYZ file not found: {xyz_path}')
+                    continue
+
+                # Both files exist
+                print(f'      ✓ Job {idx+1}: Found .molden and .xyz files')
+                print(f'         - Molden: {molden_path}')
+                print(f'         - XYZ:    {xyz_path}')
+                valid_indices.append(idx)
+
+            except Exception as e:
+                print(f'ERROR: Exception while checking files for job {idx+1}: {e}')
+                continue
+
+        # Update file lists to only include valid entries
+        if len(valid_indices) == 0:
+            raise FileNotFoundError("No valid .molden and .xyz file pairs found!")
+
+        if len(valid_indices) < len(self.molden_paths):
+            print(f'\nWARNING: Only {len(valid_indices)}/{len(self.molden_paths)} jobs have valid files.')
+            print('         Invalid jobs will be removed from processing.')
+            self.molden_paths = [self.molden_paths[i] for i in valid_indices]
+            self.xyz_paths = [self.xyz_paths[i] for i in valid_indices]
+            self.lst_of_folders = [self.lst_of_folders[i] for i in valid_indices]
+            if self.lst_of_tmcm_idx:
+                self.lst_of_tmcm_idx = [self.lst_of_tmcm_idx[i] for i in valid_indices]
+
+        print(f'\n   > Validation complete: {len(valid_indices)} valid job(s) ready for processing')
 
     # =========================================================================
     # Multipole and Charge Parsing Methods
@@ -719,7 +663,7 @@ Input commands that were to be sent:
     # Electrostatic Potential (ESP) Calculation Methods
     # =========================================================================
 
-    def ESPfromMonopole(self, path_to_xyz, espatom_idx, charge_range, charge_file):
+    def monopole_esp(self, path_to_xyz, espatom_idx, charge_range, charge_file):
         """Calculate electrostatic potential at specified atom.
 
         Parameters
@@ -1069,7 +1013,7 @@ Input commands that were to be sent:
             #Add contributions to Monopole E from point charges to total E
         return [constants.VM_TO_VA*np.array(E_vec), position_vec, df['Atom'][idx_atom], constants.VM_TO_VA*np.array(Monopole_E), constants.VM_TO_VA*np.array(multipole_Efield_contribution)]
 
-    def ESPfromMultipole(self, xyzfilepath, atom_multipole_file, charge_range, idx_atom):
+    def multipole_esp(self, xyzfilepath, atom_multipole_file, charge_range, idx_atom):
         '''
 
         Input: idx_atom: integer of atom index
@@ -1199,7 +1143,7 @@ Input commands that were to be sent:
         return bond_dipoles
 
     # Bond_indices is a list of tuples where each tuple contains the zero-indexed values of location of the atoms of interest
-    def E_proj_bondIndices_atomwise(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines, bool_multipole, df_ptchg=None):
+    def bondEfield(self, bond_indices, xyz_filepath, atom_multipole_file, all_lines, bool_multipole, df_ptchg=None):
         '''
         Input: bond_indices: list of tuples of atom indices
         xyz_filepath: string of xyz filename
@@ -1310,7 +1254,7 @@ Input commands that were to be sent:
         unique_atoms = list(dict.fromkeys(atoms_to_include))
 
         # Calculate ESP
-        [coord_shell_ESP, atom_type] = self.ESPfromMonopole(path_to_xyz, metal_idx, unique_atoms, charge_file)
+        [coord_shell_ESP, atom_type] = self.monopole_esp(path_to_xyz, metal_idx, unique_atoms, charge_file)
         return coord_shell_ESP
 
 
@@ -1486,8 +1430,9 @@ Input commands that were to be sent:
     # These unified methods replace the previous separate implementations
     # ============================================================================
 
-    def getESP(self, charge_types, ESPdata_filename, multiwfn_module, multiwfn_path, atmrad_path,
-               use_multipole=False, include_decay=False, include_coord_shells=False, dielectric=1):
+    def getESP(self, charge_types, ESPdata_filename, multiwfn_path, atmrad_path,
+               use_multipole=False, include_decay=False, include_coord_shells=False,
+               visualize=None, dielectric=1):
         """Unified ESP calculation method supporting multiple modes.
 
         This consolidated method replaces getESPData(), getESPMultipole(), and getESPDecay()
@@ -1502,8 +1447,6 @@ Input commands that were to be sent:
             or list of strings.
         ESPdata_filename : str
             Output CSV filename (without extension).
-        multiwfn_module : str
-            Module name containing Multiwfn executable.
         multiwfn_path : str
             Path to Multiwfn executable.
         atmrad_path : str
@@ -1514,6 +1457,9 @@ Input commands that were to be sent:
             If True, include distance-sorted ESP decay analysis (default: False).
         include_coord_shells : bool, optional
             If True, include first and second coordination shell ESP (default: False).
+        visualize : bool or None, optional
+            If True, create PDB file with ESP values in B-factor column.
+            None uses config defaults (default: None).
         dielectric : float, optional
             Dielectric constant (default: 1).
 
@@ -1552,6 +1498,12 @@ Input commands that were to be sent:
         if isinstance(final_structure_file, list):
             final_structure_file = final_structure_file[0]
 
+        # Handle visualization settings
+        if visualize is None:
+            viz_esp = self.config.get('visualize_esp', False)
+        else:
+            viz_esp = visualize
+
         owd = os.getcwd()
         allspeciesdict = []
         counter = 0
@@ -1561,10 +1513,11 @@ Input commands that were to be sent:
             f = str(f)
             print(f'-----------------{f}------------------')
             atom_idx = metal_idxs[counter]
-            counter += 1
             results_dict = {}
             results_dict['Name'] = f
-            file_path_xyz = f"{owd}/{f}/{final_structure_file}"
+            # Use stored absolute path instead of constructing it
+            file_path_xyz = self.xyz_paths[counter]
+            counter += 1
 
             # Calculate total lines for monopole calculations
             if not use_multipole or include_decay:
@@ -1576,32 +1529,38 @@ Input commands that were to be sent:
                 print(f'Partial Charge Scheme: {charge_type}')
                 try:
                     # Use centralized partitionCharge() to get/compute charges
+                    # Extract actual filenames from paths
+                    molden_filename = os.path.basename(self.molden_paths[counter-1])
+                    xyz_filename = os.path.basename(self.xyz_paths[counter-1])
                     comp_cost = self.multiwfn.partitionCharge(
                         multipole_bool=use_multipole,
                         f=f,
                         multiwfn_path=multiwfn_path,
                         atmrad_path=atmrad_path,
                         charge_type=charge_type,
-                        owd=owd
+                        owd=owd,
+                        molden_filename=molden_filename,
+                        xyz_filename=xyz_filename
                     )
 
                     if comp_cost == -1:
                         print(f"WARNING: Charge calculation failed for {charge_type} in {f}")
                         continue
 
-                    file_path_multipole = f"{owd}/{f}/Multipole{charge_type}.txt"
-                    file_path_monopole = f"{owd}/{f}/Charges{charge_type}.txt"
-                    path_to_xyz = f"{owd}/{f}/{final_structure_file}"
+                    # Use directory path directly (f is already absolute path from lst_of_folders)
+                    file_path_multipole = f"{f}/Multipole{charge_type}.txt"
+                    file_path_monopole = f"{f}/Charges{charge_type}.txt"
+                    path_to_xyz = file_path_xyz
 
                     # Calculate ESP using appropriate method
                     if use_multipole:
-                        [final_esp, atom_name] = self.ESPfromMultipole(
+                        [final_esp, atom_name] = self.multipole_esp(
                             file_path_xyz, file_path_multipole, all_lines, atom_idx
                         )
                         results_dict['Total ESP'] = final_esp
                         results_dict['Atom'] = atom_name
                     else:
-                        [ESP_all, atom_type] = self.ESPfromMonopole(
+                        [ESP_all, atom_type] = self.monopole_esp(
                             file_path_xyz, atom_idx, all_lines, file_path_monopole
                         )
                         [total_charge, partial_charge_atom] = Electrostatics.charge_atom(
@@ -1638,6 +1597,35 @@ Input commands that were to be sent:
                         except Exception as e:
                             print(f'Warning: Coordination shell analysis failed for {charge_type}: {e}')
 
+                    # Visualization: ESP values
+                    if viz_esp:
+                        try:
+                            from .geometry import Visualize
+                            import numpy as np
+
+                            # Get total number of atoms
+                            total_atoms = Electrostatics.mapcount(file_path_xyz) - 2
+
+                            # Create b_factor array with ESP value at metal atom
+                            b_factors = np.zeros(total_atoms)
+
+                            # Get ESP value based on mode
+                            if use_multipole:
+                                esp_value = final_esp if 'final_esp' in locals() else 0.0
+                            else:
+                                esp_value = ESP_all if 'ESP_all' in locals() else 0.0
+
+                            b_factors[atom_idx] = esp_value
+
+                            # Create PDB file
+                            structure_name = os.path.basename(f.rstrip("/"))
+                            path_to_pol = file_path_multipole if use_multipole else file_path_monopole
+                            pdbName = f'esp_{charge_type}_{structure_name}_atom{atom_idx}.pdb'
+                            Visualize(file_path_xyz).makePDB(path_to_pol, b_factors, pdbName)
+                            print(f"    Created ESP visualization PDB: {pdbName}")
+                        except Exception as e:
+                            print(f'Warning: ESP visualization failed for {charge_type}: {e}')
+
                 except Exception as e:
                     logging.exception(f'Exception during ESP calculation for {charge_type}')
                     continue
@@ -1649,9 +1637,9 @@ Input commands that were to be sent:
         df.to_csv(f"{ESPdata_filename}.csv")
         return df
 
-    def getEfield(self, charge_types, Efielddata_filename, multiwfn_module, multiwfn_path, atmrad_path,
+    def getEfield(self, charge_types, Efielddata_filename, multiwfn_path, atmrad_path,
                   multipole_bool=False, input_bond_indices=[], auto_find_bonds=False,
-                  decompose_atomwise=False, visualize=None, dielectric=1):
+                  save_atomwise_decomposition=False, visualize=None, dielectric=1):
         """Unified E-field calculation method supporting multiple modes.
 
         This consolidated method replaces getEFieldMultipole(), getEfield_acrossBond(),
@@ -1663,8 +1651,6 @@ Input commands that were to be sent:
             Charge partitioning scheme. Options: 'Hirshfeld', 'Becke', 'Hirshfeld_I', etc.
         Efielddata_filename : str
             Output CSV filename (without extension).
-        multiwfn_module : str
-            Module name containing Multiwfn executable.
         multiwfn_path : str
             Path to Multiwfn executable.
         atmrad_path : str
@@ -1678,8 +1664,8 @@ Input commands that were to be sent:
         auto_find_bonds : bool, optional
             If True and input_bond_indices is empty, automatically find bonds to adjacent atoms
             using getBondedAtoms() for each metal center (default: False).
-        decompose_atomwise : bool, optional
-            If True, compute atom-wise E-field decomposition (default: False).
+        save_atomwise_decomposition : bool, optional
+            If True, save atom-wise E-field decomposition to CSV (default: False).
         visualize : bool or None, optional
             Override config visualization settings. None uses config defaults (default: None).
         dielectric : float, optional
@@ -1687,8 +1673,9 @@ Input commands that were to be sent:
 
         Returns
         -------
-        pd.DataFrame
-            DataFrame with E-field results saved to CSV.
+        pd.DataFrame or tuple of pd.DataFrame
+            If save_atomwise_decomposition=False: returns DataFrame with E-field results
+            If save_atomwise_decomposition=True: returns (total_df, atomwise_df) tuple
 
         Examples
         --------
@@ -1699,7 +1686,7 @@ Input commands that were to be sent:
         >>> es.getEfield('Hirshfeld_I', 'efield', ..., auto_find_bonds=True)
 
         >>> # Monopole mode with atom-wise decomposition
-        >>> es.getEfield('Hirshfeld', 'efield', ..., multipole_bool=False, decompose_atomwise=True)
+        >>> es.getEfield('Hirshfeld', 'efield', ..., multipole_bool=False, save_atomwise_decomposition=True)
         """
         # Ensure charge_types is a string (E-field works with single scheme)
         if isinstance(charge_types, list):
@@ -1719,7 +1706,7 @@ Input commands that were to be sent:
 
         # Handle visualization settings
         if visualize is None:
-            viz_efield = self.config.get('visualize_efield', False)
+            viz_efield = self.config.get('visualize_ef', False)
             viz_charges = self.config.get('visualize_charges', False)
             viz_per_bond = self.config.get('visualize_per_bond', False)
         else:
@@ -1729,6 +1716,7 @@ Input commands that were to be sent:
 
         owd = os.getcwd()
         allspeciesdict = []
+        all_atomwise_data = []  # Collect atomwise E-field decomposition
         counter = 0
 
         for f in list_of_file:
@@ -1736,7 +1724,8 @@ Input commands that were to be sent:
                 # Convert f to string if it's not already (handles int folder names)
                 f = str(f)
                 results_dict = {}
-                file_path_xyz = f"{owd}/{f}/{final_structure_file}"
+                # Use stored absolute path instead of constructing it
+                file_path_xyz = self.xyz_paths[counter]
                 total_lines = Electrostatics.mapcount(file_path_xyz)
                 init_all_lines = range(0, total_lines - 2)
 
@@ -1773,9 +1762,12 @@ Input commands that were to be sent:
                     counter += 1
                     continue
 
-                # Partition charges
+                # Partition charges - extract actual filenames from paths
+                molden_filename = os.path.basename(self.molden_paths[counter])
+                xyz_filename = os.path.basename(self.xyz_paths[counter])
                 comp_cost = self.multiwfn.partitionCharge(
-                    multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd
+                    multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd,
+                    molden_filename=molden_filename, xyz_filename=xyz_filename
                 )
 
                 if comp_cost == -1:
@@ -1783,8 +1775,9 @@ Input commands that were to be sent:
                     counter += 1
                     continue
 
-                file_path_multipole = f"{owd}/{f}Multipole{charge_type}.txt"
-                file_path_charges = f"{owd}/{f}Charges{charge_type}.txt"
+                # Use directory path directly (f is already absolute path from lst_of_folders)
+                file_path_multipole = f"{f}/Multipole{charge_type}.txt"
+                file_path_charges = f"{f}/Charges{charge_type}.txt"
 
                 # Handle point charges
                 df_ptchg = None
@@ -1795,7 +1788,8 @@ Input commands that were to be sent:
                             "Point charge file path is not set. Please call set_ptChgfile() "
                             "with the filename before using includePtChgs=True"
                         )
-                    full_ptchg_fp = os.path.join(owd, f, ptchg_filename)
+                    # Use directory path directly (f is already absolute path)
+                    full_ptchg_fp = os.path.join(f, ptchg_filename)
                     df_ptchg = self.getPtChgs(full_ptchg_fp)
 
                 # Select appropriate file path
@@ -1804,7 +1798,7 @@ Input commands that were to be sent:
 
                 # Calculate E-field with atom-wise decomposition
                 [proj_Efields, bondedAs, bonded_idx, bond_lens, E_proj_atomwise,
-                 E_proj_atomwise_list] = self.E_proj_bondIndices_atomwise(
+                 E_proj_atomwise_list] = self.bondEfield(
                     bond_indices_to_use, file_path_xyz, path_to_pol, all_lines,
                     multipole_bool, df_ptchg=df_ptchg
                 )
@@ -1834,7 +1828,8 @@ Input commands that were to be sent:
                             # Expand E_atomwise to include all atoms (zeros for excluded)
                             E_atomwise_full = np.zeros(total_atoms)
                             E_atomwise_full[all_lines] = E_atomwise_qm
-                            pdbName = f'Efield_bond{bond_idx}_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
+                            structure_name = os.path.basename(f.rstrip("/"))
+                            pdbName = f'ef_{charge_type}_{structure_name}_bond{bond_pair[0]}-{bond_pair[1]}.pdb'
                             Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise_full, pdbName)
                     elif len(E_proj_atomwise_list) == 1:
                         # Single bond: create one PDB with bond info in name
@@ -1842,20 +1837,23 @@ Input commands that were to be sent:
                         E_atomwise_full = np.zeros(total_atoms)
                         E_atomwise_full[all_lines] = E_atomwise_qm
                         bond_pair = bonded_idx[0]
-                        pdbName = f'Efield_bond0_{bond_pair[0]}-{bond_pair[1]}_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
+                        structure_name = os.path.basename(f.rstrip("/"))
+                        pdbName = f'ef_{charge_type}_{structure_name}_bond{bond_pair[0]}-{bond_pair[1]}.pdb'
                         Visualize(file_path_xyz).makePDB(path_to_pol, E_atomwise_full, pdbName)
                     else:
                         # Fallback: use the combined E_proj_atomwise
                         E_proj_atomwise_qm = E_proj_atomwise[:n_qm_atoms]
                         E_proj_atomwise_full = np.zeros(total_atoms)
                         E_proj_atomwise_full[all_lines] = E_proj_atomwise_qm
-                        pdbName = f'Efield_cont_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
+                        structure_name = os.path.basename(f.rstrip("/"))
+                        pdbName = f'ef_{charge_type}_{structure_name}_combined.pdb'
                         Visualize(file_path_xyz).makePDB(path_to_pol, E_proj_atomwise_full, pdbName)
 
                 # Visualization: partial charges
                 if viz_charges:
                     charge_b_col = df['charge']
-                    pdbName = f'Charges_{f.rstrip("/").replace("/", "_")}_{charge_type}_.pdb'
+                    structure_name = os.path.basename(f.rstrip("/"))
+                    pdbName = f'charges_{charge_type}_{structure_name}.pdb'
                     Visualize(file_path_xyz).makePDB(path_to_pol, charge_b_col, pdbName)
 
                 # Store results
@@ -1870,6 +1868,25 @@ Input commands that were to be sent:
                 results_dict['Comp Cost'] = comp_cost
                 results_dict['Folder'] = f
 
+                # Collect atomwise decomposition if requested
+                if save_atomwise_decomposition and E_proj_atomwise_list:
+                    structure_name = os.path.basename(f.rstrip("/"))
+                    total_atoms = total_lines - 2
+
+                    # Store atomwise data for each bond
+                    for bond_idx, (E_atomwise, bond_pair) in enumerate(zip(E_proj_atomwise_list, bonded_idx)):
+                        # E_atomwise contains contributions from each atom
+                        for atom_idx in range(len(E_atomwise)):
+                            atomwise_entry = {
+                                'Structure': structure_name,
+                                'Bond_Index': bond_idx,
+                                'Bond_Atoms': f"{bond_pair[0]}-{bond_pair[1]}",
+                                'Atom_Index': atom_idx,
+                                'Efield_Contribution_V_per_A': E_atomwise[atom_idx],
+                                'Charge_Type': charge_type
+                            }
+                            all_atomwise_data.append(atomwise_entry)
+
                 allspeciesdict.append(results_dict)
                 counter += 1
 
@@ -1882,6 +1899,14 @@ Input commands that were to be sent:
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
         df.to_csv(f"{Efielddata_filename}.csv")
+
+        # Save atomwise decomposition if requested
+        if save_atomwise_decomposition and all_atomwise_data:
+            df_atomwise = pd.DataFrame(all_atomwise_data)
+            df_atomwise.to_csv(f"{Efielddata_filename}_atomwise.csv", index=False)
+            print(f"Saved atomwise E-field decomposition to: {Efielddata_filename}_atomwise.csv")
+            return df, df_atomwise
+
         return df
 
 
@@ -1942,8 +1967,8 @@ Input commands that were to be sent:
         os.chdir(owd)
         os.chdir(f)
         #subprocess.call(multiwfn_module, shell=True)
-        file_path_multipole = f"{os.getcwd()}/{self.config['chgprefix']}Multipole{charge_type}.txt"
-        file_path_monopole = f"{os.getcwd()}/{self.config['chgprefix']}Charges{charge_type}.txt"
+        file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
+        file_path_monopole = f"{os.getcwd()}/Charges{charge_type}.txt"
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
         #file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
 
@@ -2035,7 +2060,7 @@ Input commands that were to be sent:
         os.chdir(owd)
         return comp_cost
 
-    def get_residueDipoles(self, charge_type,  multiwfn_module, multiwfn_path, atmrad_path, multipole_bool, solute_indices = [], num_atoms_solvent=0):
+    def get_residueDipoles(self, charge_type, multiwfn_path, atmrad_path, multipole_bool, solute_indices = [], num_atoms_solvent=0):
         '''
         Function computes a partial charges of all atoms in one system... if the desired file already exists the just return it!!
         Inputs:
@@ -2057,19 +2082,27 @@ Input commands that were to be sent:
             final_structure_file = final_structure_file[0]
         frame_num_lst = []
 
-
+        counter = 0
         for f in list_of_folders:
             try:
                 # Convert f to string if it's not already (handles int folder names)
                 f = str(f)
-                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd)
+                # Extract actual filenames from paths
+                molden_filename = os.path.basename(self.molden_paths[counter])
+                xyz_filename = os.path.basename(self.xyz_paths[counter])
+                comp_cost = self.multiwfn.partitionCharge(multipole_bool, f, multiwfn_path, atmrad_path, charge_type, owd,
+                                                         molden_filename=molden_filename, xyz_filename=xyz_filename)
                 #If the calculation is not successful, continue
                 if comp_cost == -1:
                     print(f"Warning: Charge calculation failed for {f}, skipping")
+                    counter += 1
                     continue
-                file_path_multipole = f"{os.getcwd()}/{f}/Multipole{charge_type}.txt"
-                file_path_monopole = f"{os.getcwd()}/{f}/Charges{charge_type}.txt"
-                file_path_xyz = f"{os.getcwd()}/{f}/{final_structure_file}"
+                # Use directory path directly (f is already absolute path from lst_of_folders)
+                file_path_multipole = f"{f}/Multipole{charge_type}.txt"
+                file_path_monopole = f"{f}/Charges{charge_type}.txt"
+                # Use stored absolute path instead of constructing it
+                file_path_xyz = self.xyz_paths[counter]
+                counter += 1
                     
                 if multipole_bool:
                     xyz_fp =  file_path_xyz
@@ -2126,7 +2159,7 @@ Input commands that were to be sent:
 
 
 
-    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path):
+    def getpartialchgs(self, charge_types, lst_atom_idxs, partial_chg_filename, multiwfn_path, atmrad_path):
         '''
         Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
         
@@ -2140,8 +2173,6 @@ Input commands that were to be sent:
             Name of the output file name    
         multiwfn_path: string
             Path to the multiwfn executable
-        multiwfn_module: string
-            Name of the module that contains the multiwfn executable
         atmrad_path: string
             Path to the atmrad executable
         
@@ -2167,7 +2198,6 @@ Input commands that were to be sent:
             counter = counter + 1
             os.chdir(owd)
             os.chdir(f)
-            subprocess.call(multiwfn_module, shell=True)
             command_A = f"{multiwfn_path} {self.config['molden_filename']}"
             results_dir = os.getcwd() + '/'
 
@@ -2267,7 +2297,7 @@ Input commands that were to be sent:
 
 
 
-    def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, multiwfn_module, atmrad_path, multipole_mode=True, polarization_scheme='Hirshfeld_I'):
+    def getcharge_residues(self, charge_types, res_dict, partial_chg_filename, multiwfn_path, atmrad_path, multipole_mode=True, polarization_scheme='Hirshfeld_I'):
         '''Function computes partial charges on a select set of atoms using the charge scheme specified in charge types. Note atom indices will be carried over between csvs
 
         Inputs:
@@ -2280,8 +2310,6 @@ Input commands that were to be sent:
             Name of the output file name
         multiwfn_path: string
             Path to the multiwfn executable
-        multiwfn_module: string
-            Name of the module that contains the multiwfn executable
         atmrad_path: string
             Path to the atmrad executable
         multipole_mode: boolean
@@ -2342,7 +2370,6 @@ Input commands that were to be sent:
                     with resources.path('pyef.resources', 'settings.ini') as ini_path:
                         path_to_ini_file = str(ini_path)
                         Command_Polarization = f"{multiwfn_path} {molden_filename} -set {path_to_ini_file} > {polarization_file}"
-                    subprocess.call(multiwfn_module, shell=True)
                     command_A = f"{multiwfn_path} final_optim.molden"
                     print('Atomic Multipole Calculation initialized')
                     # Now Run the calculation for atomic dipole and quadrupole moment
@@ -2426,7 +2453,7 @@ Input commands that were to be sent:
         return df
 
 
-    def _compute_atomwise_dipole_contributions(self, atomwise_Efield, df_substrate, df_env, df_all_atoms, one_mol, filename):
+    def compute_atomwise_dipole_contributions(self, atomwise_Efield, df_substrate, df_env, df_all_atoms, one_mol, filename):
         """
         Compute atom-wise energy contributions from environment E-fields interacting with substrate dipoles.
 
@@ -2517,7 +2544,7 @@ Input commands that were to be sent:
 
         return df_atomwise
 
-    def _visualize_atomwise_contributions(self, df_atomwise, file_path_xyz, charge_file, filename, charge_type):
+    def visualize_atomwise_contributions(self, df_atomwise, file_path_xyz, charge_file, filename, charge_type):
         """
         Create PDB visualization of atom-wise energy contributions.
 
@@ -2552,11 +2579,11 @@ Input commands that were to be sent:
             b_factor_contributions[atom_idx] = contribution
 
         # Create PDB file with contributions in B-factor column
-        pdb_name = f'Estabilization_atomwise_{filename}{charge_type}.pdb'
+        pdb_name = f'estab_{charge_type}_{filename}_atomwise.pdb'
         Visualize(file_path_xyz).makePDB(charge_file, b_factor_contributions, pdb_name)
         print(f"Created visualization PDB: {pdb_name}")
 
-    def _compute_atomwise_contributions(self, atomwise_ESP, df_substrate, df_env, df_all_atoms, one_mol, filename):
+    def compute_atomwise_contributions(self, atomwise_ESP, df_substrate, df_env, df_all_atoms, one_mol, filename):
         """
         Compute atom-wise energy contributions from environment atoms to substrate stabilization.
 
@@ -2634,7 +2661,7 @@ Input commands that were to be sent:
         return df_atomwise
     
 
-    def _build_interaction_tensor(self, r_i, r_j, multipole_order, dielectric):
+    def build_interaction_tensor(self, r_i, r_j, multipole_order, dielectric):
         """
         Build the multipole interaction tensor T_ij using AMOEBA formalism.
 
@@ -2759,7 +2786,7 @@ Input commands that were to be sent:
 
         return T
 
-    def _build_multipole_vector(self, atom_data, multipole_order):
+    def build_multipole_vector(self, atom_data, multipole_order):
         """
         Build multipole moment vector M for an atom using AMOEBA formalism.
 
@@ -2808,10 +2835,10 @@ Input commands that were to be sent:
 
         return np.array(M)
 
-    def getElectrostatic_stabilization(self, multiwfn_path, multiwfn_module, atmrad_path,
+    def getElectrostatic_stabilization(self, multiwfn_path, atmrad_path,
                                               substrate_idxs, charge_type='Hirshfeld_I',
                                               name_dataStorage='estatic', env_idxs=None,
-                                              decompose_atomwise=False, visualize=None,
+                                              save_atomwise_decomposition=False, visualize=None,
                                               multipole_order=2, substrate_multipole_order=None,
                                               env_multipole_order=None):
         """
@@ -2837,8 +2864,6 @@ Input commands that were to be sent:
         -----------
         multiwfn_path : str
             Path to Multiwfn executable
-        multiwfn_module : str
-            Module name containing Multiwfn executable
         atmrad_path : str
             Path to atmrad executable
         substrate_idxs : list
@@ -2849,8 +2874,8 @@ Input commands that were to be sent:
             Output filename prefix (default: 'estaticFile_tensor')
         env_idxs : list or None, optional
             List of environment atom indices. If None, uses all non-substrate atoms (default: None)
-        decompose_atomwise : bool, optional
-            If True, compute atom-wise decomposition showing each substrate atom's contribution (default: False)
+        save_atomwise_decomposition : bool, optional
+            If True, save atom-wise decomposition to CSV showing each substrate atom's contribution (default: False)
         visualize : bool or None, optional
             If True, create PDB files with energy contributions in B-factor column.
             None uses config defaults (default: None)
@@ -2870,8 +2895,8 @@ Input commands that were to be sent:
         Returns:
         --------
         pd.DataFrame or tuple of pd.DataFrame
-            If decompose_atomwise=False: returns DataFrame with total stabilization energies
-            If decompose_atomwise=True: returns (total_df, atomwise_df) tuple
+            If save_atomwise_decomposition=False: returns DataFrame with total stabilization energies
+            If save_atomwise_decomposition=True: returns (total_df, atomwise_df) tuple
 
         Notes:
         ------
@@ -2898,22 +2923,22 @@ Input commands that were to be sent:
         ---------
         >>> # Compute monopole + dipole + dipole-dipole interactions
         >>> df = estat.get_Electrostatic_stabilization_tensor(
-        ...     multiwfn_path, multiwfn_module, atmrad_path,
+        ...     multiwfn_path, atmrad_path,
         ...     substrate_idxs=[[0, 1, 2]],  # 3-atom substrate
         ...     multipole_order=2  # Include dipole-dipole terms
         ... )
 
         >>> # Include quadrupole terms with atom-wise decomposition
         >>> df, df_atomwise = estat.get_Electrostatic_stabilization_tensor(
-        ...     multiwfn_path, multiwfn_module, atmrad_path,
+        ...     multiwfn_path, atmrad_path,
         ...     substrate_idxs=[[0, 1, 2]],
         ...     multipole_order=3,
-        ...     decompose_atomwise=True
+        ...     save_atomwise_decomposition=True
         ... )
 
         >>> # QM/MM: QM substrate (with dipoles) interacting with MM environment (charges only)
         >>> df = estat.get_Electrostatic_stabilization_tensor(
-        ...     multiwfn_path, multiwfn_module, atmrad_path,
+        ...     multiwfn_path, atmrad_path,
         ...     substrate_idxs=[[0, 1, 2]],  # QM region
         ...     substrate_multipole_order=2,  # QM: charges + dipoles
         ...     env_multipole_order=1         # MM: charges only
@@ -2953,7 +2978,8 @@ Input commands that were to be sent:
             f = str(f)
             substrate_idx = substrate_idxs[counter]
             results_dict = {}
-            file_path_xyz = f"{os.getcwd()}/{f}/{final_structure_file}"
+            # Use stored absolute path instead of constructing it
+            file_path_xyz = self.xyz_paths[counter]
             total_lines = Electrostatics.mapcount(file_path_xyz)
             init_all_lines = np.arange(0, total_lines - 2)
 
@@ -2963,8 +2989,12 @@ Input commands that were to be sent:
                 env_idx = env_idxs[counter]
 
             # Partition charges (with multipole analysis if needed)
+            # Extract actual filenames from paths
+            molden_filename = os.path.basename(self.molden_paths[counter])
+            xyz_filename = os.path.basename(self.xyz_paths[counter])
             comp_cost = self.multiwfn.partitionCharge(need_multipoles, f,
-                                            multiwfn_path, atmrad_path, charge_type, owd)
+                                            multiwfn_path, atmrad_path, charge_type, owd,
+                                            molden_filename=molden_filename, xyz_filename=xyz_filename)
 
             if comp_cost == -1:
                 print(f"Warning: Charge calculation failed for {f}, skipping")
@@ -2976,8 +3006,9 @@ Input commands that were to be sent:
             df_geom = geom.getGeomInfo()
 
             # Load charge/multipole data with automatic fallback
-            multipole_name = f"{os.getcwd()}/{f}/Multipole{charge_type}.txt"
-            monopole_name = f"{os.getcwd()}/{f}/Charges{charge_type}.txt"
+            # Use directory path directly (f is already absolute path from lst_of_folders)
+            multipole_name = f"{f}/Multipole{charge_type}.txt"
+            monopole_name = f"{f}/Charges{charge_type}.txt"
 
             # Try to load multipole file first, fall back to charges if not available
             multipole_available = os.path.exists(multipole_name)
@@ -3059,7 +3090,7 @@ Input commands that were to be sent:
                                df_geom['Z'][sub_idx]])
 
                 # Build substrate multipole vector with substrate-specific order
-                M_i = self._build_multipole_vector(sub_row, substrate_multipole_order)
+                M_i = self.build_multipole_vector(sub_row, substrate_multipole_order)
 
                 for env_idx_atom in env_idx:
                     # Get environment atom data using dictionary lookup for multipoles or direct dataframe for monopoles
@@ -3077,11 +3108,11 @@ Input commands that were to be sent:
                                    df_geom['Z'][env_idx_atom]])
 
                     # Build environment multipole vector with environment-specific order
-                    M_j = self._build_multipole_vector(env_row, env_multipole_order)
+                    M_j = self.build_multipole_vector(env_row, env_multipole_order)
 
                     # Build interaction tensor with max order (tensor must accommodate both)
                     tensor_order = max(substrate_multipole_order, env_multipole_order)
-                    T_ij = self._build_interaction_tensor(r_i, r_j, tensor_order, dielectric)
+                    T_ij = self.build_interaction_tensor(r_i, r_j, tensor_order, dielectric)
 
                     # Pad multipole vectors to match tensor dimensions if needed
                     # This handles QM/MM cases where substrate and environment have different orders
@@ -3103,7 +3134,7 @@ Input commands that were to be sent:
                     total_energy += E_pair_kcal_mol
 
                 # Store atom-wise decomposition if requested
-                if decompose_atomwise:
+                if save_atomwise_decomposition:
                     atom_data = {
                         'FileName': f,
                         'Atom_Index': sub_idx,
@@ -3142,7 +3173,7 @@ Input commands that were to be sent:
             results_dict['FileName'] = f
             allspeciesdict.append(results_dict)
 
-            if decompose_atomwise:
+            if save_atomwise_decomposition:
                 all_atomwise_data.extend(atomwise_contributions)
 
                 # Visualize atom-wise contributions if requested
@@ -3159,10 +3190,10 @@ Input commands that were to be sent:
                             if 0 <= atom_idx < total_atoms:
                                 b_factors[atom_idx] = row['Energy_Contribution_kcal_mol']
 
-                        name_abbrev = f.split('/')[0]
+                        structure_name = os.path.basename(f.rstrip("/"))
 
                         # Create PDB file
-                        pdb_name = f'Estabilization_tensor_{name_abbrev}_sub{substrate_multipole_order}_env{env_multipole_order}.pdb'
+                        pdb_name = f'estab_{charge_type}_{structure_name}_tensor_sub{substrate_multipole_order}_env{env_multipole_order}.pdb'
                         if multipole_available and (substrate_multipole_order >= 2 or env_multipole_order >= 2):
                             Visualize(file_path_xyz).makePDB(multipole_name, b_factors, pdb_name)
                         else:
@@ -3178,11 +3209,11 @@ Input commands that were to be sent:
 
         # Create output DataFrames
         df = pd.DataFrame(allspeciesdict)
-        df.to_csv(name_dataStorage + 'multipole_' + str(multipole_order) + '.csv', index=False)
+        df.to_csv(f'{name_dataStorage}_multipole_{multipole_order}.csv', index=False)
 
-        if decompose_atomwise:
+        if save_atomwise_decomposition:
             df_atomwise = pd.DataFrame(all_atomwise_data)
-            df_atomwise.to_csv(name_dataStorage + '_atomwise.csv', index=False)
+            df_atomwise.to_csv(f'{name_dataStorage}_atomwise.csv', index=False)
             return df, df_atomwise
 
         return df
