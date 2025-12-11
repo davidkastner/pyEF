@@ -1,0 +1,75 @@
+# PyEF Configuration File
+# Complete list of all available parameters
+
+# ============================================================
+# REQUIRED PARAMETERS
+# ============================================================
+input: jobs.csv                          # Path to job batch CSV file
+multiwfn_path: /path/to/Multiwfn         # Path to Multiwfn executable
+atmrad_path: /path/to/atmrad             # Path to atmrad directory
+
+# ============================================================
+# CHARGE PARTITIONING OPTIONS
+# ============================================================
+charge_types: ['Hirshfeld_I']            # Charge schemes: Hirshfeld, Hirshfeld_I, CHELPG, Becke
+multipole: true                          # Use multipole expansion for E-field (true/false)
+use_multipole: false                     # Use multipole expansion for ESP (true/false)
+multipole_order: 2                       # Multipole expansion order (1=dipole, 2=quadrupole, etc.)
+
+# ============================================================
+# ANALYSIS OPTIONS
+# ============================================================
+save_atomwise_decomposition: false       # Save atom-wise decomposition to separate CSV files (true/false)
+                                         # For E-field: creates {filename}_atomwise.csv with per-atom contributions
+                                         # For estab: creates {filename}_atomwise.csv with per-atom energy contributions
+
+# Visualization options (create PDB files with values in B-factor column)
+visualize_ef: false                      # Create PDB files for E-field visualization (true/false)
+visualize_esp: false                     # Create PDB files for ESP visualization (true/false)
+visualize_charges: false                 # Create PDB files for partial charges visualization (true/false)
+
+substrate_idxs: [0, 1, 2]               # Substrate atom indices for estab (0-indexed)
+env_idxs: [3, 4, 5, 6]                  # Environment atom indices for estab (0-indexed)
+
+# ============================================================
+# EXCLUDE ATOMS FROM E-FIELD CALCULATION
+# ============================================================
+# Option 1: Same exclusions for all jobs (flat list)
+exclude_atoms: [7, 8, 9]
+
+# Option 2: Different exclusions per job (nested list - one per job in jobs.csv)
+# exclude_atoms:
+#   - [0, 1, 2]      # Job 1: exclude atoms 0, 1, 2
+#   - [3, 4, 5, 6]   # Job 2: exclude atoms 3, 4, 5, 6
+#   - []             # Job 3: no exclusions
+#   - [10, 11]       # Job 4: exclude atoms 10, 11
+
+# ============================================================
+# QM/MM OPTIONS
+# ============================================================
+include_ptchgs: false                    # Include MM point charges (true/false)
+ptchg_file: 'pointcharges.txt'          # Filename of point charge file
+                                        # File is looked for in same directory as molden file
+                                        # Each job should have its own pointcharges.txt in its directory
+dielectric_scale: 1.0                   # Dielectric scaling factor for MM charges
+
+# ============================================================
+# PHYSICAL PARAMETERS
+# ============================================================
+dielectric: 1                           # Dielectric constant (1 = vacuum)
+
+# ============================================================
+# TECHNICAL OPTIONS
+# ============================================================
+use_ecp: false                          # Use ECP correction for molden files (true/false)
+geometry_check: false                   # Run geometry checks (true/false)
+
+# ============================================================
+# EXAMPLE JOB BATCH FILE (jobs.csv)
+# ============================================================
+# Format: analysis_type, path_to_molden, path_to_xyz, atom_indices
+#
+# ef, /path/to/job1/optim.molden, /path/to/job1/optim.xyz, (25, 26)
+# esp, /path/to/job2/optim.molden, /path/to/job2/optim.xyz, 30
+# estab, /path/to/job3/optim.molden, /path/to/job3/optim.xyz
+# ef+esp, /path/to/job4/optim.molden, /path/to/job4/optim.xyz, (10, 11)

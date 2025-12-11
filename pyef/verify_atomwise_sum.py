@@ -71,7 +71,7 @@ def verify_atomwise_decomposition():
 
     try:
         [E_projected, bonded_atoms, bond_idx, bond_lens, E_proj_atomwise,
-         E_proj_atomwise_list] = es.E_proj_bondIndices_atomwise(
+         E_proj_atomwise_list] = es.bondEfield(
             bond_indices, xyz_file, charge_file, all_lines,
             bool_multipole=False, df_ptchg=None
         )

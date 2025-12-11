@@ -171,7 +171,7 @@ class Geometry:
 
 
 
-    def Hbond_check(self,donors_strong, hydrogens, acceptors_strong, hconv_cutoff, hcoor_cutoff,  strong_angle_cutoff):
+    def hbond_check(self,donors_strong, hydrogens, acceptors_strong, hconv_cutoff, hcoor_cutoff,  strong_angle_cutoff):
         hbond_strong = []
         for _, donor in donors_strong.iterrows():
             d_pos = np.array(donor['pos'])
@@ -270,8 +270,8 @@ class Geometry:
         env_donors_strong = env_df[env_df['Atom'].str.startswith(donor_atoms_strong)]
         solute_acceptors_strong = solute_df[solute_df['Atom'].str.startswith(acceptor_atoms_strong)]
 
-        str_Hbonds_solute = self.Hbond_check(solute_donors_strong, hydrogens, env_acceptors_strong, hconv_cutoff, hcoor_cutoff,  strong_angle_cutoff)
-        str_Hbonds_solvent = self.Hbond_check(env_donors_strong, hydrogens, solute_acceptors_strong, hconv_cutoff, hcoor_cutoff, strong_angle_cutoff)
+        str_Hbonds_solute = self.hbond_check(solute_donors_strong, hydrogens, env_acceptors_strong, hconv_cutoff, hcoor_cutoff,  strong_angle_cutoff)
+        str_Hbonds_solvent = self.hbond_check(env_donors_strong, hydrogens, solute_acceptors_strong, hconv_cutoff, hcoor_cutoff, strong_angle_cutoff)
 
 
         # ---- Weak donors (C–H) and acceptors (include halogens) ----
@@ -386,7 +386,7 @@ class Visualize:
         # TODO: Implement this method
         pass
 
-    def PDBESP(self):
+    def pdb_esp(self):
         #visualize the ESP of the full system
         xyzfie = self.xyzfile
         from .analysis import Electrostatics

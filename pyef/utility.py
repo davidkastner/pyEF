@@ -507,7 +507,6 @@ class MultiwfnInterface:
             Configuration dictionary with keys:
             - molden_filename: Name of molden file
             - xyzfilename: Name of XYZ geometry file
-            - chgprefix: Prefix for charge output files
             - rerun: Whether to rerun existing calculations
             - hasECP: Whether calculation used ECP
             - maxIHirshFuzzyBasis: Max basis functions for Hirshfeld-I fuzzy
@@ -516,7 +515,6 @@ class MultiwfnInterface:
         self.config = config if config is not None else {
             'molden_filename': 'final_optim.molden',
             'xyzfilename': 'final_optim.xyz',
-            'chgprefix': '',
             'rerun': False,
             'hasECP': False,
             'maxIHirshFuzzyBasis': 1500,
@@ -632,7 +630,8 @@ class MultiwfnInterface:
             raise
 
     def partitionCharge(self, multipole_bool, f,
-                       multiwfn_path, atmrad_path, charge_type, owd):
+                       multiwfn_path, atmrad_path, charge_type, owd,
+                       molden_filename=None, xyz_filename=None):
         """
         Partition electron density using Multiwfn to generate partial charges or multipole moments.
 
@@ -653,6 +652,12 @@ class MultiwfnInterface:
             Partitioning scheme (e.g., 'Hirshfeld', 'CHELPG', 'Hirshfeld_I')
         owd : str
             Original working directory
+        molden_filename : str, optional
+            Name of the molden file (not full path, just filename).
+            If None, uses self.config['molden_filename']
+        xyz_filename : str, optional
+            Name of the xyz file (not full path, just filename).
+            If None, uses self.config['xyzfilename']
 
         Returns
         -------
@@ -663,11 +668,17 @@ class MultiwfnInterface:
         # Handle f being a list (take first element)
         if isinstance(f, list):
             f = f[0]
-        molden_filename = self.config['molden_filename']
-        final_structure_file = self.config['xyzfilename']
-        # Handle xyzfilename being a list (take first element)
-        if isinstance(final_structure_file, list):
-            final_structure_file = final_structure_file[0]
+
+        # Use provided filenames or fall back to config defaults
+        if molden_filename is None:
+            molden_filename = self.config['molden_filename']
+        if xyz_filename is None:
+            final_structure_file = self.config['xyzfilename']
+            # Handle xyzfilename being a list (take first element)
+            if isinstance(final_structure_file, list):
+                final_structure_file = final_structure_file[0]
+        else:
+            final_structure_file = xyz_filename
         print(f"Do we need to run calcs?: {self.config['rerun']}")
         comp_cost = 0  # Default to 0 for "already exists" case
         num_atoms = 0
@@ -676,8 +687,8 @@ class MultiwfnInterface:
         os.chdir(owd)
         os.chdir(f)
 
-        file_path_multipole = f"{os.getcwd()}/{self.config['chgprefix']}Multipole{charge_type}.txt"
-        file_path_monopole = f"{os.getcwd()}/{self.config['chgprefix']}Charges{charge_type}.txt"
+        file_path_multipole = f"{os.getcwd()}/Multipole{charge_type}.txt"
+        file_path_monopole = f"{os.getcwd()}/Charges{charge_type}.txt"
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
 
         # Check if previous calculations fully converged for desired multipole/charge scheme
@@ -704,13 +715,18 @@ class MultiwfnInterface:
                         command = f"{multiwfn_path} {molden_filename} -set {path_to_init_file}"
 
                     multiwfn_commands = ['15', '-1'] + self.dict_of_multipole[charge_type] + ['0', 'q']
-                    num_atoms = self._count_atoms(final_structure_file)
+                    num_atoms = self.count_atoms(final_structure_file)
 
                     if charge_type == 'Hirshfeld_I':
                         # Get the number of basis functions
-                        num_basis = MoldenObject(file_path_xyz, molden_filename).countBasis()
+                        molden_full_path = f"{os.getcwd()}/{molden_filename}"
+                        num_basis = MoldenObject(file_path_xyz, molden_full_path).countBasis()
                         atmrad_src = atmrad_path
-                        copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+                        # Only copy if atmrad_src exists and is a directory
+                        if os.path.isdir(atmrad_src):
+                            copy_tree(atmrad_src, os.getcwd() + '/atmrad/')
+                        else:
+                            print(f"Warning: atmrad_path '{atmrad_src}' is not a directory. Skipping atmrad copy.")
                         print(f'Current num of basis is: {num_basis}')
                         print(f'The current max num is: {self.config["maxIHirshFuzzyBasis"]}')
                         if num_basis > self.config['maxIHirshFuzzyBasis']:
@@ -770,7 +786,7 @@ class MultiwfnInterface:
         return comp_cost
 
     @staticmethod
-    def _count_atoms(xyz_filename):
+    def count_atoms(xyz_filename):
         """Count number of atoms in XYZ file (mapcount replacement)."""
         with open(xyz_filename, 'r') as f:
             for i, line in enumerate(f):

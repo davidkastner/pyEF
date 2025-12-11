@@ -4,12 +4,12 @@ import pyef
 import argparse
 from pyef.analysis import Electrostatics
 
-def main(job_name, jobs, metal_indices, bond_indices, dielectric,
-         geom_flag, esp_flag, ef_flag, estab_flag,
-         multiwfn_module, multiwfn_path, atmrad_path,
+def main(job_name, molden_paths, xyz_paths, analysis_types, metal_indices, bond_indices, dielectric,
+         geom_flag,
+         multiwfn_path, atmrad_path,
          charge_types=['Hirshfeld_I'], multipole_bool=True, use_multipole=False,
          decompose_atomwise=False, substrate_idxs=None, env_idxs=None, multipole_order=2,
-         include_ptchgs=False, ptchg_file='', dielectric_scale=1.0):
+         include_ptchgs=False, ptchg_file='', dielectric_scale=1.0, use_ecp=False, exclude_atoms=[]):
     """
     Main function for running the pyEF workflow.
 
@@ -17,8 +17,12 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
     ----------
     job_name : str
         Name for output files
-    jobs : list of str
-        List of job paths
+    molden_paths : list of str
+        List of paths to .molden files
+    xyz_paths : list of str
+        List of paths to .xyz files
+    analysis_types : list of str
+        List of analysis types per job ('ef', 'esp', 'estab', or combinations)
     metal_indices : list of int or None
         List of metal atom indices (only required for ESP analysis or auto-finding bonds)
     bond_indices : list of tuples
@@ -27,14 +31,6 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
         Dielectric constant
     geom_flag : bool
         Run geometry checks
-    esp_flag : bool
-        Run ESP analysis
-    ef_flag : bool
-        Run electric field analysis
-    estab_flag : bool
-        Run electrostatic stabilization analysis
-    multiwfn_module : str
-        Module name for Multiwfn
     multiwfn_path : str
         Path to Multiwfn executable
     atmrad_path : str
@@ -56,9 +52,18 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
     include_ptchgs : bool, optional
         Include MM point charges from QM/MM calculations (default: False)
     ptchg_file : str, optional
-        Path to point charge file (default: '')
+        Filename of point charge file (default: '')
+        File is looked for in the same directory as each job's molden file.
+        Example: 'pointcharges.txt' will look for this file in each job directory.
     dielectric_scale : float, optional
         Dielectric scaling factor for MM charges (default: 1.0)
+    use_ecp : bool, optional
+        Use effective core potential (ECP) correction for molden files (default: False)
+    exclude_atoms : list of int or list of lists, optional
+        Atom indices to exclude from E-field calculations (default: [])
+        Can be either:
+        - Flat list [0, 1, 2] for same exclusions across all jobs
+        - Nested list [[0, 1], [2, 3], []] for different exclusions per job
 
     Notes
     -----
@@ -67,69 +72,99 @@ def main(job_name, jobs, metal_indices, bond_indices, dielectric,
     - If jobs end abruptly, delete the polarization file before restarting
     """
 
-    # Path from each initial directory to the directory containing the .molden file
-    # NOTE: If jobs already contain complete paths, set folder_to_file_path = ''
-    folder_to_file_path  = '/scr/'
+    # Validate inputs
+    if len(molden_paths) != len(xyz_paths) or len(molden_paths) != len(analysis_types):
+        raise ValueError("molden_paths, xyz_paths, and analysis_types must have the same length")
 
-    # Initialize Electrostatics Object
-    incage_bool = False
-    # Metal indices only needed for ESP calculations or auto-finding bonds
-    if metal_indices:
-        dataObject = Electrostatics(jobs, folder_to_file_path, lst_of_tmcm_idx=metal_indices,
-                                    incage_bool=incage_bool, dielectric=dielectric)
-    else:
-        dataObject = Electrostatics(jobs, folder_to_file_path,
-                                    incage_bool=incage_bool, dielectric=dielectric)
+    # Determine if using per-job analysis types (always True in new format)
+    use_per_job_analysis = True
 
-    # Configure QM/MM if requested
-    if include_ptchgs and ptchg_file:
-        dataObject.includePtChgs(ptchg_file)
-        dataObject.set_dielectric_scale(dielectric_scale)
+    # Group jobs by analysis type for efficient batch processing
+    from collections import defaultdict
+    analysis_groups = defaultdict(list)  # {analysis_type: [job_indices, ...]}
 
-    # Fix/reformat the name and charges on atoms in .molden file to set up for future calculations
-    dataObject.prepData()
-    dataObject.fix_allECPmolden()
+    for idx, analysis_type in enumerate(analysis_types):
+        if analysis_type:
+            # Handle combined analysis types (e.g., 'ef+esp')
+            for atype in analysis_type.lower().replace('+', ' ').split():
+                analysis_groups[atype].append(idx)
 
-    if geom_flag:
-        # Method will calculate various RMSD, molsimplify error parameters/flags
-        # NOTE: errorAnalysis() method does not exist in Electrostatics class
-        # TODO: Implement errorAnalysis() or remove this functionality
-        # dataObject.errorAnalysis('Errordata')
-        pass
+    # Process each analysis type
+    for analysis_type, job_indices in analysis_groups.items():
+        # Filter data for this analysis type
+        filtered_molden = [molden_paths[i] for i in job_indices]
+        filtered_xyz = [xyz_paths[i] for i in job_indices]
+        filtered_metals = [metal_indices[i] if metal_indices else None for i in job_indices]
+        filtered_bonds = [bond_indices[i] if bond_indices else [] for i in job_indices]
 
-    # Run ESP analysis if requested
-    if esp_flag:
-        print("Performing electrostatic potential (ESP) analysis...")
-        ESPdata_filename = f'{job_name}_ESPdata'
-        dataObject.getESP(charge_types, ESPdata_filename, multiwfn_module,
-                         multiwfn_path, atmrad_path, use_multipole=use_multipole,
-                         dielectric=dielectric)
+        print(f"\n{'='*60}")
+        print(f"Running {analysis_type.upper()} analysis on {len(filtered_molden)} jobs")
+        print(f"{'='*60}\n")
 
-    # Run E-field analysis if requested
-    if ef_flag:
-        print("Performing electric field analysis...")
-        Efielddata_filename = f'{job_name}_Efielddata'
-        dataObject.getEfield(charge_types[0] if isinstance(charge_types, list) else charge_types,
-                            Efielddata_filename, multiwfn_module, multiwfn_path, atmrad_path,
-                            multipole_bool=multipole_bool, input_bond_indices=bond_indices,
-                            decompose_atomwise=decompose_atomwise, dielectric=dielectric)
-
-    # Run electrostatic stabilization analysis if requested
-    if estab_flag:
-        if substrate_idxs is None:
-            print("Warning: substrate_idxs not specified for electrostatic stabilization. Skipping...")
+        # Initialize Electrostatics Object for this group
+        incage_bool = False
+        if any(filtered_metals):
+            dataObject = Electrostatics(filtered_molden, filtered_xyz,
+                                      lst_of_tmcm_idx=filtered_metals,
+                                      incage_bool=incage_bool, dielectric=dielectric)
         else:
-            print("Performing electrostatic stabilization analysis...")
-            estab_filename = f'{job_name}_Estab'
-            dataObject.getElectrostatic_stabilization(
-                multiwfn_path, multiwfn_module, atmrad_path,
-                substrate_idxs=substrate_idxs,
-                charge_type=charge_types[0] if isinstance(charge_types, list) else charge_types,
-                name_dataStorage=estab_filename,
-                env_idxs=env_idxs,
-                decompose_atomwise=decompose_atomwise,
-                multipole_order=multipole_order
-            )
+            dataObject = Electrostatics(filtered_molden, filtered_xyz,
+                                      incage_bool=incage_bool, dielectric=dielectric)
+
+        # Configure QM/MM if requested
+        if include_ptchgs and ptchg_file:
+            dataObject.includePtChgs(ptchg_file)
+            dataObject.set_dielectric_scale(dielectric_scale)
+
+        # Set excluded atoms if specified
+        if exclude_atoms:
+            dataObject.setExcludeAtomFromCalc(exclude_atoms)
+
+        # Prepare data
+        dataObject.prepData()
+        if use_ecp:
+            dataObject.fix_allECPmolden()
+
+        # Run geometry check if requested
+        if geom_flag:
+            # Method will calculate various RMSD, molsimplify error parameters/flags
+            # NOTE: errorAnalysis() method does not exist in Electrostatics class
+            # TODO: Implement errorAnalysis() or remove this functionality
+            # dataObject.errorAnalysis('Errordata')
+            pass
+
+        # Run the appropriate analysis
+        if analysis_type == 'esp':
+            # ESP can use multiple charge types, so we'll use the first one for the filename
+            chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
+            ESPdata_filename = f'{analysis_type}_{job_name}_{chg_type}'
+            dataObject.getESP(charge_types, ESPdata_filename,
+                           multiwfn_path, atmrad_path, use_multipole=use_multipole,
+                           dielectric=dielectric)
+
+        elif analysis_type == 'ef':
+            chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
+            Efielddata_filename = f'{analysis_type}_{job_name}_{chg_type}'
+            dataObject.getEfield(chg_type,
+                               Efielddata_filename, multiwfn_path, atmrad_path,
+                               multipole_bool=multipole_bool, input_bond_indices=filtered_bonds,
+                               decompose_atomwise=decompose_atomwise, dielectric=dielectric)
+
+        elif analysis_type == 'estab':
+            if substrate_idxs is None:
+                print(f"Warning: substrate_idxs not specified for {analysis_type}. Skipping...")
+            else:
+                chg_type = charge_types[0] if isinstance(charge_types, list) else charge_types
+                estab_filename = f'{analysis_type}_{job_name}_{chg_type}'
+                dataObject.getElectrostatic_stabilization(
+                    multiwfn_path, atmrad_path,
+                    substrate_idxs=substrate_idxs,
+                    charge_type=chg_type,
+                    name_dataStorage=estab_filename,
+                    env_idxs=env_idxs,
+                    decompose_atomwise=decompose_atomwise,
+                    multipole_order=multipole_order
+                )
 
 def read_file_lines(file_path):
     """Reads in auxiliary files containing job information"""
@@ -137,7 +172,7 @@ def read_file_lines(file_path):
         return [line.strip() for line in file.readlines()]
 
 if __name__ == "__main__":
-    # Example: python run.py --ef --esp --estab --jobs_file path/to/jobs.in --metals_file path/to/metals.in --job_name myJob --bonds_file path/to/bonds.in --multiwfn_module multiwfn --multiwfn_path /path/to/multiwfn --atmrad_path /path/to/atmrad --dielectric 1.0 --substrate_idxs 1,2,3 > pyEF.log
+    # Example: python run.py --ef --esp --estab --jobs_file path/to/jobs.in --metals_file path/to/metals.in --job_name myJob --bonds_file path/to/bonds.in --multiwfn_path /path/to/multiwfn --atmrad_path /path/to/atmrad --dielectric 1.0 --substrate_idxs 1,2,3 > pyEF.log
     parser = argparse.ArgumentParser(description="PyEF Analysis Pipeline")
     parser.add_argument("--geom", action="store_true", help="Perform a geometry check")
     parser.add_argument("--esp", action="store_true", help="Perform electrostatic potential (ESP) analysis")
@@ -147,7 +182,6 @@ if __name__ == "__main__":
     parser.add_argument("--metals_file", required=True, help="Path to file containing metal indices")
     parser.add_argument("--job_name", required=True, help="Name for the job/output files")
     parser.add_argument("--bonds_file", required=True, help="Path to file containing bond indices")
-    parser.add_argument("--multiwfn_module", required=True, help="Module name for multiwfn")
     parser.add_argument("--multiwfn_path", required=True, help="Path to multiwfn executable")
     parser.add_argument("--atmrad_path", required=True, help="Path to atmrad file")
     parser.add_argument("--dielectric", type=float, default=1.0, help="Dielectric constant (default: 1.0)")
@@ -174,6 +208,6 @@ if __name__ == "__main__":
 
     main(args.job_name, jobs, metal_indices, bond_indices, args.dielectric,
          geom_flag, esp_flag, ef_flag, estab_flag,
-         args.multiwfn_module, args.multiwfn_path, args.atmrad_path,
+         args.multiwfn_path, args.atmrad_path,
          args.charge_types, args.multipole, args.use_multipole,
          args.decompose_atomwise, substrate_idxs, env_idxs, args.multipole_order)
