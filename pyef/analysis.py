@@ -2421,8 +2421,8 @@ Input commands that were to be sent:
                         full_file_path = os.getcwd() +'/final_optim_' +key+'.txt'
                         if key == "Hirshfeld_I":
                             with resources.path('pyef.resources', 'atmrad') as atmrad_resource:
-                            atmrad_src = str(atmrad_resource)
-                            copy_tree(atmrad_src, results_dir + 'atmrad/')
+                                atmrad_src = str(atmrad_resource)
+                                copy_tree(atmrad_src, results_dir + 'atmrad/')
                         try:
                             for res_name in res_dict.keys():
                                 res_indices = res_dict[res_name]
