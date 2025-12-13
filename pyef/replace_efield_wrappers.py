@@ -8,7 +8,7 @@ with open('analysis.py', 'r') as f:
     content = f.read()
 
 # Define the wrapper for getEfield_acrossBond
-efield_acrossbond_wrapper = '''    def getEfield_acrossBond(self, charge_type, Efielddata_filename, multiwfn_path, atmrad_path, multipole_bool, input_bond_indices=[], dielectric=1):
+efield_acrossbond_wrapper = '''    def getEfield_acrossBond(self, charge_type, Efielddata_filename, multiwfn_path, multipole_bool, input_bond_indices=[], dielectric=1):
         """Legacy wrapper for getEfield() with bond-specific E-field calculation.
 
         DEPRECATED: Use getEfield() directly instead.
@@ -20,7 +20,6 @@ efield_acrossbond_wrapper = '''    def getEfield_acrossBond(self, charge_type, E
             charge_types=charge_type,
             Efielddata_filename=Efielddata_filename,
             multiwfn_path=multiwfn_path,
-            atmrad_path=atmrad_path,
             multipole_bool=multipole_bool,
             input_bond_indices=input_bond_indices,
             auto_find_bonds=False,
@@ -30,7 +29,7 @@ efield_acrossbond_wrapper = '''    def getEfield_acrossBond(self, charge_type, E
         )'''
 
 # Define the wrapper for getEfield_decomposable
-efield_decomposable_wrapper = '''    def getEfield_decomposable(self, charge_type, Efielddata_filename, multiwfn_path, atmrad_path, multipole_bool, input_bond_indices=[], dielectric=1):
+efield_decomposable_wrapper = '''    def getEfield_decomposable(self, charge_type, Efielddata_filename, multiwfn_path, multipole_bool, input_bond_indices=[], dielectric=1):
         """Legacy wrapper for getEfield() with decomposable E-field calculation.
 
         DEPRECATED: Use getEfield() directly instead.
@@ -42,7 +41,6 @@ efield_decomposable_wrapper = '''    def getEfield_decomposable(self, charge_typ
             charge_types=charge_type,
             Efielddata_filename=Efielddata_filename,
             multiwfn_path=multiwfn_path,
-            atmrad_path=atmrad_path,
             multipole_bool=multipole_bool,
             input_bond_indices=input_bond_indices,
             auto_find_bonds=False,
@@ -52,7 +50,7 @@ efield_decomposable_wrapper = '''    def getEfield_decomposable(self, charge_typ
         )'''
 
 # Define the wrapper for getEFieldMultipole
-efield_multipole_wrapper = '''    def getEFieldMultipole(self, Efield_data_filename, multiwfn_path, atmrad_path, input_bond_indices=[], excludeAtoms=[], polarization_scheme='Hirshfeld_I'):
+efield_multipole_wrapper = '''    def getEFieldMultipole(self, Efield_data_filename, multiwfn_path, input_bond_indices=[], excludeAtoms=[], polarization_scheme='Hirshfeld_I'):
         """Legacy wrapper for getEfield() with multipole E-field calculation.
 
         DEPRECATED: Use getEfield() with multipole_bool=True instead.
@@ -68,7 +66,6 @@ efield_multipole_wrapper = '''    def getEFieldMultipole(self, Efield_data_filen
             charge_types=polarization_scheme,
             Efielddata_filename=Efield_data_filename,
             multiwfn_path=multiwfn_path,
-            atmrad_path=atmrad_path,
             multipole_bool=True,
             input_bond_indices=input_bond_indices,
             auto_find_bonds=False,

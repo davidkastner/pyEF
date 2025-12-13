@@ -12,11 +12,17 @@ class TestParseJobBatchFile:
     def test_basic_csv_parsing(self, tmp_path):
         """Test basic CSV parsing without comments"""
         csv_file = tmp_path / "jobs.csv"
-        csv_file.write_text("job1,0,1\njob2,1,2\njob3,2,3\n")
+        csv_file.write_text(
+            "ef,path/to/file1.molden,path/to/file1.xyz,0,1\n"
+            "esp,path/to/file2.molden,path/to/file2.xyz,1,2\n"
+            "estab,path/to/file3.molden,path/to/file3.xyz,2,3\n"
+        )
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
-        assert jobs == ["job1", "job2", "job3"]
+        assert analysis_types == ["ef", "esp", "estab"]
+        assert molden_paths == ["path/to/file1.molden", "path/to/file2.molden", "path/to/file3.molden"]
+        assert xyz_paths == ["path/to/file1.xyz", "path/to/file2.xyz", "path/to/file3.xyz"]
         assert metal_indices == [0, 1, 2]
         assert bond_indices == [[(0, 1)], [(1, 2)], [(2, 3)]]
 
@@ -25,15 +31,17 @@ class TestParseJobBatchFile:
         csv_file = tmp_path / "jobs.csv"
         csv_file.write_text(
             "# This is a comment\n"
-            "job1,0,1\n"
-            "job2,1,2  # inline comment\n"
+            "ef,path/to/file1.molden,path/to/file1.xyz,0,1\n"
+            "esp,path/to/file2.molden,path/to/file2.xyz,1,2  # inline comment\n"
             "# Another comment\n"
-            "job3,2,3\n"
+            "estab,path/to/file3.molden,path/to/file3.xyz,2,3\n"
         )
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
-        assert jobs == ["job1", "job2", "job3"]
+        assert analysis_types == ["ef", "esp", "estab"]
+        assert molden_paths == ["path/to/file1.molden", "path/to/file2.molden", "path/to/file3.molden"]
+        assert xyz_paths == ["path/to/file1.xyz", "path/to/file2.xyz", "path/to/file3.xyz"]
         assert metal_indices == [0, 1, 2]
         assert bond_indices == [[(0, 1)], [(1, 2)], [(2, 3)]]
 
@@ -41,30 +49,34 @@ class TestParseJobBatchFile:
         """Test CSV parsing with empty lines"""
         csv_file = tmp_path / "jobs.csv"
         csv_file.write_text(
-            "job1,0,1\n"
+            "ef,path/to/file1.molden,path/to/file1.xyz,0,1\n"
             "\n"
-            "job2,1,2\n"
+            "esp,path/to/file2.molden,path/to/file2.xyz,1,2\n"
             "\n\n"
-            "job3,2,3\n"
+            "estab,path/to/file3.molden,path/to/file3.xyz,2,3\n"
         )
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
-        assert jobs == ["job1", "job2", "job3"]
+        assert analysis_types == ["ef", "esp", "estab"]
+        assert molden_paths == ["path/to/file1.molden", "path/to/file2.molden", "path/to/file3.molden"]
+        assert xyz_paths == ["path/to/file1.xyz", "path/to/file2.xyz", "path/to/file3.xyz"]
         assert metal_indices == [0, 1, 2]
 
     def test_csv_with_whitespace(self, tmp_path):
         """Test CSV parsing with extra whitespace"""
         csv_file = tmp_path / "jobs.csv"
         csv_file.write_text(
-            "  job1  ,  0  ,  1  \n"
-            "job2,1,2\n"
-            "  job3  ,  2  ,  3\n"
+            "  ef  ,  path/to/file1.molden  ,  path/to/file1.xyz  ,  0  ,  1  \n"
+            "esp,path/to/file2.molden,path/to/file2.xyz,1,2\n"
+            "  estab  ,  path/to/file3.molden  ,  path/to/file3.xyz  ,  2  ,  3\n"
         )
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
-        assert jobs == ["job1", "job2", "job3"]
+        assert analysis_types == ["ef", "esp", "estab"]
+        assert molden_paths == ["path/to/file1.molden", "path/to/file2.molden", "path/to/file3.molden"]
+        assert xyz_paths == ["path/to/file1.xyz", "path/to/file2.xyz", "path/to/file3.xyz"]
         assert metal_indices == [0, 1, 2]
 
     def test_empty_file(self, tmp_path):
@@ -72,9 +84,11 @@ class TestParseJobBatchFile:
         csv_file = tmp_path / "empty.csv"
         csv_file.write_text("")
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
-        assert jobs == []
+        assert analysis_types == []
+        assert molden_paths == []
+        assert xyz_paths == []
         assert metal_indices == []
         assert bond_indices == []
 
@@ -88,18 +102,20 @@ class TestParseJobBatchFile:
             "# Comment 3\n"
         )
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
-        assert jobs == []
+        assert analysis_types == []
+        assert molden_paths == []
+        assert xyz_paths == []
         assert metal_indices == []
         assert bond_indices == []
 
     def test_integer_conversion(self, tmp_path):
         """Test that metal and bond indices are properly converted to integers"""
         csv_file = tmp_path / "jobs.csv"
-        csv_file.write_text("job1,10,20\n")
+        csv_file.write_text("ef,path/to/file.molden,path/to/file.xyz,10,20\n")
 
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(csv_file))
 
         assert isinstance(metal_indices[0], int)
         assert isinstance(bond_indices[0][0][0], int)

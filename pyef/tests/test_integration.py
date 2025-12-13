@@ -19,25 +19,37 @@ class TestWorkflowIntegration:
         # Create a batch CSV file
         batch_file = tmp_path / "batch.csv"
         batch_file.write_text(
-            "sample_1,0,1\n"
+            "ef,path/to/sample_1.molden,path/to/sample_1.xyz,0,1\n"
             "# This is a comment\n"
-            "sample_2,1,2\n"
+            "esp,path/to/sample_2.molden,path/to/sample_2.xyz,1,2\n"
         )
 
         # Parse the batch file
-        jobs, metal_indices, bond_indices = parse_job_batch_file(str(batch_file))
+        analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(str(batch_file))
 
         # Verify correct parsing
-        assert len(jobs) == 2
-        assert jobs[0] == "sample_1"
-        assert jobs[1] == "sample_2"
+        assert len(analysis_types) == 2
+        assert analysis_types[0] == "ef"
+        assert analysis_types[1] == "esp"
+
+        assert len(molden_paths) == 2
+        assert molden_paths[0] == "path/to/sample_1.molden"
+        assert molden_paths[1] == "path/to/sample_2.molden"
+
+        assert len(xyz_paths) == 2
+        assert xyz_paths[0] == "path/to/sample_1.xyz"
+        assert xyz_paths[1] == "path/to/sample_2.xyz"
 
         assert metal_indices == [0, 1]
         assert bond_indices == [[(0, 1)], [(1, 2)]]
 
         # Verify we can use these for downstream analysis
-        for job, metal_idx, bond_idx in zip(jobs, metal_indices, bond_indices):
-            assert isinstance(job, str)
+        for analysis_type, molden_path, xyz_path, metal_idx, bond_idx in zip(
+            analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices
+        ):
+            assert isinstance(analysis_type, str)
+            assert isinstance(molden_path, str)
+            assert isinstance(xyz_path, str)
             assert isinstance(metal_idx, int)
             assert isinstance(bond_idx, list)
             assert len(bond_idx) > 0
