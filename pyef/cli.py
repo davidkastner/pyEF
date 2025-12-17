@@ -3,6 +3,13 @@
 import os
 import yaml
 import click
+from .validation import (
+    check_path_exists,
+    validate_charge_type,
+    validate_numeric_range,
+    check_index_overlap,
+    VALID_CHARGE_TYPES
+)
 
 def welcome():
     """Print first to welcome the user while it waits to load the modules"""
@@ -99,32 +106,94 @@ def parse_job_batch_file(file_path):
 
             # Validate minimum number of columns
             if len(columns) < 3:
-                raise ValueError(
-                    f"Line {line_num}: Invalid format. Expected at least 3 columns: "
-                    f"analysis_type, path_to_molden, path_to_xyz [, atom_indices]. "
-                    f"Got {len(columns)} columns."
-                )
+                raise ValueError(f"""
+{'='*60}
+ERROR: Invalid CSV format on line {line_num}
+{'='*60}
+Expected at least 3 columns, got {len(columns)}
+Format: analysis_type, path_to_molden, path_to_xyz, [atom_indices]
+
+Current line: {line}
+
+Examples of correct format:
+  ef, /path/to/job.molden, /path/to/job.xyz, (25, 26)
+  esp, /path/to/job.molden, /path/to/job.xyz, 30
+  estab, /path/to/job.molden, /path/to/job.xyz
+  ef+esp, /path/to/job.molden, /path/to/job.xyz, (10, 11)
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml (lines 67-74)
+- README.md: Section 2.2 (Job Batch File Format)
+{'='*60}
+""")
 
             # Extract analysis type (column 1)
             analysis_type = columns[0].lower().strip()
             analysis_parts = set(analysis_type.replace('+', ' ').split())
             if not analysis_parts.issubset(valid_analysis) or not analysis_parts:
-                raise ValueError(
-                    f"Line {line_num}: Invalid analysis type '{columns[0]}'. "
-                    f"Must be one of: {', '.join(valid_analysis)} or combinations like 'ef+esp'."
-                )
+                raise ValueError(f"""
+{'='*60}
+ERROR: Invalid analysis type on line {line_num}
+{'='*60}
+Specified: '{columns[0]}'
+Valid options: {', '.join(sorted(valid_analysis))}
+
+You can also combine analyses with '+':
+  ef+esp    # Run both electric field and ESP
+  ef+estab  # Run electric field and stabilization
+
+Examples:
+  ef, /path/to/job.molden, /path/to/job.xyz, (25, 26)
+  esp, /path/to/job.molden, /path/to/job.xyz, 30
+  estab, /path/to/job.molden, /path/to/job.xyz
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+- README.md: Section 2.2 (Job Batch File Format)
+{'='*60}
+""")
             analysis_types.append(columns[0])  # Keep original case
 
             # Extract molden path (column 2)
             molden_path = columns[1].strip()
             if not molden_path:
-                raise ValueError(f"Line {line_num}: Missing molden file path in column 2.")
+                raise ValueError(f"""
+{'='*60}
+ERROR: Missing molden file path on line {line_num}
+{'='*60}
+Column 2 is empty or missing.
+
+Format: analysis_type, path_to_molden, path_to_xyz, [atom_indices]
+
+Example:
+  ef, /path/to/job/optim.molden, /path/to/job/optim.xyz, 25
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+- README.md: Section 2.2 (Job Batch File Format)
+{'='*60}
+""")
             molden_paths.append(molden_path)
 
             # Extract xyz path (column 3)
             xyz_path = columns[2].strip()
             if not xyz_path:
-                raise ValueError(f"Line {line_num}: Missing xyz file path in column 3.")
+                raise ValueError(f"""
+{'='*60}
+ERROR: Missing XYZ file path on line {line_num}
+{'='*60}
+Column 3 is empty or missing.
+
+Format: analysis_type, path_to_molden, path_to_xyz, [atom_indices]
+
+Example:
+  ef, /path/to/job/optim.molden, /path/to/job/optim.xyz, 25
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+- README.md: Section 2.2 (Job Batch File Format)
+{'='*60}
+""")
             xyz_paths.append(xyz_path)
 
             # Parse remaining columns for metal indices and/or bond tuples
@@ -162,10 +231,29 @@ def parse_job_batch_file(file_path):
                     else:
                         bond_indices.append([])
                 except ValueError:
-                    raise ValueError(
-                        f"Line {line_num}: Invalid atom index '{columns[3]}'. "
-                        f"Expected integer or tuple format like (1, 2)."
-                    )
+                    raise ValueError(f"""
+{'='*60}
+ERROR: Invalid atom index format on line {line_num}
+{'='*60}
+Specified: '{columns[3]}'
+Expected: integer or tuple format
+
+Valid formats:
+  - Single atom index: 25
+  - Bond tuple: (25, 26)
+  - Multiple bonds: (25, 26), (25, 27)
+
+Examples:
+  ef, /path/to/job.molden, /path/to/job.xyz, (25, 26)
+  esp, /path/to/job.molden, /path/to/job.xyz, 30
+
+Note: Atom indices are 0-based (first atom = 0)
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+- README.md: Section 2.2 (Job Batch File Format)
+{'='*60}
+""")
             else:
                 # No additional data
                 metal_indices.append(None)
@@ -385,6 +473,136 @@ def run(config):
 
     # Exclude atoms from E-field calculation
     exclude_atoms = config_data.get('exclude_atoms', [])
+
+    # ===== VALIDATE CONFIG PARAMETERS =====
+
+    # Validate multiwfn_path exists and is executable
+    if not multiwfn_path:
+        raise ValueError(f"""
+{'='*60}
+ERROR: Missing multiwfn_path in configuration
+{'='*60}
+The 'multiwfn_path' parameter is required but not specified.
+
+Multiwfn is required for all pyEF calculations.
+
+Example in config.yaml:
+  multiwfn_path: /usr/local/bin/Multiwfn
+
+For installation instructions, see:
+- README.md: Section 4 (Installation)
+- https://pyef.readthedocs.io/
+{'='*60}
+""")
+    check_path_exists(multiwfn_path, path_type="file", context="multiwfn_path")
+
+    # Validate input file exists
+    if not input:
+        raise ValueError(f"""
+{'='*60}
+ERROR: Missing input file in configuration
+{'='*60}
+The 'input' parameter is required but not specified.
+
+Example in config.yaml:
+  input: jobs.csv
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+- README.md: Section 2 (Quick Start Guide)
+{'='*60}
+""")
+    check_path_exists(input, path_type="file", context="input file")
+
+    # Validate dielectric constant
+    validate_numeric_range(dielectric, "dielectric", min_val=0.001, context="config file")
+
+    # Validate multipole_order
+    validate_numeric_range(multipole_order, "multipole_order", allowed_values=[1, 2, 3], context="config file")
+
+    # Validate dielectric_scale
+    validate_numeric_range(dielectric_scale, "dielectric_scale", min_val=0.001, context="config file")
+
+    # Validate charge types
+    if not isinstance(charge_types, list):
+        raise ValueError(f"""
+{'='*60}
+ERROR: Invalid charge_types format in config
+{'='*60}
+Expected: list of charge type strings
+Got: {type(charge_types).__name__}
+
+Example in config.yaml:
+  charge_types: ['Hirshfeld_I']
+  # or
+  charge_types: ['Hirshfeld', 'Becke']
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+{'='*60}
+""")
+
+    for charge_type in charge_types:
+        validate_charge_type(charge_type, context="config file")
+
+    # Validate substrate_idxs and env_idxs don't overlap (for estab calculations)
+    if substrate_idxs is not None and env_idxs is not None:
+        if not isinstance(substrate_idxs, list):
+            raise ValueError(f"""
+{'='*60}
+ERROR: Invalid substrate_idxs format
+{'='*60}
+Expected: list of integers
+Got: {type(substrate_idxs).__name__}
+
+Example in config.yaml:
+  substrate_idxs: [0, 1, 2, 3]
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+{'='*60}
+""")
+
+        if not isinstance(env_idxs, list):
+            raise ValueError(f"""
+{'='*60}
+ERROR: Invalid env_idxs format
+{'='*60}
+Expected: list of integers
+Got: {type(env_idxs).__name__}
+
+Example in config.yaml:
+  env_idxs: [10, 11, 12, 13]
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+{'='*60}
+""")
+
+        check_index_overlap(substrate_idxs, env_idxs, "substrate_idxs", "env_idxs", "electrostatic stabilization")
+
+    # Validate QM/MM options
+    if include_ptchgs and not ptchg_file:
+        raise ValueError(f"""
+{'='*60}
+ERROR: Missing ptchg_file for QM/MM calculation
+{'='*60}
+include_ptchgs is set to true, but ptchg_file is not specified.
+
+Example in config.yaml:
+  include_ptchgs: true
+  ptchg_file: 'pointcharges.txt'
+
+Note: The file should exist in the same directory as each job's
+molden file.
+
+For more information, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/example_config.yaml
+- README.md: Section 3.4 (QM/MM Calculations)
+{'='*60}
+""")
+
+    # ===== END VALIDATION =====
 
     # Parse job batch file
     analysis_types, molden_paths, xyz_paths, metal_indices, bond_indices = parse_job_batch_file(input)

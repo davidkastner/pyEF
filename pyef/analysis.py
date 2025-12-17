@@ -44,6 +44,11 @@ from distutils.dir_util import copy_tree
 from .geometry import Geometry, Visualize
 from .utility import MoldenObject, MultiwfnInterface
 from . import utility as constants  # Backward compatibility alias
+from .validation import (
+    validate_charge_type,
+    validate_numeric_range,
+    VALID_CHARGE_TYPES
+)
 
 
 class Electrostatics:
@@ -130,9 +135,108 @@ class Electrostatics:
         ECP options: "stuttgart_rsc", "def2", "crenbl", "lanl2dz", "lacvps"
         """
         # Validate inputs
+        # Type check: molden_paths and xyz_paths must be lists
+        if not isinstance(molden_paths, list):
+            raise TypeError(f"""
+{'='*60}
+ERROR: Invalid type for molden_paths
+{'='*60}
+Expected: list of strings
+Got: {type(molden_paths).__name__}
+
+Correct usage:
+  estat = Electrostatics(
+      molden_paths=['job1.molden', 'job2.molden'],
+      xyz_paths=['job1.xyz', 'job2.xyz']
+  )
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+- README.md: Section 3 (Detailed Tutorials)
+{'='*60}
+""")
+
+        if not isinstance(xyz_paths, list):
+            raise TypeError(f"""
+{'='*60}
+ERROR: Invalid type for xyz_paths
+{'='*60}
+Expected: list of strings
+Got: {type(xyz_paths).__name__}
+
+Correct usage:
+  estat = Electrostatics(
+      molden_paths=['job1.molden', 'job2.molden'],
+      xyz_paths=['job1.xyz', 'job2.xyz']
+  )
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+- README.md: Section 3 (Detailed Tutorials)
+{'='*60}
+""")
+
+        # Length check
         if len(molden_paths) != len(xyz_paths):
-            raise ValueError(f"molden_paths and xyz_paths must have the same length. "
-                           f"Got {len(molden_paths)} molden files and {len(xyz_paths)} xyz files.")
+            raise ValueError(f"""
+{'='*60}
+ERROR: Mismatched list lengths
+{'='*60}
+molden_paths has {len(molden_paths)} items
+xyz_paths has {len(xyz_paths)} items
+
+Both lists must have the same length (one molden and one xyz file per job).
+
+Correct usage:
+  estat = Electrostatics(
+      molden_paths=['job1.molden', 'job2.molden'],  # 2 files
+      xyz_paths=['job1.xyz', 'job2.xyz']            # 2 files
+  )
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+{'='*60}
+""")
+
+        # Type check: lst_of_tmcm_idx must be list of integers if provided
+        if lst_of_tmcm_idx is not None:
+            if not isinstance(lst_of_tmcm_idx, list):
+                raise TypeError(f"""
+{'='*60}
+ERROR: Invalid type for lst_of_tmcm_idx
+{'='*60}
+Expected: list of integers
+Got: {type(lst_of_tmcm_idx).__name__}
+
+Correct usage:
+  estat = Electrostatics(
+      molden_paths=['job1.molden', 'job2.molden'],
+      xyz_paths=['job1.xyz', 'job2.xyz'],
+      lst_of_tmcm_idx=[25, 30]  # Metal atom indices (0-based)
+  )
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+{'='*60}
+""")
+
+            # Check all elements are integers
+            non_integers = [idx for idx in lst_of_tmcm_idx if not isinstance(idx, (int, np.integer))]
+            if non_integers:
+                raise TypeError(f"""
+{'='*60}
+ERROR: Non-integer values in lst_of_tmcm_idx
+{'='*60}
+Expected: all elements must be integers
+Found non-integer values: {non_integers}
+
+Correct usage:
+  lst_of_tmcm_idx: [25, 30]  # Integers only
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+{'='*60}
+""")
 
         # Initialize configuration with defaults
         self.config = {
@@ -155,6 +259,42 @@ class Electrostatics:
         }
         # Override defaults with user-provided kwargs
         self.config.update(kwargs)
+
+        # Validate config parameters from kwargs
+        if 'dielectric' in kwargs:
+            validate_numeric_range(kwargs['dielectric'], 'dielectric', min_val=0.001, context="Electrostatics initialization")
+
+        if 'dielectric_scale' in kwargs:
+            validate_numeric_range(kwargs['dielectric_scale'], 'dielectric_scale', min_val=0.001, context="Electrostatics initialization")
+
+        if 'multipole_order' in kwargs:
+            validate_numeric_range(kwargs['multipole_order'], 'multipole_order', allowed_values=[1, 2, 3], context="Electrostatics initialization")
+
+        if 'charge_types' in kwargs:
+            charge_types = kwargs['charge_types']
+            if isinstance(charge_types, str):
+                charge_types = [charge_types]
+            elif not isinstance(charge_types, list):
+                raise TypeError(f"""
+{'='*60}
+ERROR: Invalid type for charge_types parameter
+{'='*60}
+Expected: string or list of strings
+Got: {type(charge_types).__name__}
+
+Correct usage:
+  estat = Electrostatics(
+      molden_paths=['job1.molden'],
+      xyz_paths=['job1.xyz'],
+      charge_types=['Hirshfeld_I']  # List of charge types
+  )
+
+For more examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+{'='*60}
+""")
+            for charge_type in charge_types:
+                validate_charge_type(charge_type, context="Electrostatics initialization")
 
         # Store file paths directly
         self.molden_paths = [os.path.abspath(p) for p in molden_paths]
@@ -182,6 +322,51 @@ class Electrostatics:
         # Fix molden files if ECP was used in calculations
         if self.config['hasECP']:
             self.fix_allECPmolden()
+
+    # =========================================================================
+    # Validation Methods
+    # =========================================================================
+
+    def _validate_atom_indices(self, indices, xyz_path, context=""):
+        """
+        Validate that atom indices are within structure bounds.
+
+        Parameters
+        ----------
+        indices : int, list of int, or list of tuples
+            Atom index or list of atom indices to validate (0-indexed)
+        xyz_path : str
+            Path to XYZ file to get atom count
+        context : str, optional
+            Description of where indices are used (for error message)
+
+        Raises
+        ------
+        ValueError
+            If any index is out of bounds
+        """
+        from .validation import get_atom_count_from_xyz, validate_atom_indices
+
+        # Get atom count from XYZ file
+        atom_count = get_atom_count_from_xyz(xyz_path)
+
+        # Convert to flat list of indices
+        flat_indices = []
+        if isinstance(indices, int):
+            flat_indices = [indices]
+        elif isinstance(indices, (list, tuple)):
+            for item in indices:
+                if isinstance(item, (int, np.integer)):
+                    flat_indices.append(int(item))
+                elif isinstance(item, (list, tuple)):
+                    # Handle bond tuples like [(1, 2), (3, 4)]
+                    for sub_item in item:
+                        if isinstance(sub_item, (int, np.integer)):
+                            flat_indices.append(int(sub_item))
+
+        # Validate all indices
+        if flat_indices:
+            validate_atom_indices(flat_indices, atom_count, context=context, xyz_path=xyz_path)
 
     # =========================================================================
     # Multiwfn Interface Methods
@@ -1468,6 +1653,23 @@ Input commands that were to be sent:
         pd.DataFrame
             DataFrame with ESP results saved to CSV.
 
+        Output Files
+        ------------
+        **CSV file:** Auto-generated with format:
+        - Monopole: `esp_{charge_type}.csv`
+        - Multipole: `esp_multipole_{charge_type}.csv`
+        - Examples: `esp_Hirshfeld_I.csv`, `esp_multipole_Hirshfeld_I.csv`
+        - Contains ESP values at metal centers for all jobs
+        - Columns: job name, charge type, ESP values, coordinates, etc.
+
+        **PDB file (if visualize=True):** `esp_{charge_type}_{structure}_atom{idx}.pdb`
+        - One file per job and metal atom
+        - B-factor column contains ESP values at each atom
+        - Example: `esp_Hirshfeld_I_complex_atom25.pdb`
+
+        Note: If you provide a custom filename (not 'output', 'esp', etc.),
+        your filename will be used instead of automatic naming.
+
         Examples
         --------
         >>> # Monopole mode (replaces getESPData)
@@ -1485,10 +1687,33 @@ Input commands that were to be sent:
 
         # Validate that metal indices are provided for ESP calculation
         if not self.lst_of_tmcm_idx:
-            raise ValueError(
-                "ESP calculation requires metal atom indices. "
-                "Please provide lst_of_tmcm_idx when initializing the Electrostatics object."
-            )
+            raise ValueError(f"""
+{'='*60}
+ERROR: ESP calculation requires metal atom indices
+{'='*60}
+Metal atom indices (lst_of_tmcm_idx) were not provided during
+initialization of the Electrostatics object.
+
+Correct usage:
+  estat = Electrostatics(
+      molden_paths=['job1.molden', 'job2.molden'],
+      xyz_paths=['job1.xyz', 'job2.xyz'],
+      lst_of_tmcm_idx=[25, 30],  # Metal indices (0-indexed)
+      dielectric=4.0
+  )
+  esp_df = estat.getESP(['Hirshfeld_I'], 'output', multiwfn_path)
+
+Note: Atom indices are 0-based (first atom = index 0)
+
+For complete examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+- README.md: Section 3.2 (ESP Calculation)
+{'='*60}
+""")
+
+        # Validate charge types
+        for charge_type in charge_types:
+            validate_charge_type(charge_type, context="getESP")
 
         self.config['dielectric'] = dielectric
         metal_idxs = self.lst_of_tmcm_idx
@@ -1633,7 +1858,25 @@ Input commands that were to be sent:
 
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
-        df.to_csv(f"{ESPdata_filename}.csv")
+
+        # Generate automatic CSV filename
+        # Format: esp_{charge_type}.csv or esp_multipole_{charge_type}.csv
+        if len(charge_types) == 1:
+            charge_type_str = charge_types[0]
+        else:
+            charge_type_str = "_".join(charge_types)
+
+        prefix = "multipole_" if use_multipole else ""
+        auto_filename = f"esp_{prefix}{charge_type_str}.csv"
+
+        # Use automatic filename if user provided default/generic name, otherwise use their name
+        if ESPdata_filename in ['output', 'esp', 'ESPdata', 'esp_data']:
+            output_filename = auto_filename
+        else:
+            output_filename = f"{ESPdata_filename}.csv"
+
+        df.to_csv(output_filename)
+        print(f"Saved ESP results to: {output_filename}")
         return df
 
     def getEfield(self, charge_types, Efielddata_filename, multiwfn_path,
@@ -1673,6 +1916,31 @@ Input commands that were to be sent:
         pd.DataFrame or tuple of pd.DataFrame
             If save_atomwise_decomposition=False: returns DataFrame with E-field results
             If save_atomwise_decomposition=True: returns (total_df, atomwise_df) tuple
+
+        Output Files
+        ------------
+        **Main CSV file:** Auto-generated with format:
+        - Monopole: `ef_{charge_type}.csv`
+        - Multipole: `ef_multipole_{charge_type}.csv`
+        - Examples: `ef_Hirshfeld_I.csv`, `ef_multipole_Hirshfeld_I.csv`
+        - Contains E-field magnitudes and projections for all jobs and bonds
+        - Columns: job name, bond atoms, E-field magnitude (MV/cm), projections, etc.
+
+        **Atomwise CSV (if save_atomwise_decomposition=True):**
+        - Format: `ef_{charge_type}_atomwise.csv` or `ef_multipole_{charge_type}_atomwise.csv`
+        - Example: `ef_Hirshfeld_I_atomwise.csv`
+        - Per-atom E-field contributions for each bond
+        - Shows which atoms contribute most to the E-field
+        - Columns: job, bond, atom index, contribution magnitude, etc.
+
+        **PDB files (if visualize=True):**
+        - Per bond: `ef_{charge_type}_{structure}_bond{i}-{j}.pdb`
+        - Combined: `ef_{charge_type}_{structure}_combined.pdb`
+        - B-factor contains E-field contribution from each atom
+        - Examples: `ef_Hirshfeld_I_complex_bond25-26.pdb`
+
+        Note: If you provide a custom filename (not 'output', 'efield', etc.),
+        your filename will be used instead of automatic naming.
 
         Examples
         --------
@@ -1740,11 +2008,38 @@ Input commands that were to be sent:
                 if auto_find_bonds or (not input_bond_indices):
                     # Auto-find bonded atoms (requires metal indices)
                     if not self.lst_of_tmcm_idx:
-                        raise ValueError(
-                            "Auto-finding bonds requires metal atom indices. "
-                            "Please provide lst_of_tmcm_idx when initializing the Electrostatics object, "
-                            "or specify bond indices explicitly via input_bond_indices parameter."
-                        )
+                        raise ValueError(f"""
+{'='*60}
+ERROR: Electric field calculation requires bond or metal indices
+{'='*60}
+You need to either:
+1. Provide metal indices (lst_of_tmcm_idx) for auto-finding bonds, OR
+2. Specify bond indices explicitly via input_bond_indices parameter
+
+Option 1 - Auto-find bonds:
+  estat = Electrostatics(
+      molden_paths=['job1.molden'],
+      xyz_paths=['job1.xyz'],
+      lst_of_tmcm_idx=[25]  # Metal atom index
+  )
+  ef_df = estat.getEfield('Hirshfeld_I', 'output', multiwfn_path,
+                          auto_find_bonds=True)
+
+Option 2 - Specify bond indices:
+  estat = Electrostatics(
+      molden_paths=['job1.molden'],
+      xyz_paths=['job1.xyz']
+  )
+  ef_df = estat.getEfield('Hirshfeld_I', 'output', multiwfn_path,
+                          input_bond_indices=[[(25, 26), (25, 27)]])
+
+Note: Atom indices are 0-based (first atom = index 0)
+
+For complete examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+- README.md: Section 3.1 (Electric Field Calculation)
+{'='*60}
+""")
                     atom_idx = metal_idxs[counter]
                     bonded_atoms_list = self.getBondedAtoms(file_path_xyz, atom_idx)
                     bond_indices_to_use = [(atom_idx, bonded_idx) for bonded_idx in bonded_atoms_list]
@@ -1888,13 +2183,33 @@ Input commands that were to be sent:
 
         os.chdir(owd)
         df = pd.DataFrame(allspeciesdict)
-        df.to_csv(f"{Efielddata_filename}.csv")
+
+        # Generate automatic CSV filename
+        # Format: ef_{charge_type}.csv or ef_multipole_{charge_type}.csv
+        if isinstance(charge_types, list) and len(charge_types) > 0:
+            charge_type_str = charge_types[0]
+        else:
+            charge_type_str = charge_types
+
+        prefix = "multipole_" if multipole_bool else ""
+        auto_filename = f"ef_{prefix}{charge_type_str}"
+
+        # Use automatic filename if user provided default/generic name
+        if Efielddata_filename in ['output', 'efield', 'Efielddata', 'ef_data']:
+            base_filename = auto_filename
+        else:
+            base_filename = Efielddata_filename
+
+        main_csv = f"{base_filename}.csv"
+        df.to_csv(main_csv)
+        print(f"Saved E-field results to: {main_csv}")
 
         # Save atomwise decomposition if requested
         if save_atomwise_decomposition and all_atomwise_data:
             df_atomwise = pd.DataFrame(all_atomwise_data)
-            df_atomwise.to_csv(f"{Efielddata_filename}_atomwise.csv", index=False)
-            print(f"Saved atomwise E-field decomposition to: {Efielddata_filename}_atomwise.csv")
+            atomwise_csv = f"{base_filename}_atomwise.csv"
+            df_atomwise.to_csv(atomwise_csv, index=False)
+            print(f"Saved atomwise E-field decomposition to: {atomwise_csv}")
             return df, df_atomwise
 
         return df
@@ -2899,6 +3214,29 @@ Input commands that were to be sent:
             If save_atomwise_decomposition=False: returns DataFrame with total stabilization energies
             If save_atomwise_decomposition=True: returns (total_df, atomwise_df) tuple
 
+        Output Files
+        ------------
+        **Main CSV file:** Auto-generated with format:
+        - Monopole: `estab_{charge_type}.csv`
+        - Multipole: `estab_multipole{N}_{charge_type}.csv` (N = multipole order)
+        - Examples: `estab_Hirshfeld_I.csv`, `estab_multipole2_Hirshfeld_I.csv`
+        - Contains total electrostatic stabilization energies (kcal/mol) for all jobs
+        - Columns: job name, total energy, substrate/environment details, etc.
+
+        **Atomwise CSV (if save_atomwise_decomposition=True):**
+        - Format: `estab_{charge_type}_atomwise.csv` or `estab_multipole{N}_{charge_type}_atomwise.csv`
+        - Examples: `estab_Hirshfeld_I_atomwise.csv`, `estab_multipole2_Hirshfeld_I_atomwise.csv`
+        - Per-atom energy contributions showing which atoms contribute most
+        - Columns: job, atom index, energy contribution, coordinates, etc.
+
+        **PDB file (if visualize=True):** `estab_{charge_type}_{structure}_tensor_sub{N}_env{M}.pdb`
+        - B-factor contains energy contribution from each environment atom to substrate
+        - N = substrate multipole order, M = environment multipole order
+        - Example: `estab_Hirshfeld_I_complex_tensor_sub2_env1.pdb`
+
+        Note: If you provide a custom filename (not 'output', 'estatic', etc.),
+        your filename will be used instead of automatic naming.
+
         Notes:
         ------
         **Comparison with other methods:**
@@ -2945,6 +3283,58 @@ Input commands that were to be sent:
         ...     env_multipole_order=1         # MM: charges only
         ... )
         """
+        # Validate required parameters
+        if substrate_idxs is None or (isinstance(substrate_idxs, list) and len(substrate_idxs) == 0):
+            raise ValueError(f"""
+{'='*60}
+ERROR: Electrostatic stabilization requires substrate indices
+{'='*60}
+substrate_idxs parameter is required but not provided.
+
+Correct usage:
+  estab_df = estat.getElectrostatic_stabilization(
+      multiwfn_path='/path/to/multiwfn',
+      substrate_idxs=[0, 1, 2, 3],  # Active site atoms
+      env_idxs=[10, 11, 12],        # Environment atoms (optional)
+      multipole_order=2
+  )
+
+Note: Atom indices are 0-based (first atom = index 0)
+
+For complete examples, see:
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+- README.md: Section 3.3 (Electrostatic Stabilization)
+{'='*60}
+""")
+
+        # Validate charge type
+        validate_charge_type(charge_type, context="getElectrostatic_stabilization")
+
+        # Validate multipole orders
+        validate_numeric_range(multipole_order, "multipole_order", allowed_values=[1, 2, 3],
+                             context="getElectrostatic_stabilization")
+        if substrate_multipole_order is not None:
+            validate_numeric_range(substrate_multipole_order, "substrate_multipole_order",
+                                 allowed_values=[1, 2, 3], context="getElectrostatic_stabilization")
+        if env_multipole_order is not None:
+            validate_numeric_range(env_multipole_order, "env_multipole_order",
+                                 allowed_values=[1, 2, 3], context="getElectrostatic_stabilization")
+
+        # Validate substrate and environment indices don't overlap
+        if env_idxs is not None and substrate_idxs is not None:
+            from .validation import check_index_overlap
+            # Handle both flat lists and nested lists
+            flat_substrate = substrate_idxs
+            if substrate_idxs and isinstance(substrate_idxs[0], (list, tuple)):
+                flat_substrate = [idx for sublist in substrate_idxs for idx in sublist]
+
+            flat_env = env_idxs
+            if env_idxs and isinstance(env_idxs[0], (list, tuple)):
+                flat_env = [idx for sublist in env_idxs for idx in sublist]
+
+            check_index_overlap(flat_substrate, flat_env, "substrate_idxs", "env_idxs",
+                              context="electrostatic stabilization")
+
         dielectric = self.config['dielectric']
         list_of_file = self.lst_of_folders
         final_structure_file = self.config['xyzfilename']
@@ -3210,11 +3600,31 @@ Input commands that were to be sent:
 
         # Create output DataFrames
         df = pd.DataFrame(allspeciesdict)
-        df.to_csv(f'{name_dataStorage}_multipole_{multipole_order}.csv', index=False)
+
+        # Generate automatic CSV filename
+        # Format: estab_{charge_type}.csv or estab_multipole{N}_{charge_type}.csv
+        if multipole_order > 1:
+            prefix = f"multipole{multipole_order}_"
+        else:
+            prefix = ""
+
+        auto_filename = f"estab_{prefix}{charge_type}"
+
+        # Use automatic filename if user provided default/generic name
+        if name_dataStorage in ['output', 'estatic', 'estab', 'estab_data']:
+            base_filename = auto_filename
+        else:
+            base_filename = name_dataStorage
+
+        main_csv = f"{base_filename}.csv"
+        df.to_csv(main_csv, index=False)
+        print(f"Saved electrostatic stabilization results to: {main_csv}")
 
         if save_atomwise_decomposition:
             df_atomwise = pd.DataFrame(all_atomwise_data)
-            df_atomwise.to_csv(f'{name_dataStorage}_atomwise.csv', index=False)
+            atomwise_csv = f"{base_filename}_atomwise.csv"
+            df_atomwise.to_csv(atomwise_csv, index=False)
+            print(f"Saved atomwise decomposition to: {atomwise_csv}")
             return df, df_atomwise
 
         return df

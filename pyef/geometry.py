@@ -354,6 +354,28 @@ class Geometry:
         return new_dict
 
 class Visualize:
+    """Create PDB visualizations of electrostatic properties.
+
+    This class generates PDB files with electrostatic properties (ESP, E-field,
+    energies) stored in the B-factor column for visualization in molecular
+    viewers like PyMOL, VMD, or Chimera.
+
+    PDB File Naming Convention Quick Reference
+    -------------------------------------------
+    ESP:        esp_{charge_type}_{structure}_atom{idx}.pdb
+    E-field:    ef_{charge_type}_{structure}_bond{i}-{j}.pdb
+                ef_{charge_type}_{structure}_combined.pdb
+    Estab:      estab_{charge_type}_{structure}_atomwise.pdb
+                estab_{charge_type}_{structure}_tensor_sub{N}_env{M}.pdb
+
+    Where:
+    - {charge_type}: Hirshfeld_I, CHELPG, Becke, etc.
+    - {structure}: Job directory name or XYZ filename
+    - {idx}, {i}, {j}: Atom indices (0-based)
+    - {N}, {M}: Multipole orders (1=monopole, 2=+dipole, 3=+quadrupole)
+
+    See makePDB() docstring for complete details and visualization examples.
+    """
 
     def __init__(self, filexyz='None'):
         self.xyzfile = filexyz
@@ -394,13 +416,72 @@ class Visualize:
         pass
 
     def makePDB(self, output_filename, b_col, pdbName):
-        ''' Function to generate PDB files with partial charges
-        Input: xyzfilename: string of xyz filename
-        output_filename: string of output filename
-        type_charge: string of type of charge (Monopole or Multipole)
-        pdbName: string of output pdb filename
-        Output: .pdb file with partial charges
-        '''
+        """Generate PDB files with data in B-factor column for visualization.
+
+        Creates a PDB file from XYZ coordinates with custom values (e.g., charges,
+        electric fields, energies) stored in the B-factor column for visualization
+        in programs like PyMOL, VMD, or Chimera.
+
+        Parameters
+        ----------
+        output_filename : str
+            Path to input file containing atom data (typically charges or multipoles)
+        b_col : array-like
+            Values to store in B-factor column (0-indexed, length = number of atoms)
+            Examples: partial charges, E-field magnitudes, energy contributions
+        pdbName : str
+            Output PDB filename
+
+        Output PDB Naming Conventions
+        ------------------------------
+        PyEF automatically generates PDB files with descriptive names:
+
+        **ESP (Electrostatic Potential):**
+        - Format: `esp_{charge_type}_{structure}_atom{idx}.pdb`
+        - Example: `esp_Hirshfeld_I_complex_atom25.pdb`
+        - B-factor: ESP value at each atom
+
+        **Electric Field (per bond):**
+        - Format: `ef_{charge_type}_{structure}_bond{atom1}-{atom2}.pdb`
+        - Example: `ef_Hirshfeld_I_complex_bond25-26.pdb`
+        - B-factor: E-field contribution from each atom to the specified bond
+
+        **Electric Field (combined, all bonds):**
+        - Format: `ef_{charge_type}_{structure}_combined.pdb`
+        - Example: `ef_Hirshfeld_I_complex_combined.pdb`
+        - B-factor: Total E-field contribution from each atom to all bonds
+
+        **Electrostatic Stabilization (atomwise):**
+        - Format: `estab_{charge_type}_{structure}_atomwise.pdb`
+        - Example: `estab_Hirshfeld_I_complex_atomwise.pdb`
+        - B-factor: Energy contribution from each environment atom to substrate
+
+        **Electrostatic Stabilization (tensor formalism):**
+        - Format: `estab_{charge_type}_{structure}_tensor_sub{N}_env{M}.pdb`
+        - Example: `estab_Hirshfeld_I_complex_tensor_sub2_env1.pdb`
+        - B-factor: Multipole interaction energies (N, M = multipole orders)
+
+        Notes
+        -----
+        - All atom indices in filenames use 0-based indexing
+        - Structure name is derived from the job directory or XYZ filename
+        - Charge type indicates the partitioning scheme (Hirshfeld_I, CHELPG, etc.)
+        - B-factor values can be positive or negative depending on the property
+
+        Visualization Tips
+        ------------------
+        In PyMOL:
+        ```
+        load esp_Hirshfeld_I_complex_atom25.pdb
+        spectrum b, blue_white_red, minimum=-10, maximum=10
+        ```
+
+        In VMD:
+        ```
+        mol new esp_Hirshfeld_I_complex_atom25.pdb
+        mol modcolor 0 0 Beta
+        ```
+        """
         import openbabel
         from biopandas.pdb import PandasPdb
         import warnings
