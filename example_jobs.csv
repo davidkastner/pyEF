@@ -1,0 +1,28 @@
+# PyEF Job Batch File - New Format
+#
+# Format: analysis_type, path_to_molden, path_to_xyz, [atom_indices]
+#
+# analysis_type: ef (electric field), esp (electrostatic potential), estab (electrostatic stabilization), or combinations (ef+esp)
+# path_to_molden: Absolute or relative path to the .molden file
+# path_to_xyz: Absolute or relative path to the .xyz file
+# atom_indices: Optional - depends on analysis type:
+#   - For 'ef': Bond pairs as tuples, e.g., (25, 26), (25, 27)
+#   - For 'esp': Single metal atom index, e.g., 30
+#   - For 'estab': Not required (uses substrate_idxs from config)
+#
+# Examples:
+
+# Electric field analysis with bond pairs
+ef, /path/to/job1/optim.molden, /path/to/job1/optim.xyz, (25, 26), (25, 27)
+
+# ESP analysis with metal center
+esp, /path/to/job2/final.molden, /path/to/job2/final.xyz, 30
+
+# Electrostatic stabilization (no indices needed)
+estab, /path/to/job3/structure.molden, /path/to/job3/structure.xyz
+
+# Combined analysis
+ef+esp, /path/to/job4/optim.molden, /path/to/job4/optim.xyz, 35, (35, 40)
+
+# Relative paths work too (relative to current working directory)
+ef, ./calculations/job5/optim.molden, ./calculations/job5/optim.xyz, (10, 11)

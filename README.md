@@ -39,37 +39,56 @@ PyEF is a python package optimized to run using molden files from QM calculation
 
 **Step 1: Create a job list** (`jobs.csv`)
 
-The format depends on your analysis type:
-
-**For Electric Field or Stabilization Analysis:**
+**NEW FORMAT (Required):** Explicitly specify paths to .molden and .xyz files:
 ```csv
-path/to/structure.pdb
-```
-Format: Just the `structure_path` (no indices required!)
+# Format: analysis_type, path_to_molden, path_to_xyz, [atom_indices]
 
-**For ESP Analysis:**
-```csv
-path/to/structure.pdb, 25
-```
-Format: `structure_path, metal_atom_index` (0-indexed)
+# E-field analysis with specific bonds
+ef, /path/to/job1/optim.molden, /path/to/job1/optim.xyz, (25, 26), (25, 27)
 
-**For Electric Field with Specific Bonds:**
-```csv
-path/to/structure.pdb, 25, 26
+# ESP analysis with metal center
+esp, /path/to/job2/final.molden, /path/to/job2/final.xyz, 30
+
+# Electrostatic stabilization
+estab, /path/to/job3/structure.molden, /path/to/job3/structure.xyz
+
+# Combined analysis (ef+esp)
+ef+esp, /path/to/job4/optim.molden, /path/to/job4/optim.xyz, 35
+
+# Relative paths work too
+ef, ./calculations/job5/optim.molden, ./calculations/job5/optim.xyz, (10, 11)
 ```
-Format: `structure_path, metal_atom_index, bonded_atom_index` (0-indexed)
+
+**Supported analysis types:**
+- `ef` - Electric field analysis
+- `esp` - Electrostatic potential analysis
+- `estab` - Electrostatic stabilization analysis
+- `ef+esp` - Combined analysis (any combination with `+`)
+
+**Format Details:**
+- Column 1: Analysis type (required)
+- Column 2: Absolute or relative path to .molden file (required)
+- Column 3: Absolute or relative path to .xyz file (required)
+- Column 4+: Atom indices (optional, depends on analysis type):
+  - For `ef`: Bond pairs as tuples, e.g., `(25, 26), (25, 27)`
+  - For `esp`: Single metal atom index, e.g., `30`
+  - For `estab`: Not required (uses `substrate_idxs` from config)
 
 **Step 2: Create a config file** (`config.yaml`)
 ```yaml
 input: jobs.csv
 dielectric: 1
-ef: true                              # Electric field analysis
-esp: false                            # Electrostatic potential
-estab: false                          # Electrostatic stabilization
+# Note: ef/esp/estab settings are optional if you specify analysis types in jobs.csv
 multiwfn_module: multiwfn
 multiwfn_path: /path/to/multiwfn
-atmrad_path: /path/to/atmrad
+charge_types:
+  - Hirshfeld_I
 ```
+
+**Config file notes:**
+- If you specify analysis types in `jobs.csv` (new format), you don't need `ef/esp/estab` settings
+- If you use the old `jobs.csv` format (no analysis types), set `ef/esp/estab` in config
+- The `ef/esp/estab` settings in config apply to ALL jobs when using old format
 
 **Step 3: Run PyEF**
 ```bash
@@ -121,19 +140,20 @@ multipole_order: 2                # 1=monopole, 2=+dipole, 3=+quadrupole
 ```python
 from pyef.analysis import Electrostatics
 
-# Initialize with complete folder path
-es = Electrostatics(['structure/scr'], dielectric=4.0)
-es.prepData()
-es.fix_allECPmolden()
+# Initialize with explicit file paths
+molden_paths = ['/path/to/job1/optim.molden', '/path/to/job2/optim.molden']
+xyz_paths = ['/path/to/job1/optim.xyz', '/path/to/job2/optim.xyz']
+
+es = Electrostatics(molden_paths, xyz_paths, dielectric=4.0)
 
 # Calculate E-field (no metal indices needed when using bond indices)
-df = es.getEfield('Hirshfeld_I', 'output', 'multiwfn',
-                  '/path/to/multiwfn', '/path/to/atmrad',
+df = es.getEfield('Hirshfeld_I', 'output',
+                  '/path/to/multiwfn',
                   input_bond_indices=[(25, 26)])
 
 # Calculate stabilization
 estab_df = es.getElectrostatic_stabilization(
-    '/path/to/multiwfn', 'multiwfn', '/path/to/atmrad',
+    '/path/to/multiwfn',
     substrate_idxs=[1,2,3,4,5], multipole_order=2
 )
 
@@ -171,7 +191,6 @@ esp_df = es.getESP(
     ESPdata_filename='esp_output',
     multiwfn_module='multiwfn',
     multiwfn_path='/path/to/multiwfn',
-    atmrad_path='/path/to/atmrad',
     use_multipole=True
 )
 
@@ -181,7 +200,6 @@ efield_df = es.getEfield(
     Efielddata_filename='efield_output',
     multiwfn_module='multiwfn',
     multiwfn_path='/path/to/multiwfn',
-    atmrad_path='/path/to/atmrad',
     input_bond_indices=[(25, 26), (30, 31)],
     multipole_bool=True
 )
@@ -190,7 +208,6 @@ efield_df = es.getEfield(
 estab_df = es.getElectrostatic_stabilization(
     multiwfn_path='/path/to/multiwfn',
     multiwfn_module='multiwfn',
-    atmrad_path='/path/to/atmrad',
     substrate_idxs=[1, 2, 3, 4, 5],  # Substrate atoms
     env_idxs=[6, 7, 8, 9, 10],       # Environment atoms
     charge_type='Hirshfeld_I',
@@ -240,7 +257,6 @@ geometry_check: false
 
 multiwfn_module: multiwfn
 multiwfn_path: /path/to/multiwfn
-atmrad_path: /path/to/atmrad
 
 # ==========================================
 # Advanced Options
@@ -305,56 +321,78 @@ env_idxs:
 
 #### Step 2: Create a Job Batch File
 
-Create a CSV file (e.g., `jobs.csv`) listing all structures to analyze. The format depends on your analysis type:
+Create a CSV file (e.g., `jobs.csv`) listing all structures to analyze.
 
-**Format Options:**
+**RECOMMENDED: New Per-Job Format**
 
-1. **Electrostatic Stabilization or E-field (auto-detect bonds):**
+Specify analysis type for each job directly in the CSV:
+
 ```csv
 # ==========================================
-# PyEF Job Batch File - Simplified Format
+# PyEF Job Batch File - Per-Job Analysis Format
 # ==========================================
-# Format: job_path
-# Lines starting with '#' are comments and will be ignored
+# Format: job_path, analysis_type, [additional parameters]
+# Lines starting with '#' are comments
+#
+# Analysis types: ef, esp, estab, or combinations (ef+esp, esp+estab, etc.)
+# Use 0-based indexing for all atom indices
 
+# E-field analysis with specific bonds
+structures/complex1.pdb, ef, (25, 26), (25, 27)
+
+# ESP analysis (requires metal index)
+structures/complex2.pdb, esp, 30
+
+# Electrostatic stabilization (no indices needed)
+structures/complex3.pdb, estab
+
+# Combined analysis
+structures/complex4.pdb, ef+esp, 35, 36
+
+# You can mix different analysis types in one batch!
+structures/complex5.pdb, ef, (40, 41)
+structures/complex6.pdb, esp, 45
+```
+
+**Benefits of per-job format:**
+- No need to set `ef/esp/estab` in config file
+- Different jobs can have different analysis types
+- Cleaner, more flexible workflow
+- All job info in one place
+
+**OLD FORMAT (Still Supported)**
+
+If you don't specify analysis types in CSV, use config file settings:
+
+```csv
+# Simplified format (uses config file analysis settings)
 structures/complex1.pdb
-structures/complex2.pdb
-structures/complex3.pdb
-```
 
-2. **ESP Analysis (requires metal index):**
-```csv
-# ==========================================
-# PyEF Job Batch File - ESP Format
-# ==========================================
-# Format: job_path, metal_index
-# Use 0-based indexing for atom indices
+# With metal index (for ESP or auto-finding bonds)
+structures/complex2.pdb, 25
 
-structures/complex1.pdb, 25
-structures/complex2.pdb, 30
-structures/complex3.pdb, 28
-```
+# With specific bonds (old format)
+structures/complex3.pdb, 25, 26
 
-3. **E-field with Specific Bonds:**
-```csv
-# ==========================================
-# PyEF Job Batch File - E-field Format
-# ==========================================
-# Format: job_path, metal_index, bonded_atom_index
-# Use 0-based indexing for atom indices
-
-structures/complex1.pdb, 25, 26
-structures/complex2.pdb, 30, 31
-structures/complex3.pdb, 28, 29
-
-# You can add comments anywhere
-structures/complex4.pdb, 32, 33  # This is an inline comment
+# With tuple bonds (new format)
+structures/complex4.pdb, (30, 31), (30, 32)
 ```
 
 **Column descriptions:**
+
+**New per-job format:**
 - **Column 1** (required): Path to the structure file (PDB/molden format)
-- **Column 2** (required for ESP, optional for E-field): Index of the metal atom (0-based indexing)
-- **Column 3** (optional for E-field): Index of the bonded atom (0-based indexing)
+- **Column 2** (required): Analysis type (`ef`, `esp`, `estab`, or combinations like `ef+esp`)
+- **Columns 3+** (varies by analysis):
+  - For `ef`: Bond tuples `(atom1, atom2)` or metal_index, bonded_atom_index
+  - For `esp`: Metal atom index (0-based)
+  - For `estab`: No additional columns needed
+
+**Old format (no analysis type in CSV):**
+- **Column 1** (required): Path to the structure file
+- **Column 2** (optional): Metal atom index (0-based)
+- **Column 3** (optional): Bonded atom index (0-based)
+- Or use bond tuples: `(atom1, atom2), (atom3, atom4), ...`
 
 #### Step 3: Run the CLI
 
@@ -405,9 +443,12 @@ multipole: true
 
 `protein_complexes.csv` (with specific bonds):
 ```csv
-# Active site analysis - specify exact bonds
+# Active site analysis - specify exact bonds (old format)
 proteins/1abc_active_site.pdb, 150, 151
 proteins/2def_active_site.pdb, 145, 146
+
+# Or use new tuple format for multiple bonds
+proteins/3ghi_active_site.pdb, (200, 201), (200, 202), (200, 203)
 ```
 
 Or `protein_complexes.csv` (simplified - auto-detect bonds):

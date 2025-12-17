@@ -1,0 +1,283 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{bm}
+\usepackage{tensor}
+\geometry{margin=1in}
+
+\title{Multipole Electrostatic Formalism in pyEF}
+\author{Analysis Module Equations}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This document presents the mathematical formalism implemented in the \texttt{analysis.py} module for computing electrostatic interactions using multipole expansions. The implementation follows the AMOEBA polarizable force field formalism (Ren \& Ponder, J. Phys. Chem. B 2003) and uses tensor-based methods for efficient calculation of multipole-multipole interactions.
+
+\section{Multipole Vector Construction}
+
+\subsection{Multipole Moment Vector}
+
+For each atom, we construct a multipole moment vector $\mathbf{M}$ that contains the charge, dipole, and quadrupole moments:
+
+\begin{equation}
+\mathbf{M} =
+\begin{cases}
+[q] & \text{Order 1 (monopole only)} \\
+[q, \mu_x, \mu_y, \mu_z]^T & \text{Order 2 (+ dipole)} \\
+[q, \mu_x, \mu_y, \mu_z, Q_{xx}, Q_{xy}, Q_{xz}, Q_{yy}, Q_{yz}]^T & \text{Order 3 (+ quadrupole)}
+\end{cases}
+\end{equation}
+
+\subsection{Unit Conversions}
+
+The multipole moments are converted from atomic units to SI-based units:
+
+\begin{align}
+q &: \text{dimensionless (in units of } e \text{)} \\
+\bm{\mu} &= \bm{\mu}_\text{Bohr} \cdot a_0 \quad \text{(units: } e \cdot \text{m)} \\
+\mathbf{Q} &= \mathbf{Q}_\text{Bohr} \cdot a_0^2 \quad \text{(units: } e \cdot \text{m}^2 \text{)}
+\end{align}
+
+where $a_0 = 0.529177 \times 10^{-10}$ m is the Bohr radius.
+
+\subsection{Traceless Quadrupole Representation}
+
+The quadrupole tensor is symmetric and traceless:
+
+\begin{equation}
+\mathbf{Q} = \begin{pmatrix}
+Q_{xx} & Q_{xy} & Q_{xz} \\
+Q_{xy} & Q_{yy} & Q_{yz} \\
+Q_{xz} & Q_{yz} & Q_{zz}
+\end{pmatrix}, \quad \text{with } Q_{zz} = -Q_{xx} - Q_{yy}
+\end{equation}
+
+Therefore, only 5 independent components are stored: $Q_{xx}, Q_{xy}, Q_{xz}, Q_{yy}, Q_{yz}$.
+
+\section{Interaction Tensor Formalism}
+
+\subsection{General Form}
+
+The interaction tensor $\mathbf{T}_{ij}$ contains all spatial derivatives of the Coulomb potential between atoms $i$ and $j$. The total electrostatic interaction energy is computed as:
+
+\begin{equation}
+E_{ij} = \mathbf{M}_i^T \cdot \mathbf{T}_{ij} \cdot \mathbf{M}_j
+\end{equation}
+
+\subsection{Distance Vector and Unit Vector}
+
+Given positions $\mathbf{r}_i$ and $\mathbf{r}_j$ in Angstroms:
+
+\begin{align}
+\mathbf{r} &= (\mathbf{r}_j - \mathbf{r}_i) \cdot 10^{-10} \text{ m} \\
+r &= |\mathbf{r}| \\
+\hat{\mathbf{r}} &= \frac{\mathbf{r}}{r}
+\end{align}
+
+\subsection{Coulomb Prefactor}
+
+The Coulomb prefactor with dielectric:
+
+\begin{equation}
+k = \frac{k_e e^2}{\epsilon_r}
+\end{equation}
+
+where:
+\begin{itemize}
+\item $k_e = 8.987551787 \times 10^9$ N$\cdot$m$^2$/C$^2$ is Coulomb's constant
+\item $e = 1.602176634 \times 10^{-19}$ C is the elementary charge
+\item $\epsilon_r$ is the relative dielectric constant
+\end{itemize}
+
+\subsection{Order 1: Monopole Only}
+
+For monopole-monopole interactions:
+
+\begin{equation}
+\mathbf{T}_{ij}^{(1)} = \begin{bmatrix}
+\frac{k}{r}
+\end{bmatrix}
+\end{equation}
+
+Energy:
+\begin{equation}
+E_{ij}^{(1)} = \frac{k q_i q_j}{r}
+\end{equation}
+
+\subsection{Order 2: Monopole + Dipole}
+
+The $4 \times 4$ interaction tensor includes monopole and dipole terms:
+
+\begin{equation}
+\mathbf{T}_{ij}^{(2)} = \begin{bmatrix}
+\frac{k}{r} & -\frac{k\hat{\mathbf{r}}^T}{r^2} \\[0.5em]
+\frac{k\hat{\mathbf{r}}}{r^2} & \frac{k}{r^3}(3\hat{\mathbf{r}}\hat{\mathbf{r}}^T - \mathbf{I})
+\end{bmatrix}
+\end{equation}
+
+This automatically includes all interactions:
+\begin{itemize}
+\item Charge-charge: $q_i \times q_j$
+\item Charge-dipole: $q_i \times \bm{\mu}_j$ and $\bm{\mu}_i \times q_j$
+\item Dipole-dipole: $\bm{\mu}_i \times \bm{\mu}_j$
+\end{itemize}
+
+\subsection{Order 3: Monopole + Dipole + Quadrupole}
+
+For order 3, the tensor is $9 \times 9$ and includes all terms up to quadrupole-quadrupole. Key tensor elements:
+
+\subsubsection{Monopole-Monopole}
+\begin{equation}
+T_{0,0} = \frac{k}{r}
+\end{equation}
+
+\subsubsection{Monopole-Dipole}
+\begin{align}
+T_{0,1:4} &= -\frac{k\hat{\mathbf{r}}}{r^2} \\
+T_{1:4,0} &= \frac{k\hat{\mathbf{r}}}{r^2}
+\end{align}
+
+\subsubsection{Dipole-Dipole}
+\begin{equation}
+T_{1:4,1:4} = \frac{k}{r^3}(3\hat{\mathbf{r}}\hat{\mathbf{r}}^T - \mathbf{I})
+\end{equation}
+
+\subsubsection{Monopole-Quadrupole}
+For each traceless quadrupole component $(\alpha, \beta) \in \{(0,0), (0,1), (0,2), (1,1), (1,2)\}$:
+
+\begin{equation}
+T_{0, 4+\text{idx}} = T_{4+\text{idx}, 0} = \frac{k}{r^3}(3\hat{r}_\alpha\hat{r}_\beta - \delta_{\alpha\beta})
+\end{equation}
+
+\subsubsection{Dipole-Quadrupole}
+For dipole component $i$ and quadrupole component $(\alpha, \beta)$:
+
+\begin{equation}
+T_{1+i, 4+\text{idx}} = T_{4+\text{idx}, 1+i} = \frac{k}{r^4}\left[-15\hat{r}_i\hat{r}_\alpha\hat{r}_\beta + 3(\delta_{i\alpha}\hat{r}_\beta + \delta_{i\beta}\hat{r}_\alpha + \delta_{\alpha\beta}\hat{r}_i)\right]
+\end{equation}
+
+\subsubsection{Quadrupole-Quadrupole}
+For quadrupole components $(\alpha, \beta)$ and $(\gamma, \delta)$:
+
+\begin{multline}
+T_{4+\text{idx}_1, 4+\text{idx}_2} = \frac{k}{r^5}\Big[105\hat{r}_\alpha\hat{r}_\beta\hat{r}_\gamma\hat{r}_\delta \\
+- 15(\hat{r}_\alpha\hat{r}_\beta\delta_{\gamma\delta} + \hat{r}_\gamma\hat{r}_\delta\delta_{\alpha\beta} + \hat{r}_\alpha\hat{r}_\gamma\delta_{\beta\delta} + \hat{r}_\alpha\hat{r}_\delta\delta_{\beta\gamma} + \hat{r}_\beta\hat{r}_\gamma\delta_{\alpha\delta} + \hat{r}_\beta\hat{r}_\delta\delta_{\alpha\gamma}) \\
++ 3(\delta_{\alpha\beta}\delta_{\gamma\delta} + \delta_{\alpha\gamma}\delta_{\beta\delta} + \delta_{\alpha\delta}\delta_{\beta\gamma})\Big]
+\end{multline}
+
+\section{Electrostatic Stabilization Energy}
+
+\subsection{Total Energy Formula}
+
+The total electrostatic stabilization energy between substrate and environment:
+
+\begin{equation}
+E_{\text{total}} = \sum_{i \in \text{substrate}} \sum_{j \in \text{environment}} \mathbf{M}_i^T \cdot \mathbf{T}_{ij} \cdot \mathbf{M}_j
+\end{equation}
+
+This single equation encompasses all interaction terms:
+\begin{itemize}
+\item Order 1: charge-charge
+\item Order 2: + charge-dipole + dipole-dipole
+\item Order 3: + charge-quadrupole + dipole-quadrupole + quadrupole-quadrupole
+\end{itemize}
+
+\subsection{Energy Unit Conversion}
+
+The tensor formalism yields energy in Joules. Convert to kcal/mol:
+
+\begin{equation}
+E_{\text{kcal/mol}} = E_{\text{J}} \times \frac{N_A}{4184}
+\end{equation}
+
+where $N_A = 6.02 \times 10^{23}$ mol$^{-1}$ is Avogadro's number.
+
+\section{Electric Field Calculation}
+
+\subsection{Monopole Electric Field}
+
+The electric field at atom $o$ due to a point charge $q_j$ at distance $\mathbf{r}$:
+
+\begin{equation}
+\mathbf{E}_{\text{monopole}} = -\frac{1}{\epsilon_r} k_e e q_j \frac{\mathbf{r}}{r^3}
+\end{equation}
+
+where $\mathbf{r} = (\mathbf{r}_j - \mathbf{r}_o) \times 10^{-10}$ m.
+
+\subsection{Multipole Electric Field Components}
+
+The total electric field includes contributions from charge, dipole, and quadrupole moments. For the $x$-component:
+
+\begin{multline}
+E_x = \frac{1}{\epsilon_r} k_e \frac{r_x}{r^3} \left[-e q_j + \frac{e}{r^2}(\mu_y r_y + \mu_z r_z)\right] - \frac{1}{3}E_{x,\text{quad}}
+\end{multline}
+
+The quadrupole contribution to the $x$-component:
+
+\begin{equation}
+E_{x,\text{quad}} = \frac{1}{\epsilon_r} k_e e \frac{r_x}{r^3} \frac{1}{r^4} \sum_{j,k \in \{y,z\}} r_j r_k Q_{jk}
+\end{equation}
+
+Similar expressions hold for $E_y$ and $E_z$ components.
+
+\subsection{Complete Atomic Contribution}
+
+For atom $j$ contributing to the field at atom $o$, the total field vector is:
+
+\begin{equation}
+\mathbf{E}_j = \frac{1}{\epsilon_r} k_e \left[\frac{-e q_j \mathbf{r}}{r^3} + \frac{e}{r^5}\left(3(\bm{\mu}_j \cdot \mathbf{r})\mathbf{r} - r^2\bm{\mu}_j\right) + \mathbf{E}_{\text{quad}}\right]
+\end{equation}
+
+where the quadrupole term involves the contraction:
+
+\begin{equation}
+E_{\text{quad},\alpha} = -\frac{1}{3} \frac{e}{r^7} r_\alpha \sum_{\beta,\gamma} r_\beta r_\gamma Q_{\beta\gamma}
+\end{equation}
+
+\subsection{Total Electric Field}
+
+The total electric field at atom $o$ is the sum over all atoms $j$ in the charge range:
+
+\begin{equation}
+\mathbf{E}_{\text{total}} = \sum_{j \neq o} \mathbf{E}_j
+\end{equation}
+
+Electric field units are converted from V/m to V/\AA{} using the conversion factor $10^{-10}$.
+
+\section{QM/MM Support}
+
+The formalism naturally handles QM/MM calculations where substrate and environment can have different multipole orders:
+
+\begin{itemize}
+\item QM regions: Use order 2 or 3 (include dipoles/quadrupoles)
+\item MM regions: Use order 1 (charges only)
+\end{itemize}
+
+The interaction tensor is built with dimension $\max(\text{order}_{\text{substrate}}, \text{order}_{\text{environment}})$, and multipole vectors are zero-padded as needed to maintain proper dimensionality.
+
+\section{Summary of Key Features}
+
+\subsection{Advantages of Tensor Formalism}
+\begin{itemize}
+\item \textbf{Complete}: Automatically includes all multipole-multipole interaction terms
+\item \textbf{Symmetric}: Properly treats both substrate and environment multipoles
+\item \textbf{Efficient}: Single matrix multiplication per atom pair
+\item \textbf{Extensible}: Easy to add higher-order multipole terms
+\item \textbf{Flexible}: Supports mixed multipole orders for QM/MM calculations
+\end{itemize}
+
+\subsection{Implementation Notes}
+\begin{itemize}
+\item All distances in Angstroms are converted to meters for SI unit consistency
+\item Charges are treated as dimensionless (in units of $e$)
+\item Dielectric constant is applied uniformly to all interactions
+\item Traceless quadrupole representation reduces storage and improves numerical stability
+\item Automatic fallback to charge-only mode if multipole files are unavailable
+\end{itemize}
+
+\end{document}

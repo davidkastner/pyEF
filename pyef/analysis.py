@@ -46,66 +46,6 @@ from .utility import MoldenObject, MultiwfnInterface
 from . import utility as constants  # Backward compatibility alias
 
 
-def visualize_charges_pdb(xyz_file, charges, pdb_name):
-    """Create a PDB file with charges visualized in the b-factor column.
-
-    Args:
-        xyz_file (str): Path to the XYZ structure file
-        charges (array-like): Array of atomic charges to visualize
-        pdb_name (str): Output PDB filename
-
-    Returns:
-        None: Writes PDB file to disk
-    """
-    import openbabel
-    from biopandas.pdb import PandasPdb
-    import warnings
-    import sys
-
-    # Suppress Open Babel warnings
-    warnings.filterwarnings('ignore', category=DeprecationWarning)
-    stderr_backup = sys.stderr
-    sys.stderr = open(os.devnull, 'w')
-
-    try:
-        # Convert XYZ to PDB using OpenBabel
-        obConversion = openbabel.OBConversion()
-        obConversion.SetInAndOutFormats("xyz", "pdb")
-        mol = openbabel.OBMol()
-        obConversion.ReadFile(mol, xyz_file)
-        mol.ConnectTheDots()
-        mol.PerceiveBondOrders()
-        mol.FindRingAtomsAndBonds()
-        obConversion.WriteFile(mol, pdb_name)
-
-        # Load PDB and assign charges to b-factor column
-        ppdb = PandasPdb()
-        ppdb.read_pdb(pdb_name)
-
-        # Verify lengths match
-        if len(charges) != len(ppdb.df['HETATM']):
-            print(f"WARNING: Length mismatch in visualize_charges_pdb!")
-            print(f"  charges length: {len(charges)}")
-            print(f"  PDB DataFrame length: {len(ppdb.df['HETATM'])}")
-            # Resize charges if needed
-            if len(charges) < len(ppdb.df['HETATM']):
-                charges_padded = np.zeros(len(ppdb.df['HETATM']))
-                charges_padded[:len(charges)] = charges
-                charges = charges_padded
-            else:
-                charges = charges[:len(ppdb.df['HETATM'])]
-
-        # Sort and assign charges to b-factor
-        ppdb.df['HETATM'] = ppdb.df['HETATM'].sort_values('atom_number').reset_index(drop=True)
-        ppdb.df['HETATM']['b_factor'] = charges
-        ppdb.to_pdb(path=pdb_name, records=['HETATM'], gz=False, append_newline=True)
-
-    finally:
-        # Restore stderr
-        sys.stderr.close()
-        sys.stderr = stderr_backup
-
-
 class Electrostatics:
     """Compute electrostatic properties from quantum chemistry calculations.
 
@@ -3278,3 +3218,66 @@ Input commands that were to be sent:
             return df, df_atomwise
 
         return df
+    
+
+
+def visualize_charges_pdb(xyz_file, charges, pdb_name):
+    """Create a PDB file with charges visualized in the b-factor column.
+
+    Args:
+        xyz_file (str): Path to the XYZ structure file
+        charges (array-like): Array of atomic charges to visualize
+        pdb_name (str): Output PDB filename
+
+    Returns:
+        None: Writes PDB file to disk
+    """
+    import openbabel
+    from biopandas.pdb import PandasPdb
+    import warnings
+    import sys
+
+    # Suppress Open Babel warnings
+    warnings.filterwarnings('ignore', category=DeprecationWarning)
+    stderr_backup = sys.stderr
+    sys.stderr = open(os.devnull, 'w')
+
+    try:
+        # Convert XYZ to PDB using OpenBabel
+        obConversion = openbabel.OBConversion()
+        obConversion.SetInAndOutFormats("xyz", "pdb")
+        mol = openbabel.OBMol()
+        obConversion.ReadFile(mol, xyz_file)
+        mol.ConnectTheDots()
+        mol.PerceiveBondOrders()
+        mol.FindRingAtomsAndBonds()
+        obConversion.WriteFile(mol, pdb_name)
+
+        # Load PDB and assign charges to b-factor column
+        ppdb = PandasPdb()
+        ppdb.read_pdb(pdb_name)
+
+        # Verify lengths match
+        if len(charges) != len(ppdb.df['HETATM']):
+            print(f"WARNING: Length mismatch in visualize_charges_pdb!")
+            print(f"  charges length: {len(charges)}")
+            print(f"  PDB DataFrame length: {len(ppdb.df['HETATM'])}")
+            # Resize charges if needed
+            if len(charges) < len(ppdb.df['HETATM']):
+                charges_padded = np.zeros(len(ppdb.df['HETATM']))
+                charges_padded[:len(charges)] = charges
+                charges = charges_padded
+            else:
+                charges = charges[:len(ppdb.df['HETATM'])]
+
+        # Sort and assign charges to b-factor
+        ppdb.df['HETATM'] = ppdb.df['HETATM'].sort_values('atom_number').reset_index(drop=True)
+        ppdb.df['HETATM']['b_factor'] = charges
+        ppdb.to_pdb(path=pdb_name, records=['HETATM'], gz=False, append_newline=True)
+
+    finally:
+        # Restore stderr
+        sys.stderr.close()
+        sys.stderr = stderr_backup
+
+
