@@ -200,7 +200,54 @@ For more examples, see:
 
         # Type check: lst_of_tmcm_idx must be list of integers if provided
         if lst_of_tmcm_idx is not None:
+            # AUTO-CORRECT: Convert numpy arrays or other array-like objects to list
+            if hasattr(lst_of_tmcm_idx, '__iter__') and not isinstance(lst_of_tmcm_idx, (str, dict)):
+                # This catches numpy arrays, tuples, sets, etc. but not strings or dicts
+                try:
+                    lst_of_tmcm_idx = list(lst_of_tmcm_idx)
+                    # Successfully converted - continue with validation below
+                except (TypeError, ValueError):
+                    pass  # If conversion fails, fall through to error handling
+
             if not isinstance(lst_of_tmcm_idx, list):
+                # ENHANCED: Detect old API usage pattern
+                # Old API: Electrostatics(folders, atoms, folder_to_file_path, molden_filename, xyzfilename)
+                # New API: Electrostatics(molden_paths, xyz_paths, lst_of_tmcm_idx)
+
+                if isinstance(lst_of_tmcm_idx, str):
+                    # Likely old API: third argument was folder_to_file_path (string)
+                    hint_msg = """
+
+HINT: It looks like you may be using the OLD API format.
+The API has been updated. Here's how to migrate your code:
+
+OLD API (deprecated):
+  estat = Electrostatics(
+      list_of_folders,           # List of folder paths
+      list_of_atoms,             # List of atom indices
+      folder_to_file_path,       # String path
+      molden_filename='optim.molden',
+      xyzfilename='optim.xyz'
+  )
+
+NEW API (current):
+  estat = Electrostatics(
+      molden_paths,              # List of COMPLETE paths to .molden files
+      xyz_paths,                 # List of COMPLETE paths to .xyz files
+      lst_of_tmcm_idx=[25, 30]   # List of metal atom indices (optional)
+  )
+
+Or if you have folders, construct paths like this:
+  folders = ['/path/to/job1', '/path/to/job2']
+  molden_paths = [f'{folder}/optim.molden' for folder in folders]
+  xyz_paths = [f'{folder}/optim.xyz' for folder in folders]
+  metal_indices = [25, 30]  # Your atom indices
+
+  estat = Electrostatics(molden_paths, xyz_paths, metal_indices)
+"""
+                else:
+                    hint_msg = ""
+
                 raise TypeError(f"""
 {'='*60}
 ERROR: Invalid type for lst_of_tmcm_idx
@@ -216,7 +263,7 @@ Correct usage:
   )
 
 For more examples, see:
-- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py
+- /home/gridsan/mmanetsch/pyEF/pyef/ExampleUsage.py{hint_msg}
 {'='*60}
 """)
 
