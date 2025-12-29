@@ -2639,8 +2639,13 @@ For complete examples, see:
         atoms = df['Atom']
         arr_chgs = np.array(df['charge'])
         for res_name in res_dict.keys():
-            res_labels.append(res_name)
             res_indices = res_dict[res_name]
+
+            # Skip empty residues (no atoms)
+            if len(res_indices) == 0:
+                continue
+
+            res_labels.append(res_name)
             res_coords = arr_coords[res_indices]
             res_centroid = res_coords.mean(axis=0)
             res_chgs = arr_chgs[res_indices]
