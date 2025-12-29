@@ -2422,7 +2422,7 @@ For complete examples, see:
         os.chdir(owd)
         return comp_cost
 
-    def get_residueDipoles(self, charge_type, multiwfn_path, multipole_bool, solute_indices = [], num_atoms_solvent=0):
+    def get_residueDipoles(self, charge_type, multiwfn_path, multipole_bool, solute_indices = [], num_atoms_solvent=0, save_distance_dipoles=False):
         '''
         Function computes a partial charges of all atoms in one system... if the desired file already exists the just return it!!
         Inputs:
@@ -2494,7 +2494,8 @@ For complete examples, see:
                 init_dipole = df_dip['Dipole']
             
                 df_dip.sort_values(by='Distance from solute', ascending=True)
-                df_dip.to_csv(f'frm{f}_chg{charge_type}_DistDependentDipoles.csv')
+                if save_distance_dipoles:
+                    df_dip.to_csv(f'{f}/chg{charge_type}_DistDependentDipoles.csv')
                 sorted_dips = df_dip['Dipole']
                 avg_dips = np.average(sorted_dips[1:])
             
