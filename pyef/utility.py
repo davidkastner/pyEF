@@ -682,7 +682,6 @@ class MultiwfnInterface:
                 final_structure_file = final_structure_file[0]
         else:
             final_structure_file = xyz_filename
-        print(f"Do we need to run calcs?: {self.config['rerun']}")
         comp_cost = 0  # Default to 0 for "already exists" case
         num_atoms = 0
         need_to_run_calculation = True
@@ -695,6 +694,7 @@ class MultiwfnInterface:
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
 
         # Check if previous calculations fully converged for desired multipole/charge scheme
+        calc_type = "multipole" if multipole_bool else "monopole"
         if multipole_bool:
             if os.path.exists(file_path_multipole):
                 with open(file_path_multipole, 'r') as file:
@@ -707,7 +707,7 @@ class MultiwfnInterface:
 
         # If you need to run the calculations, run either the multipole or the monopole calculation!
         if need_to_run_calculation or self.config['rerun']:
-            print(f'Running Calculation')
+            print(f'Running {charge_type} {calc_type} calculation for {os.path.basename(f)}')
             try:
                 start = time.time()
                 if multipole_bool:
@@ -787,6 +787,9 @@ class MultiwfnInterface:
                 # Issue could be from lost memory or Multiwfn failure
                 os.chdir(owd)
                 return -1  # Return -1 to indicate failure
+        else:
+            result_file = os.path.basename(file_path_multipole if multipole_bool else file_path_monopole)
+            print(f'Found existing {charge_type} {calc_type} result: {result_file} for {os.path.basename(f)}')
 
         os.chdir(owd)
         return comp_cost
