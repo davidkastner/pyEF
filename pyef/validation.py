@@ -17,6 +17,11 @@ VALID_CHARGE_TYPES = {
     'CM5', 'EEM', 'RESP', 'PEOE'
 }
 
+# Valid charge types for multipole analysis (only these work with Multiwfn multipole mode)
+VALID_MULTIPOLE_CHARGE_TYPES = {
+    'Hirshfeld', 'Hirshfeld_I', 'Becke'
+}
+
 
 def get_atom_count_from_xyz(xyz_path: str) -> int:
     """
@@ -131,6 +136,148 @@ For more information, see:
 - README.md: Section 2.3 (Key Parameters)
 {'='*60}
 """)
+
+
+def filter_charge_types_for_multipole(charge_types: Union[str, List[str]],
+                                       context: str = "") -> List[str]:
+    """
+    Filter charge types to only those that work with multipole analysis.
+
+    Only Hirshfeld, Hirshfeld_I, and Becke are supported for multipole analysis.
+    This function validates the input, warns about unsupported types, and returns
+    only the valid ones.
+
+    Parameters
+    ----------
+    charge_types : str or list of str
+        Charge partitioning scheme(s) to validate
+    context : str, optional
+        Additional context for warning/error messages
+
+    Returns
+    -------
+    list of str
+        Filtered list containing only valid multipole charge types.
+        Returns empty list if no valid types are found.
+
+    Warnings
+    --------
+    Prints warnings for any charge types that don't support multipole analysis
+    """
+    # Convert to list if string
+    if isinstance(charge_types, str):
+        charge_types = [charge_types]
+
+    context_str = f" in {context}" if context else ""
+
+    # First validate that all charge types are generally valid
+    for charge_type in charge_types:
+        validate_charge_type(charge_type, context=context)
+
+    # Filter for multipole-compatible types
+    valid_for_multipole = []
+    invalid_for_multipole = []
+
+    for charge_type in charge_types:
+        if charge_type in VALID_MULTIPOLE_CHARGE_TYPES:
+            valid_for_multipole.append(charge_type)
+        else:
+            invalid_for_multipole.append(charge_type)
+
+    # Warn about invalid types
+    if invalid_for_multipole:
+        print(f"""
+{'='*60}
+WARNING: Invalid charge type(s) for multipole analysis{context_str}
+{'='*60}
+The following charge types do NOT support multipole analysis:
+  {', '.join(invalid_for_multipole)}
+
+Only these charge types work with multipole analysis:
+  Hirshfeld, Hirshfeld_I, Becke
+
+These charge types will be SKIPPED for multipole calculations.
+""")
+
+        if valid_for_multipole:
+            print(f"Valid charge types that will be used: {', '.join(valid_for_multipole)}")
+            print(f"{'='*60}\n")
+
+    # If no valid types remain, just return empty list (caller will handle)
+    if not valid_for_multipole:
+        print(f"No valid charge types remaining for multipole analysis{context_str}. Skipping.")
+        print(f"{'='*60}\n")
+
+    return valid_for_multipole
+
+
+def filter_charge_types_for_monopole(charge_types: Union[str, List[str]],
+                                      context: str = "") -> List[str]:
+    """
+    Filter charge types to only those that work with monopole analysis.
+
+    All charge types in VALID_CHARGE_TYPES are supported for monopole analysis.
+    This function validates the input and returns only valid types.
+
+    Parameters
+    ----------
+    charge_types : str or list of str
+        Charge partitioning scheme(s) to validate
+    context : str, optional
+        Additional context for warning/error messages
+
+    Returns
+    -------
+    list of str
+        Filtered list containing only valid monopole charge types.
+        Returns empty list if no valid types are found.
+
+    Warnings
+    --------
+    Prints warnings for any invalid charge types
+    """
+    # Convert to list if string
+    if isinstance(charge_types, str):
+        charge_types = [charge_types]
+
+    context_str = f" in {context}" if context else ""
+
+    # Filter for valid monopole types
+    valid_for_monopole = []
+    invalid_for_monopole = []
+
+    for charge_type in charge_types:
+        if charge_type in VALID_CHARGE_TYPES:
+            valid_for_monopole.append(charge_type)
+        else:
+            invalid_for_monopole.append(charge_type)
+
+    # Warn about invalid types
+    if invalid_for_monopole:
+        print(f"""
+{'='*60}
+WARNING: Invalid charge type(s) for monopole analysis{context_str}
+{'='*60}
+The following charge types are NOT valid:
+  {', '.join(invalid_for_monopole)}
+
+Valid charge types for monopole analysis:
+  Hirshfeld, Hirshfeld_I, Voronoi, Mulliken, Lowdin,
+  SCPA, Becke, ADCH, CHELPG, MK, AIM, CM5, EEM, RESP, PEOE
+
+These charge types will be SKIPPED.
+""")
+
+        if valid_for_monopole:
+            print(f"Valid charge types that will be used: {', '.join(valid_for_monopole)}")
+            print(f"{'='*60}\n")
+
+    # If no valid types remain, just return empty list (caller will handle)
+    if not valid_for_monopole:
+        print(f"No valid charge types remaining for monopole analysis{context_str}. Skipping.")
+        print(f"{'='*60}\n")
+
+    return valid_for_monopole
 
 
 def check_path_exists(path: str, path_type: str = "file", context: str = "") -> None:

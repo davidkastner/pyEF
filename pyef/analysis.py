@@ -47,7 +47,9 @@ from . import utility as constants  # Backward compatibility alias
 from .validation import (
     validate_charge_type,
     validate_numeric_range,
-    VALID_CHARGE_TYPES
+    VALID_CHARGE_TYPES,
+    filter_charge_types_for_multipole,
+    filter_charge_types_for_monopole
 )
 
 
@@ -1732,6 +1734,16 @@ Input commands that were to be sent:
         if isinstance(charge_types, str):
             charge_types = [charge_types]
 
+        # Filter charge types based on multipole/monopole mode
+        if use_multipole:
+            charge_types = filter_charge_types_for_multipole(charge_types, context="getESP")
+        else:
+            charge_types = filter_charge_types_for_monopole(charge_types, context="getESP")
+
+        # Return empty DataFrame if no valid charge types remain
+        if not charge_types:
+            return pd.DataFrame()
+
         # Validate that metal indices are provided for ESP calculation
         if not self.lst_of_tmcm_idx:
             raise ValueError(f"""
@@ -1757,10 +1769,6 @@ For complete examples, see:
 - README.md: Section 3.2 (ESP Calculation)
 {'='*60}
 """)
-
-        # Validate charge types
-        for charge_type in charge_types:
-            validate_charge_type(charge_type, context="getESP")
 
         self.config['dielectric'] = dielectric
         metal_idxs = self.lst_of_tmcm_idx
@@ -2007,6 +2015,20 @@ For complete examples, see:
             charge_type = charge_types[0]
         else:
             charge_type = charge_types
+
+        # Filter charge type based on multipole/monopole mode
+        if multipole_bool:
+            filtered_types = filter_charge_types_for_multipole(charge_type, context="getEfield")
+            if not filtered_types:
+                # Return empty DataFrame if charge type not supported
+                return pd.DataFrame()
+            charge_type = filtered_types[0]
+        else:
+            filtered_types = filter_charge_types_for_monopole(charge_type, context="getEfield")
+            if not filtered_types:
+                # Return empty DataFrame if charge type not supported
+                return pd.DataFrame()
+            charge_type = filtered_types[0]
 
         self.config['dielectric'] = dielectric
         metal_idxs = self.lst_of_tmcm_idx
@@ -2315,7 +2337,6 @@ For complete examples, see:
         # Handle xyzfilename being a list (take first element)
         if isinstance(final_structure_file, list):
             final_structure_file = final_structure_file[0]
-        print(f"Do we need to run calcs?: {self.config['rerun']}")
         comp_cost = 0  # Default to 0 for "already exists" case
         num_atoms = 0
         need_to_run_calculation = True
@@ -2327,7 +2348,8 @@ For complete examples, see:
         file_path_xyz = f"{os.getcwd()}/{final_structure_file}"
         #file_path_xyz = f"{os.getcwd()}/{f + folder_to_molden}{final_structure_file}"
 
-        #check if previous calculations fully converged for desired multipole/charge scheme 
+        #check if previous calculations fully converged for desired multipole/charge scheme
+        calc_type = "multipole" if multipole_bool else "monopole"
         if multipole_bool:
             if os.path.exists(file_path_multipole):
                 with open(file_path_multipole, 'r') as file:
@@ -2339,11 +2361,11 @@ For complete examples, see:
                 need_to_run_calculation = False
                 #Dynamically get path to package settings.ini file
                 #path_to_ini_file = str(ini_path)
-            
+
 
         #If you need to run the calculations, urn either the multipole or the monopole calculation!
         if need_to_run_calculation or self.config['rerun']:
-            print(f'Running Calculation')
+            print(f'Running {charge_type} {calc_type} calculation for {os.path.basename(f)}')
             try: 
                 start = time.time()
                 if multipole_bool:
@@ -2419,6 +2441,9 @@ For complete examples, see:
                 # Issue could be from lost memory or Multiwfn failure
                 os.chdir(owd)
                 return -1  # Return -1 to indicate failure instead of comp_cost
+        else:
+            result_file = os.path.basename(file_path_multipole if multipole_bool else file_path_monopole)
+            print(f'Found existing {charge_type} {calc_type} result: {result_file} for {os.path.basename(f)}')
         os.chdir(owd)
         return comp_cost
 
@@ -2437,6 +2462,21 @@ For complete examples, see:
         # Access Class Variables
         list_of_folders = self.lst_of_folders
         owd = os.getcwd() # Old working directory
+
+        # Filter charge type based on multipole/monopole mode
+        if multipole_bool:
+            filtered_types = filter_charge_types_for_multipole(charge_type, context="get_residueDipoles")
+            if not filtered_types:
+                # Return empty DataFrame if charge type not supported
+                return pd.DataFrame()
+            charge_type = filtered_types[0]
+        else:
+            filtered_types = filter_charge_types_for_monopole(charge_type, context="get_residueDipoles")
+            if not filtered_types:
+                # Return empty DataFrame if charge type not supported
+                return pd.DataFrame()
+            charge_type = filtered_types[0]
+
         molden_filename = self.config['molden_filename']
         final_structure_file = self.config['xyzfilename']
         # Handle xyzfilename being a list (take first element)
@@ -2497,7 +2537,7 @@ For complete examples, see:
                 if save_distance_dipoles:
                     df_dip.to_csv(f'{f}/chg{charge_type}_DistDependentDipoles.csv')
                 sorted_dips = df_dip['Dipole']
-                avg_dips = np.average(sorted_dips[1:])
+                avg_dips = np.average(sorted_dips[1:]) if len(sorted_dips) > 1 else np.nan
             
                 first_5A = df_dip.loc[(df_dip['Distance from solute'] < 5), 'Dipole'][1:]
                 v5to7A = df_dip.loc[(df_dip['Distance from solute'] < 7) & (df_dip['Distance from solute'] > 5), 'Dipole']
@@ -2505,8 +2545,14 @@ For complete examples, see:
                 above11A = df_dip.loc[(df_dip['Distance from solute'] > 11), 'Dipole']
 
                 #return a list of the solvents
+                # Handle empty arrays by using np.nan as default
+                avg_5A = np.average(first_5A) if len(first_5A) > 0 else np.nan
+                avg_5to7A = np.average(v5to7A) if len(v5to7A) > 0 else np.nan
+                avg_7to11A = np.average(v7to11A) if len(v7to11A) > 0 else np.nan
+                avg_above11A = np.average(above11A) if len(above11A) > 0 else np.nan
+                dipole_solute = sorted_dips[0] if len(sorted_dips) > 0 else np.nan
 
-                dip_dict = {'DipoleSolute': sorted_dips[0], 'AvgDipSolv': avg_dips, 'Avg5Ang': np.average(first_5A), 'Avg5to7Ang': np.average(v5to7A) , 'Avg7to11Ang': np.average(v7to11A), 'Avgabove11Ang': np.average(above11A), 'CompCost': comp_cost, 'Num5Avg':len(first_5A), 'Num5to7':len(v5to7A), 'Num7to11A': len(v7to11A), 'Numabove11A': len(above11A), 'Total_atoms': total_atoms, 'FrameNum': f }
+                dip_dict = {'DipoleSolute': dipole_solute, 'AvgDipSolv': avg_dips, 'Avg5Ang': avg_5A, 'Avg5to7Ang': avg_5to7A , 'Avg7to11Ang': avg_7to11A, 'Avgabove11Ang': avg_above11A, 'CompCost': comp_cost, 'Num5Avg':len(first_5A), 'Num5to7':len(v5to7A), 'Num7to11A': len(v7to11A), 'Numabove11A': len(above11A), 'Total_atoms': total_atoms, 'FrameNum': f }
                 lst_dicts.append(dip_dict)
             except Exception as e:
                 print(e)
@@ -2550,6 +2596,9 @@ For complete examples, see:
         '''
        # Access Class Variables
         list_of_file = self.lst_of_folders
+
+        # Filter charge types for monopole analysis only
+        charge_types = filter_charge_types_for_monopole(charge_types, context="getpartialchgs")
 
         owd = os.getcwd() # Old working directory
         allspeciesdict = []
