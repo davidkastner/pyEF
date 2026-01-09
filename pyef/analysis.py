@@ -86,6 +86,7 @@ class Electrostatics:
             - visualize_ef (bool): Create PDB files for atom-wise E-fields
             - visualize_charges (bool): Create PDB files for partial charges
             - visualize_per_bond (bool): Create separate PDB files for each bond
+            - skip_missing_files (bool): Skip calculations if required files missing (default: False)
     dict_of_calcs : dict
         Mapping of charge scheme names to Multiwfn command codes.
     dict_of_multipole : dict
@@ -309,7 +310,8 @@ For more examples, see:
             'changeDielectBoundBool': False,  # Special dielectric for bonds
             'visualize_ef': False,    # Create PDB files for atom-wise E-fields
             'visualize_charges': False,   # Create PDB files for partial charges
-            'visualize_per_bond': False   # Create separate PDB files for each bond
+            'visualize_per_bond': False,  # Create separate PDB files for each bond
+            'skip_missing_files': False   # Skip calculations if required files are missing (don't raise errors)
         }
         # Override defaults with user-provided kwargs
         self.config.update(kwargs)
@@ -1356,19 +1358,32 @@ Correct usage:
                 dipole_vec = constants.BOHR_TO_M*np.array(atom_dict["Dipole_Moment"])
                 #convention of vector pointing towards atom of interest, so positive charges exert positive Efield
                 dist_vec = constants.ANGSTROM_TO_M*np.array([(xs[idx] - xo), (ys[idx] - yo), (zs[idx] - zo)])
-                dist_arr = np.outer(dist_vec, dist_vec)
                 quadrupole_arr = constants.BOHR_TO_M*constants.BOHR_TO_M*atom_dict['Quadrupole_Moment']
 
                 # Calculate esp and convert to units (A to m); Calc E-field stenth in kJ/mol*e*m
                 r = (((xs[idx] - xo)*constants.ANGSTROM_TO_M)**2 + ((ys[idx] - yo)*constants.ANGSTROM_TO_M)**2 + ((zs[idx] - zo)*constants.ANGSTROM_TO_M)**2)**(0.5)
+                r_squared = r**2
                 Monopole_E = Monopole_E - inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"]*(1/(r**3))*dist_vec  #neg for sign convention so Efield points toward neg charge
-                Ex_quad = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**3))*(constants.ANGSTROM_TO_M*(xs[idx] - xo))*(1/r**4)*dist_arr[1:, 1:]*quadrupole_arr[1:,1:]
-                Ey_quad = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**3))*(constants.ANGSTROM_TO_M*(ys[idx] - yo))*(1/r**4)*dist_arr[0:2:3, 0:2:3]*quadrupole_arr[0:2:3,0:2:3]
-                Ez_quad = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**3))*(constants.ANGSTROM_TO_M*(zs[idx] - zo))*(1/r**4)*dist_arr[0:2, 0:2]*quadrupole_arr[0:2,0:2]
 
-                E_x_atomic_contrib = inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[0]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[1:], dist_vec[1:]))-(1/3)*Ex_quad.sum()
-                E_y_atomic_contrib = inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[1]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[0:2:3], dist_vec[0:2:3])) -(1/3)*Ey_quad.sum()
-                E_z_atomic_contrib = inv_eps*constants.COULOMB_CONSTANT*(1/(r**3))*dist_vec[2]*( -constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"] + constants.ELEMENTARY_CHARGE*(1/r**2)*np.dot(dipole_vec[0:2], dist_vec[0:2])) -(1/3)*Ez_quad.sum()
+                # Calculate full multipole contribution using proper tensor contractions
+                # Monopole term: -(k*e/ε_r) * q_j * r_ij / r³
+                E_monopole_atomic = -inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*atom_dict["Atom_Charge"]*(1/(r**3))*dist_vec
+
+                # Dipole term: (k*e/ε_r) * [3(μ_j·r_ij)*r_ij - r²*μ_j] / r⁵
+                mu_dot_r = np.dot(dipole_vec, dist_vec)
+                E_dipole_atomic = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(r**5))*(3*mu_dot_r*dist_vec - r_squared*dipole_vec)
+
+                # Quadrupole term: (k*e/ε_r) * [5*r_ij*(r_ij^T Q_j r_ij) - 2*r²*(Q_j·r_ij)] / (2*r⁷)
+                Qr = np.dot(quadrupole_arr, dist_vec)  # Matrix-vector product: Q·r
+                rTQr = np.dot(dist_vec, Qr)  # Scalar: r^T Q r = r·(Q·r)
+                E_quad_atomic = inv_eps*constants.COULOMB_CONSTANT*constants.ELEMENTARY_CHARGE*(1/(2*r**7))*(5*rTQr*dist_vec - 2*r_squared*Qr)
+
+                # Total atomic contribution (all three multipole terms)
+                E_atomic_contrib_vec = E_monopole_atomic + E_dipole_atomic + E_quad_atomic
+
+                E_x_atomic_contrib = E_atomic_contrib_vec[0]
+                E_y_atomic_contrib = E_atomic_contrib_vec[1]
+                E_z_atomic_contrib = E_atomic_contrib_vec[2]
 
                 Ex = Ex + E_x_atomic_contrib
                 Ey = Ey + E_y_atomic_contrib
@@ -2002,6 +2017,27 @@ For complete examples, see:
             for charge_type in charge_types:
                 print(f'Partial Charge Scheme: {charge_type}')
                 try:
+                    # Use directory path directly (f is already absolute path from lst_of_folders)
+                    file_path_multipole = f"{f}/Multipole{charge_type}.txt"
+                    file_path_monopole = f"{f}/Charges{charge_type}.txt"
+
+                    # Check if required files exist when skip_missing_files is enabled
+                    if self.config.get('skip_missing_files', False):
+                        required_file = file_path_multipole if use_multipole else file_path_monopole
+                        if not os.path.exists(required_file):
+                            print(f"""
+{'='*60}
+WARNING: Required charge file not found - skipping this calculation
+{'='*60}
+Expected file: {required_file}
+Job folder: {f}
+Charge type: {charge_type}
+
+Skipping to next charge type (skip_missing_files=True)
+{'='*60}
+""")
+                            continue
+
                     # Use centralized partitionCharge() to get/compute charges
                     # Extract actual filenames from paths
                     molden_filename = os.path.basename(self.molden_paths[counter-1])
@@ -2019,10 +2055,6 @@ For complete examples, see:
                     if comp_cost == -1:
                         print(f"WARNING: Charge calculation failed for {charge_type} in {f}")
                         continue
-
-                    # Use directory path directly (f is already absolute path from lst_of_folders)
-                    file_path_multipole = f"{f}/Multipole{charge_type}.txt"
-                    file_path_monopole = f"{f}/Charges{charge_type}.txt"
                     path_to_xyz = file_path_xyz
 
                     # Get point charge path for this job
@@ -2043,7 +2075,22 @@ For complete examples, see:
                             ptchg_path = self._get_ptchg_path_for_job(counter - 1, f, override_path=None)
 
                         if ptchg_path is not None and not os.path.exists(ptchg_path):
-                            raise FileNotFoundError(f"""
+                            if self.config.get('skip_missing_files', False):
+                                print(f"""
+{'='*60}
+WARNING: Point charge file not found - skipping this calculation
+{'='*60}
+Expected path: {ptchg_path}
+Job index: {counter - 1}
+Job folder: {f}
+Charge type: {charge_type}
+
+Skipping to next calculation (skip_missing_files=True)
+{'='*60}
+""")
+                                continue
+                            else:
+                                raise FileNotFoundError(f"""
 {'='*60}
 ERROR: Point charge file not found
 {'='*60}
@@ -2398,7 +2445,23 @@ For complete examples, see:
 
                     if ptchg_path is not None:
                         if not os.path.exists(ptchg_path):
-                            raise FileNotFoundError(f"""
+                            if self.config.get('skip_missing_files', False):
+                                print(f"""
+{'='*60}
+WARNING: Point charge file not found - skipping this calculation
+{'='*60}
+Expected path: {ptchg_path}
+Job index: {counter}
+Job folder: {f}
+Charge type: {charge_type}
+
+Skipping to next job (skip_missing_files=True)
+{'='*60}
+""")
+                                counter += 1
+                                continue
+                            else:
+                                raise FileNotFoundError(f"""
 {'='*60}
 ERROR: Point charge file not found
 {'='*60}
@@ -3975,7 +4038,22 @@ For complete examples, see:
 
                 if ptchg_path is not None:
                     if not os.path.exists(ptchg_path):
-                        raise FileNotFoundError(f"""
+                        if self.config.get('skip_missing_files', False):
+                            print(f"""
+{'='*60}
+WARNING: Point charge file not found - skipping this calculation
+{'='*60}
+Expected path: {ptchg_path}
+Job index: {counter}
+Job folder: {f}
+
+Skipping to next job (skip_missing_files=True)
+{'='*60}
+""")
+                            counter += 1
+                            continue
+                        else:
+                            raise FileNotFoundError(f"""
 {'='*60}
 ERROR: Point charge file not found
 {'='*60}
